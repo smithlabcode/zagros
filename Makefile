@@ -22,6 +22,7 @@ RBP = $(shell pwd)
 export PATH := $(shell pwd):$(PATH)
 
 BINDIR = $(RBP)/bin
+export SMITHLAB_CPP := $(shell pwd)/src/smithlab_cpp
 
 all:
 	@make -C src RBP=$(RBP) OPT=1 install
