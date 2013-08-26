@@ -1,0 +1,15 @@
+<!-- 
+  This file defines the regression tests to run. Commands can be split 
+  over multiple lines without a line continuation character and they will 
+  still work  
+--> 
+
+<regressionTests>
+  <test>
+    <name> Tiny test 1 </name>
+    <command> 
+	  ../../bin/em -n 10 -l 10 -i regressionTestInputs/tinyTestInput.fa
+    </command> 
+    <expected> regressionTestOutputs/tinyTestOutput.dat </expected>
+  </test>  
+</regressionTests>
