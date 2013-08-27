@@ -167,7 +167,7 @@ int main(int argc, const char **argv) {
 		regions.clear();
 		ReadBEDFile(regions_outfile, regions);
 
-    IO::expand_regions(regions);
+                IO::expand_regions(regions);
 		IO::extract_regions_fasta(chrom_dir, regions, seqs, names);
 		IO::unexpand_regions(regions);
 
