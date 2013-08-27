@@ -127,7 +127,7 @@ int main(int argc, const char **argv) {
     }
 
     Model model(motif_width, regions);
-    model.set_delta(6);
+    model.set_delta(0);
 
     model.expectation_maximization(
         max_iterations, tolerance, regions, seqs, diagnostic_events, indicators, 1, 0,

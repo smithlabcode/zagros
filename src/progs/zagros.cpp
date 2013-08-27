@@ -69,7 +69,7 @@ int main(int argc, const char **argv) {
 		bool use_sequence_information = false;
 		bool use_structure_information = false;
 		size_t max_de = 0;
-		size_t min_cluster_size = 400;
+		size_t min_cluster_size = 100;
 
 		const size_t max_iterations = 10;
 		const double tolerance = 1e-10;
