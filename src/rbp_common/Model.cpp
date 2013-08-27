@@ -489,21 +489,6 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
     const double tolerance, vector<string> &S, const vector<vector<size_t> > &D,
     vector<vector<double> > &I) {
 
-  size_t N = S.size();
-
-  vector<vector<double> > fullStrVectorTable;
-  IO::fillTables(S, fullStrVectorTable);
-  IO::trimTables(S, fullStrVectorTable);
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile.push_back(0);
-  for (size_t i = 0; i < N; i++) {
-    size_t l = S[i].length();
-    for (size_t j = 0; j < l; ++j)
-      structure_profile[j] += fullStrVectorTable[i][j];
-  }
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;
-
   cerr << "Fitting started...";
 
   double prev_score = std::numeric_limits<double>::max();
@@ -537,6 +522,21 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
       M[j][RNAUtils::base2int_RNA(S[n][max_i + j])] += 1;
     }
   }
+
+  /*size_t N = S.size();
+
+  vector<vector<double> > fullStrVectorTable;
+  IO::fillTables(S, fullStrVectorTable);
+  IO::trimTables(S, fullStrVectorTable);
+  for (size_t i = 0; i < S.front().length(); ++i)
+    structure_profile.push_back(0);
+  for (size_t i = 0; i < N; i++) {
+    size_t l = S[i].length();
+    for (size_t j = 0; j < l; ++j)
+      structure_profile[j] += fullStrVectorTable[i][j];
+  }
+  for (size_t i = 0; i < S.front().length(); ++i)
+    structure_profile[i] = structure_profile[i] / N;*/
 }
 
 void Model::expectation_maximization_seq_str(const size_t max_iterations,
@@ -649,7 +649,7 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
 
   size_t N = S.size();
 
-  vector<vector<double> > fullStrVectorTable;
+/*  vector<vector<double> > fullStrVectorTable;
   IO::fillTables(S, fullStrVectorTable);
   IO::trimTables(S, fullStrVectorTable);
   for (size_t i = 0; i < S.front().length(); ++i)
@@ -660,7 +660,7 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
       structure_profile[j] += fullStrVectorTable[i][j];
   }
   for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;
+    structure_profile[i] = structure_profile[i] / N;*/
 
 }
 

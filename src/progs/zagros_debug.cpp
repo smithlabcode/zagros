@@ -60,6 +60,7 @@ int main(int argc, const char **argv) {
     bool VERBOSE = false;
     string outfile;
     size_t motif_width = 8;
+    string chrom_dir;
 
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
@@ -69,6 +70,8 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt(
         "output", 'o', "Name of output file (default: stdout)", false, outfile);
     opt_parse.add_opt("width", 'w', "motif width", false, motif_width);
+    opt_parse.add_opt("chrom", 'c',
+        "directory with chrom files (FASTA format)", true, chrom_dir);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -85,14 +88,12 @@ int main(int argc, const char **argv) {
       cerr << opt_parse.option_missing_message() << endl;
       return EXIT_SUCCESS;
     }
-    if (leftover_args.size() != 4) {
+    if (leftover_args.size() != 2) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
     }
-    const string seqs_file(leftover_args.front());
-    const string regions_file(leftover_args[1]);
-    const string de_file(leftover_args[2]);
-    const string motif_no(leftover_args.back());
+    const string regions_file(leftover_args.front());
+    const string de_file(leftover_args.back());
 
     /****************** END COMMAND LINE OPTIONS *****************/
 
@@ -101,67 +102,39 @@ int main(int argc, const char **argv) {
     vector<GenomicRegion> regions;
     vector<GenomicRegion> de_regions;
 
-    read_fasta_file(seqs_file, names, seqs);
     ReadBEDFile(regions_file, regions);
     ReadBEDFile(de_file, de_regions);
+
+    IO::expand_regions(regions);
+    IO::extract_regions_fasta(chrom_dir, regions, seqs, names);
+    IO::unexpand_regions(regions);
 
     unordered_map<string, size_t> names_table;
     IO::make_sequence_names(names, seqs, regions, names_table);
 
     vector<vector<size_t> > diagnostic_events;
-    IO::load_diagnostic_events(
-        de_regions, names_table, regions, diagnostic_events);
+    IO::load_diagnostic_events(de_regions, names_table, regions,
+        diagnostic_events);
 
-    stringstream convert(motif_no);
-    size_t mn;
-    convert >> mn;
-    const string motif_name = "DE_EM_" + motif_no;
     size_t base_index = regions_file.find_last_of("/\\");
     string base_file = regions_file.substr(
         base_index + 1, regions_file.length() - base_index - 5);
 
-    vector<vector<size_t> > tmp_de = diagnostic_events;
-    vector<vector<size_t> > tmp_de_c(seqs.size());
-
-    size_t k = 0;
-    for (size_t i = 0; i < seqs.size() && k < mn; ++i) {
-      for (size_t j = 0; j < diagnostic_events[i].size() && k < mn; j += 1) {
-        tmp_de_c[i].push_back(tmp_de[i][j]);
-        k++;
-      }
-    }
-
     vector<vector<double> > indicators;
-    for (size_t ik = 0; ik < seqs.size(); ++ik) {
-      const size_t n_pos = seqs[ik].length() - motif_width + 1;
+    for (size_t i = 0; i < regions.size(); ++i) {
+      const size_t n_pos = regions[i].get_width() - motif_width + 1;
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
     Model model(motif_width, regions);
-//    model.find_delta(seqs, regions, diagnostic_events);
-
-    for (size_t i = 0; i<diagnostic_events.size(); ++i) {
-      for (size_t j = 0; j<diagnostic_events[i].size(); ++j)
-        cout << tmp_de_c[i][j] << "\t";
-      cout << endl;
-    }
+    model.set_delta(6);
 
     model.expectation_maximization(
-        max_iterations, tolerance, regions, seqs, tmp_de_c, indicators, 1, 0,
-        10000, base_file);
+        max_iterations, tolerance, regions, seqs, diagnostic_events, indicators, 1, 0,
+        1000, base_file);
 
-//    IO::save_input_files(seqs, regions, de_regions, base_file);
-    model.prepare_output(seqs, indicators, tmp_de_c, base_file);
+    model.prepare_output(seqs, indicators, diagnostic_events, base_file);
 
-    cout << model.print_model("DE_EM", regions, seqs, indicators);
-
-//      set_model(motif, starting_point_gs(max_iterations, tolerance, seqs, diagnostic_events, motif, f, geo_p, geo_delta, indicators));
-
-//    cerr << "------------------GS------------------------" << endl;
-//    f_liklihood = gibbs_sampling(max_iterations, tolerance, seqs, diagnostic_events, motif, 
-//                     f, geo_p, geo_delta, indicators);
-
-//      cout << print_model(motif, f, geo_p, geo_delta, regions, seqs, indicators); 
   } catch (const SMITHLABException &e) {
     cerr << e.what() << endl;
     return EXIT_FAILURE;

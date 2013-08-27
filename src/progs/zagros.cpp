@@ -167,7 +167,7 @@ int main(int argc, const char **argv) {
 		regions.clear();
 		ReadBEDFile(regions_outfile, regions);
 
-		IO::expand_regions(regions);
+    IO::expand_regions(regions);
 		IO::extract_regions_fasta(chrom_dir, regions, seqs, names);
 		IO::unexpand_regions(regions);
 
@@ -189,11 +189,12 @@ int main(int argc, const char **argv) {
 //		model.find_delta(seqs, regions, diagnostic_events);
 //		cout << model.get_delta() << endl;
 
-		model.expectation_maximization(max_iterations, tolerance, regions, seqs,
+    IO::save_input_files(seqs, regions, de_regions, base_file);
+
+    model.expectation_maximization(max_iterations, tolerance, regions, seqs,
 				diagnostic_events, indicators, use_sequence_information,
 				use_structure_information, max_de, base_file);
 
-    IO::save_input_files(seqs, regions, de_regions, base_file);
 		model.prepare_output(seqs, indicators, diagnostic_events, base_file);
 		string output_model = base_file + ".mat";
 		ofstream outf(output_model.c_str());
