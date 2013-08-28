@@ -647,9 +647,9 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
     }
   }
 
-  size_t N = S.size();
+  /*   size_t N = S.size();
 
-/*  vector<vector<double> > fullStrVectorTable;
+  vector<vector<double> > fullStrVectorTable;
   IO::fillTables(S, fullStrVectorTable);
   IO::trimTables(S, fullStrVectorTable);
   for (size_t i = 0; i < S.front().length(); ++i)
@@ -1001,7 +1001,7 @@ void Model::prepare_output(const vector<string> &seqs,
         << endl;
   } else {
     generate_profile(indicators, diagnostic_events, seqs, base_file, "motif");
-    generate_profile(indicators, diagnostic_events, seqs, base_file, "structure");
+//    generate_profile(indicators, diagnostic_events, seqs, base_file, "structure");
     generate_profile(indicators, diagnostic_events, seqs, base_file, "locations");
     generate_profile(indicators, diagnostic_events, seqs, base_file, "sequences");
     generate_profile(indicators, diagnostic_events, seqs, base_file, "des");
