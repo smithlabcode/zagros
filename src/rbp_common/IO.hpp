@@ -62,6 +62,8 @@ public:
   /*** Constructors, Destructors and object initialization ***/
   static const size_t flanking_regions_size = 20;
 
+  static const size_t regions_size = 120;
+
   static size_t
   adjust_start_pos(const size_t orig_start, const std::string &chrom_name);
 
@@ -299,6 +301,44 @@ public:
 
   static void
   show_percentage(const size_t n, std::string &percentage);
+
+  static void
+  read_rmap_output(std::string filename, std::vector<ExtendedGenomicRegion> &regions);
+
+  static void
+  read_bowtie_output(std::string filename, std::vector<ExtendedGenomicRegion> &regions);
+
+  static void
+  read_novoalign_output(std::string filename,
+      std::vector<ExtendedGenomicRegion> &regions);
+
+  static void
+  read_piranha_output(std::string filename, std::vector<ExtendedGenomicRegion> &regions);
+
+  static void
+  read_piranha_output(std::string filename, std::vector<GenomicRegion> &regions);
+
+  static bool
+  is_header_line(const std::string& line);
+
+  static bool
+  is_track_line(const char *line);
+
+  static void
+  convertBowtieExtra(std::string &extra);
+
+  static void
+  filter_scores(const float lower_bound, const float upper_bound,
+          std::vector<GenomicRegion> &regions);
+
+  static void
+  sift_single_chrom(std::vector<GenomicRegion> &other_regions,
+        std::vector<GenomicRegion> &regions,
+        std::vector<GenomicRegion> &good_regions);
+
+  static void
+  sift(std::vector<GenomicRegion> &other_regions,
+       std::vector<GenomicRegion> &regions);
 
 private:
   IO();

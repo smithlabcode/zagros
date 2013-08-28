@@ -55,6 +55,7 @@ using std::ostream;
 using std::pair;
 using std::make_pair;
 using std::sort;
+using std::numeric_limits;
 
 using smithlab::alphabet_size;
 
@@ -526,8 +527,8 @@ void IO::make_inputs(vector<ExtendedGenomicRegion> &mapped_reads,
     for (size_t j = 0; j < separated_by_chrom[i].size(); ++j) {
       GenomicRegion gr(
           separated_by_chrom[i][j].get_chrom(),
-          separated_by_chrom[i][j].get_start() - 60,
-          separated_by_chrom[i][j].get_start() + 60,
+          separated_by_chrom[i][j].get_start(),
+          separated_by_chrom[i][j].get_end(),
           separated_by_chrom[i][j].get_name(),
           separated_by_chrom[i][j].get_score(),
           separated_by_chrom[i][j].get_strand());
@@ -724,12 +725,16 @@ void IO::load_diagnostic_events(vector<GenomicRegion> &de_regions,
   for (size_t i = 0; i < de_regions.size(); ++i)
     if (regions[names[de_regions[i].get_name()]].pos_strand())
       D[names[de_regions[i].get_name()]].push_back(
-         de_regions[i].get_start()
-              - regions[names[de_regions[i].get_name()]].get_start() + IO::flanking_regions_size - 1);
+          de_regions[i].get_start()
+              - regions[names[de_regions[i].get_name()]].get_start()
+              + IO::flanking_regions_size - 1);
     else
       D[names[de_regions[i].get_name()]].push_back(
-          regions[names[de_regions[i].get_name()]].get_width() + 2*(IO::flanking_regions_size-1) - (de_regions[i].get_start()
-                    - regions[names[de_regions[i].get_name()]].get_start() + IO::flanking_regions_size - 1));
+          regions[names[de_regions[i].get_name()]].get_width()
+              + 2 * (IO::flanking_regions_size - 1)
+              - (de_regions[i].get_start()
+                  - regions[names[de_regions[i].get_name()]].get_start()
+                  + IO::flanking_regions_size - 1));
 }
 
 string IO::makeAlignment(const vector<string> &sequences,
@@ -1035,10 +1040,32 @@ void IO::save_input_files(const vector<string> &seqs,
 }
 
 void IO::expand_regions(vector<GenomicRegion> &regions) {
+
   for (size_t i = 0; i < regions.size(); ++i) {
-    regions[i].set_start(regions[i].get_start() - flanking_regions_size);
-    regions[i].set_end(regions[i].get_end() + flanking_regions_size);
+    if (regions[i].get_width() <= regions_size) {
+      regions[i].set_start(
+          regions[i].get_start()
+              - int((regions_size - regions[i].get_width()) / 2)
+              - flanking_regions_size);
+      regions[i].set_end(
+          regions[i].get_end()
+              + int((regions_size - regions[i].get_width()) / 2)
+              + flanking_regions_size);
+    } else {
+      regions[i].set_start(
+          regions[i].get_start()
+              + int((regions[i].get_width() - regions_size) / 2)
+              - flanking_regions_size);
+      regions[i].set_end(
+          regions[i].get_end()
+              - int((regions[i].get_width() - regions_size) / 2)
+              + flanking_regions_size);
+    }
   }
+//  for (size_t i = 0; i < regions.size(); ++i) {
+//    regions[i].set_start(regions[i].get_start() - flanking_regions_size);
+//    regions[i].set_end(regions[i].get_end() + flanking_regions_size);
+//  }
 }
 
 void IO::unexpand_regions(vector<GenomicRegion> &regions) {
@@ -1077,5 +1104,233 @@ void IO::show_percentage(const size_t n, string &percentage) {
   for (size_t i = n; i < 100; ++i)
     percentage = percentage + " ";
   percentage = percentage + "]";
+}
+
+void IO::read_rmap_output(string filename,
+    vector<ExtendedGenomicRegion> &regions) {
+  static const size_t buffer_size = 10000;
+
+  std::ifstream in(filename.c_str());
+  if (!in)
+    throw BEDFileException("cannot open input file " + filename);
+
+  std::ifstream::pos_type start_of_data = in.tellg();
+  in.seekg(0, std::ios::end);
+  std::ifstream::pos_type end_of_data = in.tellg();
+  in.seekg(start_of_data);
+
+  while (!in.eof()) {
+    char buffer[buffer_size];
+    in.getline(buffer, buffer_size);
+    if (in.gcount() == buffer_size - 1)
+      throw BEDFileException("Line too long in file: " + filename);
+    if (!is_header_line(buffer) && !is_track_line(buffer)) {
+      vector<string> parts(split_extended_whitespace_quoted(buffer));
+      char strand = ((parts[5] == "+") ? '+' : '-');
+      ExtendedGenomicRegion gr(
+          parts[0], convertString(parts[1]), convertString(parts[2]), parts[3],
+          convertString(parts[4]), strand, parts[6], "2C>C");
+      regions.push_back(gr);
+    }
+
+    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
+    std::cerr << "\r" << percent_done << "% completed..." << std::flush;
+    in.peek();
+  }
+  in.close();
+  std::cerr << std::endl;
+}
+
+void IO::read_bowtie_output(string filename,
+    vector<ExtendedGenomicRegion> &regions) {
+  static const size_t buffer_size = 10000;
+
+  std::ifstream in(filename.c_str());
+  if (!in)
+    throw BEDFileException("cannot open input file " + filename);
+
+  std::ifstream::pos_type start_of_data = in.tellg();
+  in.seekg(0, std::ios::end);
+  std::ifstream::pos_type end_of_data = in.tellg();
+  in.seekg(start_of_data);
+
+  while (!in.eof()) {
+    char buffer[buffer_size];
+    in.getline(buffer, buffer_size);
+    if (in.gcount() == buffer_size - 1)
+      throw BEDFileException("Line too long in file: " + filename);
+    if (!is_header_line(buffer) && !is_track_line(buffer)) {
+      vector<string> parts(split_extended_whitespace_quoted(buffer));
+      if (parts.size() == 8) {
+        vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
+        char strand = ((parts[1] == "+") ? '+' : '-');
+        convertBowtieExtra(parts[7]);
+        ExtendedGenomicRegion gr(
+            parts[2], convertString(parts[3]),
+            convertString(parts[3]) + parts[4].length(), name[0],
+            convertString(parts[6]), strand, parts[4], parts[7]);
+        regions.push_back(gr);
+      }
+    }
+    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
+    std::cerr << "\r" << percent_done << "% completed..." << std::flush;
+    in.peek();
+  }
+  in.close();
+  std::cerr << std::endl;
+}
+
+void IO::read_novoalign_output(string filename,
+    vector<ExtendedGenomicRegion> &regions) {
+  static const size_t buffer_size = 10000;
+
+  std::ifstream in(filename.c_str());
+  if (!in)
+    throw BEDFileException("cannot open input file " + filename);
+
+  std::ifstream::pos_type start_of_data = in.tellg();
+  in.seekg(0, std::ios::end);
+  std::ifstream::pos_type end_of_data = in.tellg();
+  in.seekg(start_of_data);
+
+  while (!in.eof()) {
+    char buffer[buffer_size];
+    in.getline(buffer, buffer_size);
+    if (in.gcount() == buffer_size - 1)
+      throw BEDFileException("Line too long in file: " + filename);
+    if (!is_header_line(buffer)) {
+      vector<string> parts(split_extended_whitespace_quoted(buffer));
+      if (parts.size() == 14)
+        if (parts[4] == "U") {
+          vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
+          char strand = ((parts[9] == "F") ? '+' : '-');
+          ExtendedGenomicRegion gr(
+              parts[7].substr(1), convertString(parts[8]),
+              convertString(parts[8]) + parts[2].length(), name[0],
+              convertString(parts[5]), strand, parts[2], parts[13]);
+          regions.push_back(gr);
+        }
+    }
+    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
+    std::cerr << "\r" << percent_done << "% completed..." << std::flush;
+    in.peek();
+  }
+  in.close();
+  std::cerr << std::endl;
+}
+
+void IO::read_piranha_output(string filename,
+    vector<ExtendedGenomicRegion> &regions) {
+
+  vector<GenomicRegion> the_regions;
+  ReadBEDFile(filename, the_regions);
+  for (size_t i = 0; i < the_regions.size(); i += 1) {
+    if (the_regions[i].get_width() <= regions_size) {
+      ExtendedGenomicRegion gr(
+          the_regions[i].get_chrom(),
+          the_regions[i].get_start(),
+          the_regions[i].get_end(),
+          the_regions[i].get_name(),
+          the_regions[i].get_score(),
+          the_regions[i].get_strand(), "ACGT", "2C>C");
+      regions.push_back(gr);
+    }
+  }
+}
+
+void IO::read_piranha_output(string filename, vector<GenomicRegion> &regions) {
+
+  vector<GenomicRegion> the_regions;
+  ReadBEDFile(filename, the_regions);
+  for (size_t i = 0; i < the_regions.size(); i += 1) {
+      string name = "sequence_" + convertSizet(i+1);
+      GenomicRegion gr(
+          the_regions[i].get_chrom(),
+          the_regions[i].get_start(),
+          the_regions[i].get_end(),
+          name,
+          the_regions[i].get_score(),
+          the_regions[i].get_strand());
+      regions.push_back(gr);
+  }
+}
+
+bool IO::is_header_line(const string& line) {
+  if (line.substr(0, 1) == "#")
+    return true;
+  static const char *browser_label = "browser";
+  static const size_t browser_label_len = 7;
+  for (size_t i = 0; i < browser_label_len; ++i)
+    if (line[i] != browser_label[i])
+      return false;
+  return true;
+}
+
+bool IO::is_track_line(const char *line) {
+  static const char *track_label = "track";
+  static const size_t track_label_len = 5;
+  for (size_t i = 0; i < track_label_len; ++i)
+    if (line[i] != track_label[i])
+      return false;
+  return true;
+}
+
+void IO::convertBowtieExtra(string &extra) {
+  std::replace(extra.begin(), extra.end(), ',', ' ');
+  extra.erase(std::remove(extra.begin(), extra.end(), ':'), extra.end());
+}
+
+void IO::filter_scores(const float lower_bound, const float upper_bound,
+    vector<GenomicRegion> &regions) {
+  vector<GenomicRegion> new_regions;
+  new_regions.reserve(regions.size() / 2);
+  for (size_t i = 0; i < regions.size(); ++i) {
+    const double score(regions[i].get_score());
+    if (score >= lower_bound && score <= upper_bound)
+      new_regions.push_back(regions[i]);
+  }
+  regions.swap(new_regions);
+}
+
+void IO::sift_single_chrom(vector<GenomicRegion> &other_regions,
+    vector<GenomicRegion> &regions, vector<GenomicRegion> &good_regions) {
+
+  typedef vector<GenomicRegion>::iterator region_itr;
+
+  for (size_t i = 0; i < regions.size(); ++i) {
+    region_itr closest(find_closest(other_regions, regions[i]));
+    if (closest->overlaps(regions[i])) {
+      good_regions.push_back(regions[i]);
+      good_regions[good_regions.size() - 1].set_name(closest->get_name());
+    }
+  }
+}
+
+void IO::sift(vector<GenomicRegion> &other_regions,
+    vector<GenomicRegion> &regions) {
+
+  vector<vector<GenomicRegion> > other_regions_by_chrom;
+  separate_chromosomes(other_regions, other_regions_by_chrom);
+
+  unordered_map<string, size_t> chrom_lookup;
+  for (size_t i = 0; i < other_regions_by_chrom.size(); ++i)
+    chrom_lookup[other_regions_by_chrom[i].front().get_chrom()] = i;
+  const vector<GenomicRegion> dummy;
+
+  vector<vector<GenomicRegion> > regions_by_chrom;
+  separate_chromosomes(regions, regions_by_chrom);
+  regions.clear();
+
+  vector<GenomicRegion> good_regions;
+  for (size_t i = 0; i < regions_by_chrom.size(); ++i) {
+    const unordered_map<string, size_t>::const_iterator j = chrom_lookup.find(
+        regions_by_chrom[i].front().get_chrom());
+    if (j != chrom_lookup.end()) {
+      sift_single_chrom(
+          other_regions_by_chrom[j->second], regions_by_chrom[i], good_regions);
+    }
+
+  }
+  regions.swap(good_regions);
 }
 
