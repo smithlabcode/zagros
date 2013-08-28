@@ -1300,6 +1300,8 @@ void IO::sift_single_chrom(vector<GenomicRegion> &other_regions,
   for (size_t i = 0; i < regions.size(); ++i) {
     region_itr closest(find_closest(other_regions, regions[i]));
     if (closest->overlaps(regions[i])) {
+
+      (other_regions.begin() + std::distance(other_regions.begin(),closest))->set_strand(regions[i].get_strand());
       good_regions.push_back(regions[i]);
       good_regions[good_regions.size() - 1].set_name(closest->get_name());
     }
