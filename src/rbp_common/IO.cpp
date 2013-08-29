@@ -1042,23 +1042,24 @@ void IO::save_input_files(const vector<string> &seqs,
 void IO::expand_regions(vector<GenomicRegion> &regions) {
 
   for (size_t i = 0; i < regions.size(); ++i) {
+    size_t width = regions[i].get_width();
     if (regions[i].get_width() <= regions_size) {
       regions[i].set_start(
           regions[i].get_start()
-              - int((regions_size - regions[i].get_width()) / 2)
+              - int((regions_size - width) / 2)
               - flanking_regions_size);
       regions[i].set_end(
           regions[i].get_end()
-              + int((regions_size - regions[i].get_width()) / 2)
+              + int((regions_size - width) / 2)
               + flanking_regions_size);
     } else {
       regions[i].set_start(
           regions[i].get_start()
-              + int((regions[i].get_width() - regions_size) / 2)
+              + int((width - regions_size) / 2)
               - flanking_regions_size);
       regions[i].set_end(
           regions[i].get_end()
-              - int((regions[i].get_width() - regions_size) / 2)
+              - int((width - regions_size) / 2)
               + flanking_regions_size);
     }
   }
