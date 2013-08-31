@@ -141,6 +141,33 @@ double Model::calculateLogL(const vector<string> &S,
   return ret;
 }
 
+double Model::calculateLogL_seq(const vector<string> &S,
+    const vector<vector<size_t> > &D,
+    const vector<vector<double> > &I) {
+
+  const size_t n = S.size();
+  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
+
+  for (size_t i = 0; i < n; i++) {
+    const size_t l = S[i].length();
+    for (size_t k = 0; k < I[i].size(); k++)
+      for (size_t j = 0; j < l; j++)
+        if (j >= k && j < k + M.size())
+          nb[j - k + 1][base2int(S[i][j])] += I[i][k];
+        else
+          nb[0][base2int(S[i][j])] += I[i][k];
+  }
+
+  double ret = 0.0;
+  for (size_t b = 0; b < alphabet_size; b++) {
+    ret += nb[0][b] * log(f[b]);
+    for (size_t j = 0; j < M.size(); j++)
+      ret += nb[j + 1][b] * log(M[j][b]);
+  }
+
+  return ret;
+}
+
 void Model::maximization_seq_str(const vector<string> &S,
     const vector<vector<double> > &T, const vector<double> &wnSecStr,
     const vector<vector<double> > &I) {
@@ -427,7 +454,7 @@ void Model::expectation_maximization(const size_t max_iterations,
 void Model::find_delta(const vector<string> &sequences,
     const vector<GenomicRegion> &regions, const vector<vector<size_t> > &D) {
 
-  vector<double> ll_delta(21, 0.0);
+  vector<double> ll_delta;
   for (int delta_param = -10; delta_param < 11; ++delta_param) {
     init_model(M.size(), delta_param);
     const size_t max_iterations = 10;
@@ -450,7 +477,7 @@ void Model::find_delta(const vector<string> &sequences,
       }
       prev_score = score;
     }
-//    cout << delta_param << "\t" << prev_score << endl;
+ //   cout << delta_param << "\t" << prev_score << endl;
     ll_delta.push_back(prev_score);
   }
   double max_ll = -100000000;
@@ -522,21 +549,6 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
       M[j][RNAUtils::base2int_RNA(S[n][max_i + j])] += 1;
     }
   }
-
-  /*size_t N = S.size();
-
-  vector<vector<double> > fullStrVectorTable;
-  IO::fillTables(S, fullStrVectorTable);
-  IO::trimTables(S, fullStrVectorTable);
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile.push_back(0);
-  for (size_t i = 0; i < N; i++) {
-    size_t l = S[i].length();
-    for (size_t j = 0; j < l; ++j)
-      structure_profile[j] += fullStrVectorTable[i][j];
-  }
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;*/
 }
 
 void Model::expectation_maximization_seq_str(const size_t max_iterations,
@@ -646,22 +658,6 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
       M[j][RNAUtils::base2int_RNA(S[n][max_i + j])] += 1;
     }
   }
-
-  /*   size_t N = S.size();
-
-  vector<vector<double> > fullStrVectorTable;
-  IO::fillTables(S, fullStrVectorTable);
-  IO::trimTables(S, fullStrVectorTable);
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile.push_back(0);
-  for (size_t i = 0; i < N; i++) {
-    size_t l = S[i].length();
-    for (size_t j = 0; j < l; ++j)
-      structure_profile[j] += fullStrVectorTable[i][j];
-  }
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;*/
-
 }
 
 void Model::expectation_maximization_str_de(const size_t max_iterations,
@@ -979,7 +975,7 @@ string Model::print_model(const string &motif_name,
   return ss.str();
 }
 
-void Model::prepare_output(const vector<string> &seqs,
+void Model::prepare_output(vector<string> &seqs,
     const vector<vector<double> > &indicators,
     const vector<vector<size_t> > &diagnostic_events,
     const string &base_file) {
@@ -1001,10 +997,23 @@ void Model::prepare_output(const vector<string> &seqs,
         << endl;
   } else {
     generate_profile(indicators, diagnostic_events, seqs, base_file, "motif");
-//    generate_profile(indicators, diagnostic_events, seqs, base_file, "structure");
     generate_profile(indicators, diagnostic_events, seqs, base_file, "locations");
     generate_profile(indicators, diagnostic_events, seqs, base_file, "sequences");
     generate_profile(indicators, diagnostic_events, seqs, base_file, "des");
+/*    size_t N = seqs.size();
+    vector<vector<double> > fullStrVectorTable;
+    IO::fillTables(seqs, fullStrVectorTable);
+    IO::trimTables(seqs, fullStrVectorTable);
+    for (size_t i = 0; i < seqs.front().length(); ++i)
+      structure_profile.push_back(0);
+    for (size_t i = 0; i < N; i++) {
+      size_t l = seqs[i].length();
+      for (size_t j = 0; j < l; ++j)
+        structure_profile[j] += fullStrVectorTable[i][j];
+    }
+    for (size_t i = 0; i < seqs.front().length(); ++i)
+      structure_profile[i] = structure_profile[i] / N;
+    generate_profile(indicators, diagnostic_events, seqs, base_file, "structure");*/
   }
 }
 

@@ -56,6 +56,10 @@ public:
       const std::vector<std::vector<size_t> > &D,
       const std::vector<std::vector<double> > &I);
 
+  double calculateLogL_seq(const std::vector<std::string> &S,
+      const std::vector<std::vector<size_t> > &D,
+      const std::vector<std::vector<double> > &I);
+
   void expectation_seq(const std::vector<std::string> &S,
       std::vector<std::vector<double> > &I);
 
@@ -149,7 +153,7 @@ public:
       const std::vector<std::vector<double> > &indicators);
 
   void
-  prepare_output(const std::vector<std::string> &seqs,
+  prepare_output(std::vector<std::string> &seqs,
       const std::vector<std::vector<double> > &indicators,
       const std::vector<std::vector<size_t> > &diagnostic_events,
       const std::string &base_file);
