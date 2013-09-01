@@ -61,7 +61,7 @@ Model::Model(const size_t motif_width, const vector<GenomicRegion> &regions) {
     M.push_back(vector<double>(alphabet_size, 1.0 / alphabet_size));
   lambda.resize(motif_width, 0.5);
   f.resize(alphabet_size, 1.0 / alphabet_size);
-  p = 0.5;
+  p = 0.95;
   delta = 0;
 }
 
@@ -133,7 +133,7 @@ double Model::calculateLogL(const vector<string> &S,
         for (size_t j = 0; j < D[i].size(); j++)
           power += abs(D[i][j] - (k + delta));
         assert(std::isfinite(power));
-        ret += I[i][k]*((power * log(p)) + (D[i].size() * log(1 - p)));
+        ret += I[i][k]*((power * log(1 - p)) + (D[i].size() * log(p)));
       }
     }
   }
@@ -429,6 +429,118 @@ void Model::maximization_de(const vector<GenomicRegion> &regions,
   p = max(total_sum / n, std::numeric_limits<double>::min());
 }
 
+void Model::expectation_seq_de(const vector<string> &S,
+    const vector<GenomicRegion> &regions,
+    const vector<vector<size_t> > &D,
+    vector<vector<double> > &I) {
+
+  const size_t n = S.size();
+  vector<double> denominator(n, 1.0);
+  for (size_t i = 0; i < n; i++) {
+
+    const size_t l = S[i].length();
+    vector<double> numerator(I[i].size(), 0.0);
+
+    double m = std::numeric_limits<double>::min();
+    size_t mi = 0;
+
+    for (size_t k = 0; k < I[i].size(); k++) {
+
+      vector<double> f_powers(alphabet_size, 0.0);
+      for (size_t j = 0; j < l; j++) {
+
+        const char base = base2int(S[i][j]);
+        if (j >= k && j < k + M.size()) {
+          numerator[k] += log(M[j - k][base]);
+        } else
+          f_powers[base2int(S[i][j])]++;
+
+        assert(std::isfinite(f_powers[base]));
+        if (!std::isfinite(numerator[k])) {
+          cerr << "Here!" << endl;
+          exit(1);
+        }
+      }
+      for (size_t b = 0; b < alphabet_size; b++)
+        numerator[k] += f_powers[b] * log(f[b]);
+
+      if (D[i].size() > 0) {
+        double power = 0.0;
+        for (size_t j = 0; j < D[i].size(); j++)
+          power += abs(D[i][j] - (k + delta));
+        assert(std::isfinite(power));
+        if (!std::isfinite(numerator[k])) {
+          cerr << "DE __  Here!" << endl;
+          exit(1);
+        }
+        numerator[k] += ((power * log(1-p)) + (D[i].size() * log(p)));
+      }
+
+      if (numerator[k] >= m) {
+        m = numerator[k];
+        mi = k;
+      }
+    }
+
+    for (size_t k = 0; k < I[i].size(); k++)
+      if (k != mi)
+        denominator[i] += exp(numerator[k] - m);
+    denominator[i] *= exp(m);
+
+    for (size_t k = 0; k < I[i].size(); k++)
+      I[i][k] = exp(numerator[k] - log(denominator[i]));
+  }
+
+  for (size_t i = 0; i < I.size(); i++) {
+    double sum = 0;
+    for (size_t k = 0; k < I[i].size(); k++)
+      sum += I[i][k];
+    for (size_t k = 0; k < I[i].size(); k++)
+      I[i][k] = I[i][k] / sum;
+  }
+
+}
+
+void Model::maximization_seq_de(const vector<string> &S,
+    const vector<GenomicRegion> &regions,
+    const vector<vector<size_t> > &D,
+    const vector<vector<double> > &I) {
+
+  const size_t n = S.size();
+  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
+
+  size_t total_bg_length = 0;
+  double total_sum = 0.0;
+  for (size_t i = 0; i < n; i++) {
+    size_t l = S[i].length();
+    total_bg_length += (I[i].size() - 1);
+    double indicators_sum = 0.0;
+    for (size_t k = 0; k < I[i].size(); k++) {
+      for (size_t j = 0; j < l; j++)
+        if (j >= k && j < k + M.size())
+          nb[j - k + 1][base2int(S[i][j])] += I[i][k];
+        else
+          nb[0][base2int(S[i][j])] += I[i][k];
+
+      if (D[i].size() > 0) {
+         double de_sum = 0.0;
+         for (size_t j = 0; j < D[i].size(); j++)
+           de_sum += abs(D[i][j] - (k + delta));
+         indicators_sum += (I[i][k] * D[i].size()) / (D[i].size() + de_sum);
+       }
+       total_sum += indicators_sum;
+    }
+  }
+
+  for (size_t b = 0; b < alphabet_size; b++) {
+    f[b] = max(nb[0][b] / total_bg_length, std::numeric_limits<double>::min());
+    for (size_t j = 0; j < M.size(); j++)
+      M[j][b] = max(nb[j + 1][b] / n, std::numeric_limits<double>::min());
+  }
+
+  p = max(total_sum / n, std::numeric_limits<double>::min());
+}
+
 void Model::expectation_maximization(const size_t max_iterations,
     const double tolerance, const vector<GenomicRegion> &regions,
     vector<string> &S, const vector<vector<size_t> > &D,
@@ -626,14 +738,29 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
 
   cerr << "Fitting started...";
 
+  vector<vector<double> > I1;
+  for (size_t i = 0; i < I.size(); ++i) {
+    const size_t n_pos = I[i].size();
+    I1.push_back(vector<double>(n_pos, 1 / n_pos));
+  }
+
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq(S, I);
-    maximization_seq(S, I);
+ /*   expectation_seq(S, I1);
+    I = I1;
     expectation_de(regions, D, I);
-    maximization_de(regions, D, I);
+    for (size_t i = 0; i < I.size(); ++i) {
+      for (size_t j = 0; j < I[i].size(); ++j)
+        I[i][j] = (0.25 * I[i][j]) + (0.75 * I1[i][j]);
+    }
+    I1 = I;
+    maximization_seq(S, I);
+    maximization_de(regions, D, I);*/
+    expectation_seq_de(S, regions, D, I);
+    maximization_seq_de(S, regions, D, I);
 
     const double score = calculateLogL(S, D, I);
+    cout << score << endl;
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;

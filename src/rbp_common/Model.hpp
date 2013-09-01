@@ -66,6 +66,16 @@ public:
   void maximization_seq(const std::vector<std::string> &S,
       const std::vector<std::vector<double> > &I);
 
+  void expectation_seq_de(const std::vector<std::string> &S,
+      const std::vector<GenomicRegion> &regions,
+      const std::vector<std::vector<size_t> > &D,
+      std::vector<std::vector<double> > &I);
+
+  void maximization_seq_de(const std::vector<std::string> &S,
+      const std::vector<GenomicRegion> &regions,
+      const std::vector<std::vector<size_t> > &D,
+      const std::vector<std::vector<double> > &I);
+
   void
   expectation_str(const std::vector<std::vector<double> > &T,
       const std::vector<double> &wnSecStr,

@@ -217,7 +217,7 @@ int main(int argc, const char **argv) {
 
     Model model(motif_width, targets);
     model.set_delta(6);
-		model.find_delta(seqs, regions, diagnostic_events);
+//		model.find_delta(seqs, regions, diagnostic_events);
 //		cout << model.get_delta() << endl;
 
     IO::save_input_files(seqs, targets, de_regions, base_file);
