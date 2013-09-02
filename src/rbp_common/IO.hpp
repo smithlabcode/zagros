@@ -180,7 +180,7 @@ public:
       for (size_t i = 0; i < tmp_de.size(); i += 1)
         number_de[tmp_de[i].get_start()] += 1;
       for (size_t i = 0; i < tmp_de.size(); i += 1)
-      //  if (number_de[tmp_de[i].get_start()] > 100)
+        //  if (number_de[tmp_de[i].get_start()] > 100)
         diagnostic_events.push_back(tmp_de[i]);
     }
 
@@ -285,6 +285,7 @@ public:
       const std::vector<GenomicRegion> &regions,
       const std::vector<GenomicRegion> &de_regions,
       const std::string base_file);
+
   static void
   expand_regions(std::vector<GenomicRegion> &regions);
 
@@ -303,20 +304,24 @@ public:
   show_percentage(const size_t n, std::string &percentage);
 
   static void
-  read_rmap_output(std::string filename, std::vector<ExtendedGenomicRegion> &regions);
+  read_rmap_output(std::string filename,
+      std::vector<ExtendedGenomicRegion> &regions);
 
   static void
-  read_bowtie_output(std::string filename, std::vector<ExtendedGenomicRegion> &regions);
+  read_bowtie_output(std::string filename,
+      std::vector<ExtendedGenomicRegion> &regions);
 
   static void
   read_novoalign_output(std::string filename,
       std::vector<ExtendedGenomicRegion> &regions);
 
   static void
-  read_piranha_output(std::string filename, std::vector<ExtendedGenomicRegion> &regions);
+  read_piranha_output(std::string filename,
+      std::vector<ExtendedGenomicRegion> &regions);
 
   static void
-  read_piranha_output(std::string filename, std::vector<GenomicRegion> &regions);
+  read_piranha_output(std::string filename,
+      std::vector<GenomicRegion> &regions);
 
   static bool
   is_header_line(const std::string& line);
@@ -329,16 +334,16 @@ public:
 
   static void
   filter_scores(const float lower_bound, const float upper_bound,
-          std::vector<GenomicRegion> &regions);
+      std::vector<GenomicRegion> &regions);
 
   static void
   sift_single_chrom(std::vector<GenomicRegion> &other_regions,
-        std::vector<GenomicRegion> &regions,
-        std::vector<GenomicRegion> &good_regions);
+      std::vector<GenomicRegion> &regions,
+      std::vector<GenomicRegion> &good_regions);
 
   static void
   sift(std::vector<GenomicRegion> &other_regions,
-       std::vector<GenomicRegion> &regions);
+      std::vector<GenomicRegion> &regions);
 
 private:
   IO();
