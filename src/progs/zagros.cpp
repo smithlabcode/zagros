@@ -163,8 +163,9 @@ int main(int argc, const char **argv) {
           "Mapper not recognized, please choose from the options (rmap, novoalign or bowtie)");
 
     //Reading the targets
-    cerr << "Reading target regions..." << endl;
+    cerr << "Reading target regions...";
     IO::read_piranha_output(targets_file, targets);
+    cerr << "done!" << endl;
 
     //Making the regions and extracting the diagnostic events from the mapped
     //reads
@@ -175,8 +176,6 @@ int main(int argc, const char **argv) {
 
     if (regions.size() == 0)
       throw BEDFileException("No reads found...");
-
-    IO::expand_regions(targets);
 
     //Sorting the diagnostic events file and storing the file in output directory
     string targets_outfile = base_file + ".bed";
@@ -198,9 +197,8 @@ int main(int argc, const char **argv) {
     targets.clear();
     ReadBEDFile(targets_outfile, targets);
 
-    //Expanding the target locations
+    //Extracting the target sequences
     IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-    IO::unexpand_regions(targets);
 
     unordered_map<string, size_t> names_table;
     IO::make_sequence_names(names, seqs, targets, names_table);
@@ -215,20 +213,29 @@ int main(int argc, const char **argv) {
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
-    Model model(motif_width, targets);
-    model.set_delta(0);
-		model.find_delta(seqs, regions, diagnostic_events);
+    Model model(motif_width);
+
+		if (use_structure_information) {
+      IO::expand_regions(targets);
+      seqs.clear();
+      names.clear();
+      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
+      IO::unexpand_regions(targets);
+		}
 
     IO::save_input_files(seqs, targets, de_regions, base_file);
 
+    cerr << "Fitting started..." << endl;
     model.expectation_maximization(
         max_iterations, tolerance, targets, seqs, diagnostic_events, indicators,
         use_sequence_information, use_structure_information, max_de, base_file);
 
+    cerr << "Preparing output...";
     model.prepare_output(seqs, indicators, diagnostic_events, base_file);
     string output_model = base_file + ".mat";
     ofstream outf(output_model.c_str());
     outf << model.print_model("DE_EM", targets, seqs, indicators);
+    cerr << "done!" << endl;
   } catch (const SMITHLABException &e) {
     cerr << e.what() << endl;
     return EXIT_FAILURE;

@@ -105,9 +105,7 @@ int main(int argc, const char **argv) {
     ReadBEDFile(regions_file, regions);
     ReadBEDFile(de_file, de_regions);
 
-    IO::expand_regions(regions);
     IO::extract_regions_fasta(chrom_dir, regions, seqs, names);
-    IO::unexpand_regions(regions);
 
     unordered_map<string, size_t> names_table;
     IO::make_sequence_names(names, seqs, regions, names_table);
@@ -126,7 +124,7 @@ int main(int argc, const char **argv) {
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
-    Model model(motif_width, regions);
+    Model model(motif_width);
     model.set_delta(6);
 
     model.expectation_maximization(

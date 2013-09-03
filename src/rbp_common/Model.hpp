@@ -42,7 +42,7 @@
 class Model {
 public:
   /*** Constructors, destructors and object initialization ***/
-  Model(const size_t motif_width, const std::vector<GenomicRegion> &regions);
+  Model(const size_t motif_width);
 
   void
   init_model(const size_t motif_width, const int delta_param);

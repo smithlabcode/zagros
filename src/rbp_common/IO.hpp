@@ -62,7 +62,7 @@ public:
   /*** Constructors, Destructors and object initialization ***/
   static const size_t flanking_regions_size = 20;
 
-  static const size_t regions_size = 120;
+//  static const size_t regions_size = 120;
 
   static size_t
   adjust_start_pos(const size_t orig_start, const std::string &chrom_name);

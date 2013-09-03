@@ -55,7 +55,7 @@ using std::accumulate;
 
 using smithlab::alphabet_size;
 
-Model::Model(const size_t motif_width, const vector<GenomicRegion> &regions) {
+Model::Model(const size_t motif_width) {
 
   for (size_t i = 0; i < motif_width; ++i)
     M.push_back(vector<double>(alphabet_size, 1.0 / alphabet_size));
@@ -468,6 +468,9 @@ void Model::expectation_maximization(const size_t max_iterations,
     vector<vector<double> > &I, bool s, bool t, size_t d,
     string &file_name_base) {
 
+  cerr << "Fitting the shifting parameter..." << endl;
+  find_delta(S, regions, D);
+
   if (s && t && !d)
     expectation_maximization_seq_str(
         max_iterations, tolerance, S, D, I, file_name_base);
@@ -489,6 +492,11 @@ void Model::find_delta(const vector<string> &sequences,
 
   vector<double> ll_delta;
   for (int delta_param = -10; delta_param < 11; ++delta_param) {
+    cerr << "\r"
+        << int(
+            100 * ll_delta.size()
+                / 21)
+        << "% completed..." << std::flush;
     init_model(M.size(), delta_param);
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
@@ -511,6 +519,8 @@ void Model::find_delta(const vector<string> &sequences,
     }
     ll_delta.push_back(prev_score);
   }
+  cerr << "\r" << "100% completed..." << endl;
+
   double max_ll = -100000000;
   int max_i = 0;
   for (size_t i = 0; i < ll_delta.size(); i++) {
@@ -526,7 +536,7 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
     const double tolerance, vector<string> &S, const vector<vector<size_t> > &D,
     vector<vector<double> > &I) {
 
-  cerr << "Fitting started...";
+  cerr << "Fitting the full model started...";
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
@@ -565,8 +575,6 @@ void Model::expectation_maximization_seq_str(const size_t max_iterations,
     const double tolerance, vector<string> &S, const vector<vector<size_t> > &D,
     vector<vector<double> > &I, string &file_name_base) {
 
-  size_t N = S.size();
-
 //  determineStartingStructure(S);
 
   vector<vector<double> > fullStrVectorTable;
@@ -584,17 +592,7 @@ void Model::expectation_maximization_seq_str(const size_t max_iterations,
         S, file_name_base, fullStrVectorTable, fullStrMatrixTable, wnSecStr);
   }
 
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile.push_back(0);
-  for (size_t i = 0; i < N; i++) {
-    size_t l = S[i].length();
-    for (size_t j = 0; j < l; ++j)
-      structure_profile[j] += fullStrVectorTable[i][j];
-  }
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;
-
-  cerr << "Fitting started...";
+  cerr << "Fitting the full model started...";
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
@@ -634,7 +632,7 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
     vector<string> &S, const vector<vector<size_t> > &D,
     vector<vector<double> > &I) {
 
-  cerr << "Fitting started...";
+  cerr << "Fitting the full model started...";
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
@@ -674,8 +672,6 @@ void Model::expectation_maximization_str_de(const size_t max_iterations,
     vector<string> &S, const vector<vector<size_t> > &D,
     vector<vector<double> > &I, string &file_name_base) {
 
-  size_t N = S.size();
-
   vector<vector<double> > fullStrVectorTable;
   vector<vector<vector<double> > > fullStrMatrixTable;
   vector<double> wnSecStr;
@@ -691,17 +687,7 @@ void Model::expectation_maximization_str_de(const size_t max_iterations,
         S, file_name_base, fullStrVectorTable, fullStrMatrixTable, wnSecStr);
   }
 
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile.push_back(0);
-  for (size_t i = 0; i < N; i++) {
-    size_t l = S[i].length();
-    for (size_t j = 0; j < l; ++j)
-      structure_profile[j] += fullStrVectorTable[i][j];
-  }
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;
-
-  cerr << "Fitting started...";
+  cerr << "Fitting the full model started...";
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
@@ -746,8 +732,6 @@ void Model::expectation_maximization_seq_str_de(const size_t max_iterations,
   vector<vector<vector<double> > > fullStrMatrixTable;
   vector<double> wnSecStr;
 
-  size_t N = S.size();
-
   if (IO::str_file_checks_out(S.front(), file_name_base)) {
     IO::fillTables(
         file_name_base, S, fullStrVectorTable, fullStrMatrixTable, wnSecStr);
@@ -759,17 +743,7 @@ void Model::expectation_maximization_seq_str_de(const size_t max_iterations,
         S, file_name_base, fullStrVectorTable, fullStrMatrixTable, wnSecStr);
   }
 
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile.push_back(0);
-  for (size_t i = 0; i < N; i++) {
-    size_t l = S[i].length();
-    for (size_t j = 0; j < l; ++j)
-      structure_profile[j] += fullStrVectorTable[i][j];
-  }
-  for (size_t i = 0; i < S.front().length(); ++i)
-    structure_profile[i] = structure_profile[i] / N;
-
-  cerr << "Fitting started...";
+  cerr << "Fitting the full model started...";
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {

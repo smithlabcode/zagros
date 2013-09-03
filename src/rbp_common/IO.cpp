@@ -726,15 +726,12 @@ void IO::load_diagnostic_events(vector<GenomicRegion> &de_regions,
     if (regions[names[de_regions[i].get_name()]].pos_strand())
       D[names[de_regions[i].get_name()]].push_back(
           de_regions[i].get_start()
-              - regions[names[de_regions[i].get_name()]].get_start()
-              + IO::flanking_regions_size - 1);
+              - regions[names[de_regions[i].get_name()]].get_start() - 1);
     else
       D[names[de_regions[i].get_name()]].push_back(
           regions[names[de_regions[i].get_name()]].get_width()
-              + 2 * (IO::flanking_regions_size - 1)
               - (de_regions[i].get_start()
-                  - regions[names[de_regions[i].get_name()]].get_start()
-                  + IO::flanking_regions_size - 1));
+                  - regions[names[de_regions[i].get_name()]].get_start() + 1));
 }
 
 string IO::makeAlignment(const vector<string> &sequences,
@@ -993,8 +990,7 @@ void IO::trimTables(vector<string> &sequences, const string &file_name,
     for (size_t i = 0; i < L; i++) {
       fullStrMatrixTable[n][i].resize(L);
       for (size_t j = 0; j < L; j++)
-        fullStrMatrixTable[n][i][j] = exp_fullStrMatrixTable[n][i
-            + flanking_regions_size][j + flanking_regions_size];
+        fullStrMatrixTable[n][i][j] = exp_fullStrMatrixTable[n][i + flanking_regions_size][j + flanking_regions_size];
     }
   }
 }
@@ -1040,33 +1036,10 @@ void IO::save_input_files(const vector<string> &seqs,
 }
 
 void IO::expand_regions(vector<GenomicRegion> &regions) {
-
   for (size_t i = 0; i < regions.size(); ++i) {
-    size_t width = regions[i].get_width();
-    if (regions[i].get_width() <= regions_size) {
-      regions[i].set_start(
-          regions[i].get_start()
-              - int((regions_size - width) / 2)
-              - flanking_regions_size);
-      regions[i].set_end(
-          regions[i].get_end()
-              + int((regions_size - width) / 2)
-              + flanking_regions_size);
-    } else {
-      regions[i].set_start(
-          regions[i].get_start()
-              + int((width - regions_size) / 2)
-              - flanking_regions_size);
-      regions[i].set_end(
-          regions[i].get_end()
-              - int((width - regions_size) / 2)
-              + flanking_regions_size);
-    }
+    regions[i].set_start(regions[i].get_start() - flanking_regions_size);
+    regions[i].set_end(regions[i].get_end() + flanking_regions_size);
   }
-//  for (size_t i = 0; i < regions.size(); ++i) {
-//    regions[i].set_start(regions[i].get_start() - flanking_regions_size);
-//    regions[i].set_end(regions[i].get_end() + flanking_regions_size);
-//  }
 }
 
 void IO::unexpand_regions(vector<GenomicRegion> &regions) {
@@ -1226,7 +1199,7 @@ void IO::read_piranha_output(string filename,
   vector<GenomicRegion> the_regions;
   ReadBEDFile(filename, the_regions);
   for (size_t i = 0; i < the_regions.size(); i += 1) {
-    if (the_regions[i].get_width() <= regions_size) {
+    if (the_regions[i].get_width() > 0) {
       ExtendedGenomicRegion gr(
           the_regions[i].get_chrom(),
           the_regions[i].get_start(),
