@@ -66,17 +66,20 @@ int main(int argc, const char **argv) {
     string chrom_dir;
     size_t motif_width = 8;
     string experiment = "none";
-    string mapper = "piranha";
+    string mapper;
     bool use_sequence_information = false;
     bool use_structure_information = false;
-    size_t max_de = 0;
+    bool use_de_information = false;
+    size_t max_de = std::numeric_limits<size_t>::max();
     size_t min_cluster_size = 1;
+
+    string reads_file;
 
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    OptionParser opt_parse(strip_path(argv[0]), "", "<mapped reads> <targets>");
+    OptionParser opt_parse(strip_path(argv[0]), "", "<targets>");
     opt_parse.add_opt(
         "output", 'o', "Name of output directory (default: zagros_output)",
         false, outdir);
@@ -89,20 +92,18 @@ int main(int argc, const char **argv) {
         'e',
         "The type of experiment: iCLIP, hCLIP, pCLIP (default: no diagnostic events considered)",
         false, experiment);
-    opt_parse.add_opt(
-        "mapper",
-        'm',
-        "Mapped reads format: novoalign, bowtie, rmap, piranha (default: piranha)",
-        true, mapper);
+    opt_parse.add_opt("mapper", 'm', "Mapped reads format: novoalign, "
+        "bowtie, rmap, piranha (default: none)", false, mapper);
     opt_parse.add_opt(
         "sequence", 's', "Use the sequence information", false,
         use_sequence_information);
+    opt_parse.add_opt("reads", 'r', "Mapped reads file", false, reads_file);
     opt_parse.add_opt(
         "structure", 't', "Use the structure information", false,
         use_structure_information);
     opt_parse.add_opt(
         "diagnostic_events", 'd',
-        "Maximum number of diagnostic events per sequence", false, max_de);
+        "Use the diagnostic events information", false, use_de_information);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -119,12 +120,11 @@ int main(int argc, const char **argv) {
       cerr << opt_parse.option_missing_message() << endl;
       return EXIT_SUCCESS;
     }
-    if (leftover_args.size() != 2) {
+    if (leftover_args.size() != 1) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
     }
 
-    const string reads_file(leftover_args.front());
     const string targets_file(leftover_args.back());
 
     /****************** END COMMAND LINE OPTIONS *****************/
@@ -135,64 +135,31 @@ int main(int argc, const char **argv) {
     mkdir(outdir.c_str(), 0750);
 
     //Create the base file name for output files
-    size_t base_index = reads_file.find_last_of("/\\");
-    size_t suffix_index = reads_file.find_last_of(".");
+    size_t base_index = targets_file.find_last_of("/\\");
+    size_t suffix_index = targets_file.find_last_of(".");
     if (suffix_index <= base_index)
-      suffix_index = reads_file.length() - 1;
+      suffix_index = targets_file.length() - 1;
     string base_file = outdir
-        + reads_file.substr(base_index + 1, suffix_index - base_index - 1);
+        + targets_file.substr(base_index + 1, suffix_index - base_index - 1);
 
     //Vectors to store primary information from the data
+    vector<ExtendedGenomicRegion> mapped_reads;
     vector<string> seqs;
     vector<string> names;
     vector<GenomicRegion> regions;
     vector<GenomicRegion> de_regions;
     vector<GenomicRegion> targets;
+    vector<vector<size_t> > diagnostic_events;
 
-    //Reading the mapped reads
-    vector<ExtendedGenomicRegion> mapped_reads;
-    cerr << "Reading mapped reads..." << endl;
-    if (mapper == "rmap")
-      IO::read_rmap_output(reads_file, mapped_reads);
-    else if (mapper == "novoalign")
-      IO::read_novoalign_output(reads_file, mapped_reads);
-    else if (mapper == "bowtie")
-      IO::read_bowtie_output(reads_file, mapped_reads);
-    else
-      throw BEDFileException(
-          "Mapper not recognized, please choose from the options (rmap, novoalign or bowtie)");
 
     //Reading the targets
     cerr << "Reading target regions...";
     IO::read_piranha_output(targets_file, targets);
     cerr << "done!" << endl;
-
-    //Making the regions and extracting the diagnostic events from the mapped
-    //reads
-    cerr << "Processing mapped reads..." << endl;
-    IO::make_inputs(
-        mapped_reads, regions, de_regions, experiment, max_de,
-        min_cluster_size);
-
-    if (regions.size() == 0)
-      throw BEDFileException("No reads found...");
-
-    //Sorting the diagnostic events file and storing the file in output directory
-    string targets_outfile = base_file + ".bed";
-    IO::sort_regions(de_regions, targets_outfile);
-    de_regions.clear();
-    ReadBEDFile(targets_outfile, de_regions);
-
-    //Sorting the target file and storing the file in output directory
-    IO::sort_regions(targets, targets_outfile);
-    targets.clear();
-    ReadBEDFile(targets_outfile, targets);
-
     if (targets.size() == 0)
       throw BEDFileException("No targets found...");
-
-    IO::sift(targets, de_regions);
-
+    //Sorting the target file and storing the file in output directory
+    string targets_outfile = base_file + ".bed";
     IO::sort_regions(targets, targets_outfile);
     targets.clear();
     ReadBEDFile(targets_outfile, targets);
@@ -200,12 +167,53 @@ int main(int argc, const char **argv) {
     //Extracting the target sequences
     IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
 
+    IO::sort_regions(targets, targets_outfile);
+    targets.clear();
+    ReadBEDFile(targets_outfile, targets);
+
     unordered_map<string, size_t> names_table;
     IO::make_sequence_names(names, seqs, targets, names_table);
 
-    vector<vector<size_t> > diagnostic_events;
-    IO::load_diagnostic_events(
-        de_regions, names_table, targets, diagnostic_events);
+    //Reading the mapped reads
+    if (!reads_file.empty()) {
+
+      cerr << "Reading mapped reads..." << endl;
+      if (mapper == "rmap")
+        IO::read_rmap_output(reads_file, mapped_reads);
+      else if (mapper == "novoalign")
+        IO::read_novoalign_output(reads_file, mapped_reads);
+      else if (mapper == "bowtie")
+        IO::read_bowtie_output(reads_file, mapped_reads);
+      else
+        throw BEDFileException("Mapper not recognized, please choose from "
+            "the options (rmap, novoalign or bowtie)");
+
+      //Making the regions and extracting the diagnostic events from the mapped
+      //reads
+      cerr << "Processing mapped reads..." << endl;
+      IO::make_inputs(
+          mapped_reads, regions, de_regions, experiment, max_de,
+          min_cluster_size);
+
+      if (regions.size() == 0)
+        throw BEDFileException("No reads found...");
+      //Sorting the diagnostic events file and storing the file in output directory
+      IO::sort_regions(de_regions, targets_outfile);
+      de_regions.clear();
+      ReadBEDFile(targets_outfile, de_regions);
+
+      IO::sift(targets, de_regions);
+      IO::load_diagnostic_events(
+          de_regions, names_table, targets, diagnostic_events);
+    }
+
+    if (use_structure_information) {
+      IO::expand_regions(targets);
+      seqs.clear();
+      names.clear();
+      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
+      IO::unexpand_regions(targets);
+    }
 
     vector<vector<double> > indicators;
     for (size_t i = 0; i < targets.size(); ++i) {
@@ -215,23 +223,17 @@ int main(int argc, const char **argv) {
 
     Model model(motif_width);
 
-		if (use_structure_information) {
-      IO::expand_regions(targets);
-      seqs.clear();
-      names.clear();
-      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-      IO::unexpand_regions(targets);
-		}
-
-    IO::save_input_files(seqs, targets, de_regions, base_file);
-
     cerr << "Fitting started..." << endl;
     model.expectation_maximization(
         max_iterations, tolerance, targets, seqs, diagnostic_events, indicators,
-        use_sequence_information, use_structure_information, max_de, base_file);
+        use_sequence_information, use_structure_information, use_de_information, base_file);
 
     cerr << "Preparing output...";
-    model.prepare_output(seqs, indicators, diagnostic_events, base_file);
+    IO::save_input_files(seqs, targets, de_regions, base_file);
+    if (use_de_information)
+      model.prepare_output(seqs, indicators, diagnostic_events, base_file);
+    else
+      model.prepare_output(seqs, indicators, base_file);
     string output_model = base_file + ".mat";
     ofstream outf(output_model.c_str());
     outf << model.print_model("DE_EM", targets, seqs, indicators);

@@ -136,7 +136,7 @@ public:
   void expectation_maximization(const size_t max_iterations,
       const double tolerance, const std::vector<GenomicRegion> &regions,
       std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, bool s, bool t, size_t d,
+      std::vector<std::vector<double> > &I, bool s, bool t, bool d,
       std::string &file_name_base);
   //----------------------------------------------------------------
   //----------------------------------------------------------------
@@ -169,6 +169,11 @@ public:
       const std::vector<std::vector<size_t> > &diagnostic_events,
       const std::string &base_file);
 
+  void
+  prepare_output(std::vector<std::string> &seqs,
+      const std::vector<std::vector<double> > &indicators,
+      const std::string &base_file);
+
   std::string make_pwm();
 
   std::string make_structure_profile();
@@ -187,6 +192,10 @@ public:
 
   void generate_profile(const std::vector<std::vector<double> > &indicators,
       const std::vector<std::vector<size_t> > &diagnostic_events,
+      const std::vector<std::string> &seqs, const std::string &base_file,
+      const std::string option);
+
+  void generate_profile(const std::vector<std::vector<double> > &indicators,
       const std::vector<std::string> &seqs, const std::string &base_file,
       const std::string option);
 

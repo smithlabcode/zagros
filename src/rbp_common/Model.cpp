@@ -465,11 +465,13 @@ void Model::expectation_seq_de(const vector<string> &S,
 void Model::expectation_maximization(const size_t max_iterations,
     const double tolerance, const vector<GenomicRegion> &regions,
     vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I, bool s, bool t, size_t d,
+    vector<vector<double> > &I, bool s, bool t, bool d,
     string &file_name_base) {
 
-  cerr << "Fitting the shifting parameter..." << endl;
-  find_delta(S, regions, D);
+  if (d) {
+    cerr << "Fitting the shifting parameter..." << endl;
+    find_delta(S, regions, D);
+  }
 
   if (s && t && !d)
     expectation_maximization_seq_str(
@@ -536,7 +538,7 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
     const double tolerance, vector<string> &S, const vector<vector<size_t> > &D,
     vector<vector<double> > &I) {
 
-  cerr << "Fitting the full model started...";
+  cerr << "Fitting the full model using sequence started...";
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
@@ -998,6 +1000,33 @@ void Model::prepare_output(vector<string> &seqs,
   }
 }
 
+void Model::prepare_output(vector<string> &seqs,
+    const vector<vector<double> > &indicators,
+    const string &base_file) {
+
+  string file_name = base_file + "_Rversion.tmp";
+  string command = "R --version > " + file_name;
+  system(command.c_str());
+  file_name = base_file + "_Rversion.tmp";
+  ifstream in(file_name.c_str());
+  string s;
+  getline(in, s);
+  in.close();
+  command = "rm -f " + file_name;
+  system(command.c_str());
+
+  if (s.substr(0, 9) != "R version") {
+    cerr << "R is not installed on this system - disabling graphic utilities..."
+        << endl;
+  } else {
+    generate_profile(indicators, seqs, base_file, "motif");
+    generate_profile(
+        indicators, seqs, base_file, "locations");
+    generate_profile(
+        indicators, seqs, base_file, "sequences");
+  }
+}
+
 void Model::generate_profile(const vector<vector<double> > &indicators,
     const vector<vector<size_t> > &diagnostic_events,
     const vector<string> &seqs, const string &base_file, const string option) {
@@ -1015,6 +1044,33 @@ void Model::generate_profile(const vector<vector<double> > &indicators,
     s = make_seqs_profile(indicators, seqs);
   else
     s = make_de_profile(indicators, diagnostic_events, seqs);
+  outf << s << endl;
+  outf.close();
+  string command = "cat src/utils/generate_" + option
+      + "_profile.R | R --vanilla " + file_name + " ft "
+      + convertSizet(seqs.size()) + " " + convertSizet(seqs.front().length())
+      + " > " + file_name + "_" + option + ".tmp";
+  system(command.c_str());
+  command = "rm -f " + file_name;
+  system(command.c_str());
+  command = "rm -f " + file_name + "_" + option + ".tmp";
+  system(command.c_str());
+}
+
+void Model::generate_profile(const vector<vector<double> > &indicators,
+    const vector<string> &seqs, const string &base_file, const string option) {
+
+  string file_name = base_file + "_" + option + ".dat";
+  ofstream outf(file_name.c_str());
+  string s;
+  if (option == "motif")
+    s = make_pwm();
+  else if (option == "structure")
+    s = make_structure_profile();
+  else if (option == "locations")
+    s = make_location_profile(indicators);
+  else if (option == "sequences")
+    s = make_seqs_profile(indicators, seqs);
   outf << s << endl;
   outf.close();
   string command = "cat src/utils/generate_" + option

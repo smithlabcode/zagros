@@ -129,7 +129,7 @@ int main(int argc, const char **argv) {
 
     model.expectation_maximization(
         max_iterations, tolerance, regions, seqs, diagnostic_events, indicators, 1, 0,
-        1000, base_file);
+        1, base_file);
 
     model.prepare_output(seqs, indicators, diagnostic_events, base_file);
 
