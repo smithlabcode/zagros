@@ -221,11 +221,13 @@ int main(int argc, const char **argv) {
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
+    vector<double> has_motif(targets.size(), 1.0);
+
     Model model(motif_width);
 
     cerr << "Fitting started..." << endl;
     model.expectation_maximization(
-        max_iterations, tolerance, targets, seqs, diagnostic_events, indicators,
+        max_iterations, tolerance, targets, seqs, diagnostic_events, indicators, has_motif,
         use_sequence_information, use_structure_information, use_de_information, base_file);
 
     cerr << "Preparing output...";

@@ -63,6 +63,7 @@ Model::Model(const size_t motif_width) {
   f.resize(alphabet_size, 1.0 / alphabet_size);
   p = 0.5;
   delta = 0;
+  gamma = 1;
 }
 
 void Model::init_model(const size_t motif_width, const int delta_param) {
@@ -251,7 +252,7 @@ void Model::expectation_seq_str(const vector<string> &S,
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
     for (size_t k = 0; k < I[i].size(); k++)
-        I[i][k] = exp(numerator[k] - denominator[i]);
+      I[i][k] = exp(numerator[k] - denominator[i]);
   }
 }
 
@@ -314,13 +315,12 @@ void Model::expectation_seq_str_de(const vector<string> &S,
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
     for (size_t k = 0; k < I[i].size(); k++)
-        I[i][k] = exp(numerator[k] - denominator[i]);
+      I[i][k] = exp(numerator[k] - denominator[i]);
   }
 }
 
 void Model::expectation_str_de(const vector<vector<double> > &T,
-    const vector<double> &wnSecStr,
-    const vector<vector<size_t> > &D,
+    const vector<double> &wnSecStr, const vector<vector<size_t> > &D,
     vector<vector<double> > &I) {
 
 }
@@ -465,7 +465,7 @@ void Model::expectation_seq_de(const vector<string> &S,
 void Model::expectation_maximization(const size_t max_iterations,
     const double tolerance, const vector<GenomicRegion> &regions,
     vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I, bool s, bool t, bool d,
+    vector<vector<double> > &I, vector<double> &Q, bool s, bool t, bool d,
     string &file_name_base) {
 
   if (d) {
@@ -475,18 +475,18 @@ void Model::expectation_maximization(const size_t max_iterations,
 
   if (s && t && !d)
     expectation_maximization_seq_str(
-        max_iterations, tolerance, S, D, I, file_name_base);
+        max_iterations, tolerance, S, D, I, Q, file_name_base);
   else if (s && !t && d) {
     expectation_maximization_seq_de(
-        max_iterations, tolerance, regions, S, D, I);
+        max_iterations, tolerance, regions, S, D, I, Q);
   } else if (!s && t && d) {
     expectation_maximization_str_de(
-        max_iterations, tolerance, regions, S, D, I, file_name_base);
+        max_iterations, tolerance, regions, S, D, I, Q, file_name_base);
   } else if (s && t && d) {
     expectation_maximization_seq_str_de(
-        max_iterations, tolerance, regions, S, D, I, file_name_base);
+        max_iterations, tolerance, regions, S, D, I, Q, file_name_base);
   } else
-    expectation_maximization_seq(max_iterations, tolerance, S, D, I);
+    expectation_maximization_seq(max_iterations, tolerance, S, D, I, Q);
 }
 
 void Model::find_delta(const vector<string> &sequences,
@@ -494,11 +494,8 @@ void Model::find_delta(const vector<string> &sequences,
 
   vector<double> ll_delta;
   for (int delta_param = -10; delta_param < 11; ++delta_param) {
-    cerr << "\r"
-        << int(
-            100 * ll_delta.size()
-                / 21)
-        << "% completed..." << std::flush;
+    cerr << "\r" << int(100 * ll_delta.size() / 21) << "% completed..."
+        << std::flush;
     init_model(M.size(), delta_param);
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
@@ -536,7 +533,7 @@ void Model::find_delta(const vector<string> &sequences,
 
 void Model::expectation_maximization_seq(const size_t max_iterations,
     const double tolerance, vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I) {
+    vector<vector<double> > &I, vector<double> &Q) {
 
   cerr << "Fitting the full model using sequence started...";
 
@@ -575,7 +572,7 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
 
 void Model::expectation_maximization_seq_str(const size_t max_iterations,
     const double tolerance, vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I, string &file_name_base) {
+    vector<vector<double> > &I, vector<double> &Q, string &file_name_base) {
 
 //  determineStartingStructure(S);
 
@@ -632,7 +629,7 @@ void Model::expectation_maximization_seq_str(const size_t max_iterations,
 void Model::expectation_maximization_seq_de(const size_t max_iterations,
     const double tolerance, const vector<GenomicRegion> &regions,
     vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I) {
+    vector<vector<double> > &I, vector<double> &Q) {
 
   cerr << "Fitting the full model started...";
 
@@ -672,7 +669,7 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
 void Model::expectation_maximization_str_de(const size_t max_iterations,
     const double tolerance, const vector<GenomicRegion> &regions,
     vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I, string &file_name_base) {
+    vector<vector<double> > &I, vector<double> &Q, string &file_name_base) {
 
   vector<vector<double> > fullStrVectorTable;
   vector<vector<vector<double> > > fullStrMatrixTable;
@@ -728,7 +725,7 @@ void Model::expectation_maximization_str_de(const size_t max_iterations,
 void Model::expectation_maximization_seq_str_de(const size_t max_iterations,
     const double tolerance, const vector<GenomicRegion> &regions,
     vector<string> &S, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I, string &file_name_base) {
+    vector<vector<double> > &I, vector<double> &Q, string &file_name_base) {
 
   vector<vector<double> > fullStrVectorTable;
   vector<vector<vector<double> > > fullStrMatrixTable;
@@ -1001,8 +998,7 @@ void Model::prepare_output(vector<string> &seqs,
 }
 
 void Model::prepare_output(vector<string> &seqs,
-    const vector<vector<double> > &indicators,
-    const string &base_file) {
+    const vector<vector<double> > &indicators, const string &base_file) {
 
   string file_name = base_file + "_Rversion.tmp";
   string command = "R --version > " + file_name;
@@ -1020,10 +1016,8 @@ void Model::prepare_output(vector<string> &seqs,
         << endl;
   } else {
     generate_profile(indicators, seqs, base_file, "motif");
-    generate_profile(
-        indicators, seqs, base_file, "locations");
-    generate_profile(
-        indicators, seqs, base_file, "sequences");
+    generate_profile(indicators, seqs, base_file, "locations");
+    generate_profile(indicators, seqs, base_file, "sequences");
   }
 }
 

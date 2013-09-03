@@ -109,35 +109,38 @@ public:
   void expectation_maximization_seq(const size_t max_iterations,
       const double tolerance, std::vector<std::string> &S,
       const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void expectation_maximization_seq_str(const size_t max_iterations,
       const double tolerance, std::vector<std::string> &S,
       const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::string &file_name_base);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q,
+      std::string &file_name_base);
 
   void expectation_maximization_seq_de(const size_t max_iterations,
       const double tolerance, const std::vector<GenomicRegion> &regions,
       std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void expectation_maximization_str_de(const size_t max_iterations,
       const double tolerance, const std::vector<GenomicRegion> &regions,
       std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::string &file_name_base);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q,
+      std::string &file_name_base);
 
   void expectation_maximization_seq_str_de(const size_t max_iterations,
       const double tolerance, const std::vector<GenomicRegion> &regions,
       std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::string &file_name_base);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q,
+      std::string &file_name_base);
   //----------------------------------------------------------------
   //----------------------------------------------------------------
   //----------------------------------------------------------------
   void expectation_maximization(const size_t max_iterations,
       const double tolerance, const std::vector<GenomicRegion> &regions,
       std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, bool s, bool t, bool d,
-      std::string &file_name_base);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q, bool s,
+      bool t, bool d, std::string &file_name_base);
   //----------------------------------------------------------------
   //----------------------------------------------------------------
   //----------------------------------------------------------------
@@ -214,6 +217,8 @@ private:
   std::vector<double> f;
   double p;
   int delta;
+
+  double gamma;
 
   std::vector<double> structure_profile;
 };

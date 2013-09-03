@@ -70,8 +70,9 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt(
         "output", 'o', "Name of output file (default: stdout)", false, outfile);
     opt_parse.add_opt("width", 'w', "motif width", false, motif_width);
-    opt_parse.add_opt("chrom", 'c',
-        "directory with chrom files (FASTA format)", true, chrom_dir);
+    opt_parse.add_opt(
+        "chrom", 'c', "directory with chrom files (FASTA format)", true,
+        chrom_dir);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -111,8 +112,8 @@ int main(int argc, const char **argv) {
     IO::make_sequence_names(names, seqs, regions, names_table);
 
     vector<vector<size_t> > diagnostic_events;
-    IO::load_diagnostic_events(de_regions, names_table, regions,
-        diagnostic_events);
+    IO::load_diagnostic_events(
+        de_regions, names_table, regions, diagnostic_events);
 
     size_t base_index = regions_file.find_last_of("/\\");
     string base_file = regions_file.substr(
@@ -124,12 +125,13 @@ int main(int argc, const char **argv) {
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
+    vector<double> has_motif(regions.size(), 1.0);
+
     Model model(motif_width);
-    model.set_delta(6);
 
     model.expectation_maximization(
-        max_iterations, tolerance, regions, seqs, diagnostic_events, indicators, 1, 0,
-        1, base_file);
+        max_iterations, tolerance, regions, seqs, diagnostic_events, indicators,
+        has_motif, 1, 0, 1, base_file);
 
     model.prepare_output(seqs, indicators, diagnostic_events, base_file);
 
