@@ -132,21 +132,6 @@ void IO::make_extended_regions_chrom(vector<ExtendedGenomicRegion> &regions,
 
 }
 
-void IO::sort_regions(vector<GenomicRegion> &regions, string outfile) {
-  vector<GenomicRegionPointer> sorter;
-  for (vector<GenomicRegion>::iterator i = regions.begin(); i != regions.end();
-      ++i)
-    sorter.push_back(&(*i));
-  sort(sorter.begin(), sorter.end(), region_pointer_less());
-  ostream* out =
-      (outfile.empty()) ? &std::cout : new std::ofstream(outfile.c_str());
-  for (vector<GenomicRegionPointer>::const_iterator i(sorter.begin());
-      i != sorter.end(); ++i)
-    *out << *(*i) << '\n';
-  if (out != &std::cout)
-    delete out;
-}
-
 size_t IO::adjust_start_pos(const size_t orig_start, const string &chrom_name) {
   static const double LINE_WIDTH = 50.0;
   const size_t name_offset = chrom_name.length() + 2; // For the '>' and the '\n';

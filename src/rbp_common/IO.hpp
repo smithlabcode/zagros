@@ -48,12 +48,10 @@ struct DE {
   std::string read;
 };
 
-typedef GenomicRegion* GenomicRegionPointer;
-
-struct region_pointer_less {
-  bool operator()(const GenomicRegionPointer a,
-      const GenomicRegionPointer b) const {
-    return (*a) < (*b);
+struct region_less {
+  bool operator()(const GenomicRegion a,
+      const GenomicRegion b) const {
+    return (a) < (b);
   }
 };
 
@@ -70,9 +68,6 @@ public:
   static size_t
   adjust_region_size(const size_t orig_start, const std::string &chrom_name,
       const size_t orig_size);
-
-  static void
-  sort_regions(std::vector<GenomicRegion> &regions, std::string outfile);
 
   static void
   extract_regions_chrom_fasta(const std::string &chrom_name,

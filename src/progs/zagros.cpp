@@ -102,8 +102,8 @@ int main(int argc, const char **argv) {
         "structure", 't', "Use the structure information", false,
         use_structure_information);
     opt_parse.add_opt(
-        "diagnostic_events", 'd',
-        "Use the diagnostic events information", false, use_de_information);
+        "diagnostic_events", 'd', "Use the diagnostic events information",
+        false, use_de_information);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -134,48 +134,42 @@ int main(int argc, const char **argv) {
       outdir += "/";
     mkdir(outdir.c_str(), 0750);
 
+    string dirname, base_name, suffix;
+    parse_dir_baseanme_suffix(targets_file,dirname,
+        base_name, suffix);
     //Create the base file name for output files
-    size_t base_index = targets_file.find_last_of("/\\");
-    size_t suffix_index = targets_file.find_last_of(".");
-    if (suffix_index <= base_index)
-      suffix_index = targets_file.length() - 1;
-    string base_file = outdir
-        + targets_file.substr(base_index + 1, suffix_index - base_index - 1);
+    string base_file = outdir + base_name;
 
     //Vectors to store primary information from the data
-    vector<ExtendedGenomicRegion> mapped_reads;
     vector<string> seqs;
     vector<string> names;
-    vector<GenomicRegion> regions;
     vector<GenomicRegion> de_regions;
     vector<GenomicRegion> targets;
     vector<vector<size_t> > diagnostic_events;
-
 
     //Reading the targets
     cerr << "Reading target regions...";
     IO::read_piranha_output(targets_file, targets);
     cerr << "done!" << endl;
     if (targets.size() == 0)
-      throw BEDFileException("No targets found...");
+      throw SMITHLABException("No targets found...");
     //Sorting the target file and storing the file in output directory
-    string targets_outfile = base_file + ".bed";
-    IO::sort_regions(targets, targets_outfile);
-    targets.clear();
-    ReadBEDFile(targets_outfile, targets);
+    sort(targets.begin(), targets.end(), region_less());
 
     //Extracting the target sequences
-    IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-
-    IO::sort_regions(targets, targets_outfile);
-    targets.clear();
-    ReadBEDFile(targets_outfile, targets);
+    if (use_structure_information) {
+      IO::expand_regions(targets);
+      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
+      IO::unexpand_regions(targets);
+    } else
+      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
 
     unordered_map<string, size_t> names_table;
     IO::make_sequence_names(names, seqs, targets, names_table);
 
     //Reading the mapped reads
     if (!reads_file.empty()) {
+      vector<ExtendedGenomicRegion> mapped_reads;
 
       cerr << "Reading mapped reads..." << endl;
       if (mapper == "rmap")
@@ -185,50 +179,41 @@ int main(int argc, const char **argv) {
       else if (mapper == "bowtie")
         IO::read_bowtie_output(reads_file, mapped_reads);
       else
-        throw BEDFileException("Mapper not recognized, please choose from "
+        throw SMITHLABException("Mapper not recognized, please choose from "
             "the options (rmap, novoalign or bowtie)");
 
       //Making the regions and extracting the diagnostic events from the mapped
       //reads
       cerr << "Processing mapped reads..." << endl;
+      vector<GenomicRegion> regions;
       IO::make_inputs(
           mapped_reads, regions, de_regions, experiment, max_de,
           min_cluster_size);
 
       if (regions.size() == 0)
-        throw BEDFileException("No reads found...");
+        throw SMITHLABException("No reads found...");
       //Sorting the diagnostic events file and storing the file in output directory
-      IO::sort_regions(de_regions, targets_outfile);
-      de_regions.clear();
-      ReadBEDFile(targets_outfile, de_regions);
+      sort(de_regions.begin(), de_regions.end(), region_less());
 
       IO::sift(targets, de_regions);
       IO::load_diagnostic_events(
           de_regions, names_table, targets, diagnostic_events);
     }
 
-    if (use_structure_information) {
-      IO::expand_regions(targets);
-      seqs.clear();
-      names.clear();
-      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-      IO::unexpand_regions(targets);
-    }
-
+    vector<double> has_motif(targets.size(), 1.0);
     vector<vector<double> > indicators;
     for (size_t i = 0; i < targets.size(); ++i) {
       const size_t n_pos = targets[i].get_width() - motif_width + 1;
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
-    vector<double> has_motif(targets.size(), 1.0);
-
     Model model(motif_width);
 
     cerr << "Fitting started..." << endl;
     model.expectation_maximization(
-        max_iterations, tolerance, targets, seqs, diagnostic_events, indicators, has_motif,
-        use_sequence_information, use_structure_information, use_de_information, base_file);
+        max_iterations, tolerance, targets, seqs, diagnostic_events, indicators,
+        has_motif, use_sequence_information, use_structure_information,
+        use_de_information, base_file);
 
     cerr << "Preparing output...";
     IO::save_input_files(seqs, targets, de_regions, base_file);
