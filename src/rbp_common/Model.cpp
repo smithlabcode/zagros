@@ -74,7 +74,82 @@ void Model::init_model(const size_t motif_width, const int delta_param) {
   lambda.resize(motif_width, 0.5);
   f.resize(alphabet_size, 1.0 / alphabet_size);
   p = 0.5;
+  gamma = 1;
   set_delta(delta_param);
+}
+
+void
+Model::set_model(const string &motif) {
+
+  f.resize(alphabet_size, 1.0 / alphabet_size);
+  for (size_t i = 0; i < motif.length(); ++i) {
+    M[i].resize(alphabet_size, 0.03);
+    M[i][RNAUtils::base2int_RNA(motif[i])] = 0.91;
+  }
+}
+
+string
+Model::determineStartingPoint(const vector<string> &sequences) {
+  cerr << "Starting point determination..." << endl;
+
+  const size_t N = sequences.size();
+  if (N <= 0) {
+    stringstream ss;
+    ss << "Calculating EM starting point failed. Reason: sequences vector "
+        << "is empty";
+    throw SMITHLABException(ss.str());
+  }
+  const size_t L = sequences[0].size();
+  for (size_t i = 0; i < N; i++) {
+    if (!(L == sequences[i].size())) {
+      stringstream ss;
+      ss << "Calculating EM starting point failed. Reason: sequences are "
+          << "not all the same length";
+      throw SMITHLABException(ss.str());
+    }
+  }
+
+  unordered_map<string,double> sp_lls;
+
+  srand(time(NULL));
+  const size_t r = rand() % N;
+
+  for ( size_t j = 0; j < L - M.size() + 1; j+=1)
+    sp_lls[sequences[r].substr(j,M.size())] = 0.0;
+
+  double max_ll = -1 * std::numeric_limits<double>::max();
+  string max_lm = "";
+  for (unordered_map<string,double>::iterator it=sp_lls.begin(); it!=sp_lls.end(); ++it) {
+
+    set_model(it->first);
+    const size_t max_iterations = 10;
+    const double tolerance = 1e-10;
+    vector<double> has_motif(sequences.size(), 1.0);
+    vector<vector<double> > indicators;
+    for (size_t i = 0; i < sequences.size(); ++i) {
+      const size_t n_pos = sequences[i].length() - M.size() + 1;
+      indicators.push_back(vector<double>(n_pos, 1 / n_pos));
+    }
+    double prev_score = std::numeric_limits<double>::max();
+    for (size_t i = 0; i < max_iterations; ++i) {
+      expectation_seq(sequences, indicators, has_motif);
+      maximization_seq(sequences, indicators, has_motif);
+      const double score = calculateLogL(sequences, indicators, has_motif);
+
+      if ((prev_score - score) / prev_score < tolerance) {
+        break;
+      }
+      prev_score = score;
+    }
+    sp_lls[it->first] = prev_score;
+    if (it->second >= max_ll) {
+      max_ll = it->second;
+      max_lm = it->first;
+    }
+    cerr << it->first << " => " << it-> second << '\n';
+  }
+  cerr << "done!" << endl;
+  return max_lm;
 }
 
 double Model::calculateLogL(const vector<string> &S,
@@ -104,7 +179,33 @@ double Model::calculateLogL(const vector<string> &S,
 }
 
 double Model::calculateLogL(const vector<string> &S,
-    const vector<vector<size_t> > &D, const vector<vector<double> > &I) {
+    const vector<vector<double> > &I, vector<double> &Q) {
+
+  const size_t n = S.size();
+  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
+
+  for (size_t i = 0; i < n; i++) {
+    const size_t l = S[i].length();
+    for (size_t k = 0; k < I[i].size(); k++)
+      for (size_t j = 0; j < l; j++)
+        if (j >= k && j < k + M.size())
+          nb[j - k + 1][base2int(S[i][j])] += I[i][k];
+        else
+          nb[0][base2int(S[i][j])] += I[i][k];
+  }
+
+  double ret = 0.0;
+  for (size_t b = 0; b < alphabet_size; b++) {
+    ret += nb[0][b] * log(f[b]);
+    for (size_t j = 0; j < M.size(); j++)
+      ret += nb[j + 1][b] * log(M[j][b]);
+  }
+
+  return ret;
+}
+
+double Model::calculateLogL(const vector<string> &S,
+    const vector<vector<size_t> > &D, const vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
   vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
@@ -141,35 +242,9 @@ double Model::calculateLogL(const vector<string> &S,
   return ret;
 }
 
-double Model::calculateLogL_seq(const vector<string> &S,
-    const vector<vector<size_t> > &D, const vector<vector<double> > &I) {
-
-  const size_t n = S.size();
-  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
-
-  for (size_t i = 0; i < n; i++) {
-    const size_t l = S[i].length();
-    for (size_t k = 0; k < I[i].size(); k++)
-      for (size_t j = 0; j < l; j++)
-        if (j >= k && j < k + M.size())
-          nb[j - k + 1][base2int(S[i][j])] += I[i][k];
-        else
-          nb[0][base2int(S[i][j])] += I[i][k];
-  }
-
-  double ret = 0.0;
-  for (size_t b = 0; b < alphabet_size; b++) {
-    ret += nb[0][b] * log(f[b]);
-    for (size_t j = 0; j < M.size(); j++)
-      ret += nb[j + 1][b] * log(M[j][b]);
-  }
-
-  return ret;
-}
-
 void Model::maximization_seq_str(const vector<string> &S,
     const vector<vector<double> > &T, const vector<double> &wnSecStr,
-    const vector<vector<double> > &I) {
+    const vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
 
@@ -186,34 +261,49 @@ void Model::maximization_seq_str(const vector<string> &S,
   vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
 
   size_t total_bg_length = 0;
+  //--------
+  double new_gamma = 0.0;
+  //--------
   for (size_t i = 0; i < n; i++) {
     size_t l = S[i].length();
     total_bg_length += (I[i].size() - 1);
-
-    for (size_t k = 0; k < I[i].size(); k++)
+    //--------
+    double new_Q = 0.0;
+    //--------
+    for (size_t k = 0; k < I[i].size(); k++) {
+      //--------
+      new_Q += I[i][k];
+      //--------
       for (size_t j = 0; j < l; j++)
         if (j >= k && j < k + M.size())
           nb[j - k + 1][base2int(S[i][j])] += I[i][k];
         else
           nb[0][base2int(S[i][j])] += I[i][k];
+    }
+    //--------
+    Q[i] = new_Q;
+    new_gamma += Q[i];
+    //--------
   }
+  //--------
+  gamma = max(new_gamma / n, std::numeric_limits<double>::min());
+  //--------
 
   for (size_t b = 0; b < alphabet_size; b++) {
     f[b] = max(nb[0][b] / total_bg_length, std::numeric_limits<double>::min());
     for (size_t j = 0; j < M.size(); j++)
       M[j][b] = max(nb[j + 1][b] / n, std::numeric_limits<double>::min());
   }
-
 }
 
 void Model::expectation_seq_str(const vector<string> &S,
     const vector<vector<double> > &T, const vector<double> &wnSecStr,
-    vector<vector<double> > &I) {
+    vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
-  vector<vector<double> > alpha = RNAUtils::calculateUnpairedState(
+  vector<vector<double> > Alpha = RNAUtils::calculateUnpairedState(
       S, T, wnSecStr);
-  vector<vector<double> > gamma = RNAUtils::calculatePairedState(
+  vector<vector<double> > Gamma = RNAUtils::calculatePairedState(
       S, T, wnSecStr);
 
   vector<double> denominator;
@@ -221,6 +311,10 @@ void Model::expectation_seq_str(const vector<string> &S,
 
     const size_t l = S[i].length();
     vector<double> numerator(I[i].size(), 0.0);
+    //--------
+    double has_motif = 0.0;
+    //--------
+
 
     for (size_t k = 0; k < I[i].size(); k++) {
 
@@ -229,12 +323,16 @@ void Model::expectation_seq_str(const vector<string> &S,
       for (size_t j = 0; j < l; j++) {
 
         const char base = base2int(S[i][j]);
+        //--------
+        has_motif += log(f[base]);
+        //--------
+
         if (j >= k && j < k + M.size()) {
-          numerator[k] += (alpha[i][j] * log(M[j - k][base] * lambda[j - k]));
-          numerator[k] += (gamma[i][j] * log(M[j - k][base] * lambda[j - k]));
+          numerator[k] += (Alpha[i][j] * log(M[j - k][base] * lambda[j - k]));
+          numerator[k] += (Gamma[i][j] * log(M[j - k][base] * lambda[j - k]));
         } else {
-          f_powers_ss[base2int(S[i][j])] += (alpha[i][j]);
-          f_powers_ds[base2int(S[i][j])] += (gamma[i][j]);
+          f_powers_ss[base2int(S[i][j])] += (Alpha[i][j]);
+          f_powers_ds[base2int(S[i][j])] += (Gamma[i][j]);
         }
 
         assert(std::isfinite(f_powers_ss[base]));
@@ -247,8 +345,13 @@ void Model::expectation_seq_str(const vector<string> &S,
         numerator[k] += f_powers_ss[b] * log(f[b] * 0.5);
         numerator[k] += f_powers_ds[b] * log(f[b] * 0.5);
       }
+      //--------
+      numerator[k] = numerator[k]*(gamma/(S[i].length()-M.size()+1));
+      //--------
     }
-
+    //--------
+    numerator.push_back(has_motif*(1-gamma));
+    //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
     for (size_t k = 0; k < I[i].size(); k++)
@@ -258,12 +361,12 @@ void Model::expectation_seq_str(const vector<string> &S,
 
 void Model::expectation_seq_str_de(const vector<string> &S,
     const vector<vector<double> > &T, const vector<double> &wnSecStr,
-    const vector<vector<size_t> > &D, vector<vector<double> > &I) {
+    const vector<vector<size_t> > &D, vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
-  vector<vector<double> > alpha = RNAUtils::calculateUnpairedState(
+  vector<vector<double> > Alpha = RNAUtils::calculateUnpairedState(
       S, T, wnSecStr);
-  vector<vector<double> > gamma = RNAUtils::calculatePairedState(
+  vector<vector<double> > Gamma = RNAUtils::calculatePairedState(
       S, T, wnSecStr);
 
   vector<double> denominator;
@@ -271,6 +374,9 @@ void Model::expectation_seq_str_de(const vector<string> &S,
 
     const size_t l = S[i].length();
     vector<double> numerator(I[i].size(), 0.0);
+    //--------
+    double has_motif = 0.0;
+    //--------
 
     for (size_t k = 0; k < I[i].size(); k++) {
 
@@ -279,12 +385,16 @@ void Model::expectation_seq_str_de(const vector<string> &S,
       for (size_t j = 0; j < l; j++) {
 
         const char base = base2int(S[i][j]);
+        //--------
+        has_motif += log(f[base]);
+        //--------
+
         if (j >= k && j < k + M.size()) {
-          numerator[k] += (alpha[i][j] * log(M[j - k][base] * lambda[j - k]));
-          numerator[k] += (gamma[i][j] * log(M[j - k][base] * lambda[j - k]));
+          numerator[k] += (Alpha[i][j] * log(M[j - k][base] * lambda[j - k]));
+          numerator[k] += (Gamma[i][j] * log(M[j - k][base] * lambda[j - k]));
         } else {
-          f_powers_ss[base2int(S[i][j])] += (alpha[i][j]);
-          f_powers_ds[base2int(S[i][j])] += (gamma[i][j]);
+          f_powers_ss[base2int(S[i][j])] += (Alpha[i][j]);
+          f_powers_ds[base2int(S[i][j])] += (Gamma[i][j]);
         }
 
         assert(std::isfinite(f_powers_ss[base]));
@@ -310,8 +420,13 @@ void Model::expectation_seq_str_de(const vector<string> &S,
         numerator[k] = (numerator[k]
             + ((power * log(1 - p)) + (D[i].size() * log(p))));
       }
+      //--------
+      numerator[k] *= (gamma/(S[i].length()-M.size()+1));
+      //--------
     }
-
+    //--------
+    numerator.push_back(has_motif*(1-gamma));
+    //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
     for (size_t k = 0; k < I[i].size(); k++)
@@ -321,17 +436,17 @@ void Model::expectation_seq_str_de(const vector<string> &S,
 
 void Model::expectation_str_de(const vector<vector<double> > &T,
     const vector<double> &wnSecStr, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I) {
+    vector<vector<double> > &I, vector<double> &Q) {
 
 }
 
 void Model::maximization_str(const vector<vector<double> > &T,
-    const vector<double> &wnSecStr, const vector<vector<double> > &I) {
+    const vector<double> &wnSecStr, const vector<vector<double> > &I, vector<double> &Q) {
 
 }
 
 void Model::expectation_seq(const vector<string> &S,
-    vector<vector<double> > &I) {
+    vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
   vector<double> denominator;
@@ -341,12 +456,17 @@ void Model::expectation_seq(const vector<string> &S,
     const size_t l = S[i].length();
     vector<double> numerator(I[i].size(), 0.0);
 
+    //--------
+    double has_motif = 0.0;
+    //--------
     for (size_t k = 0; k < I[i].size(); k++) {
 
       vector<double> f_powers(alphabet_size, 0.0);
       for (size_t j = 0; j < l; j++) {
-
         const char base = base2int(S[i][j]);
+        //--------
+        has_motif += log(f[base]);
+        //--------
         if (j >= k && j < k + M.size()) {
           numerator[k] += log(M[j - k][base]);
         } else
@@ -360,8 +480,13 @@ void Model::expectation_seq(const vector<string> &S,
       }
       for (size_t b = 0; b < alphabet_size; b++)
         numerator[k] += f_powers[b] * log(f[b]);
+      //--------
+      numerator[k] *= (gamma/(S[i].length()-M.size()+1));
+      //--------
     }
-
+    //--------
+    numerator.push_back(has_motif*(1-gamma));
+    //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
     for (size_t k = 0; k < I[i].size(); k++)
@@ -370,23 +495,39 @@ void Model::expectation_seq(const vector<string> &S,
 }
 
 void Model::maximization_seq(const vector<string> &S,
-    const vector<vector<double> > &I) {
+    const vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
   vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
 
   size_t total_bg_length = 0;
+  //--------
+  double new_gamma = 0.0;
+  //--------
   for (size_t i = 0; i < n; i++) {
     size_t l = S[i].length();
     total_bg_length += (I[i].size() - 1);
-
-    for (size_t k = 0; k < I[i].size(); k++)
+    //--------
+    double new_Q = 0.0;
+    //--------
+    for (size_t k = 0; k < I[i].size(); k++) {
+      //--------
+      new_Q += I[i][k];
+      //--------
       for (size_t j = 0; j < l; j++)
         if (j >= k && j < k + M.size())
           nb[j - k + 1][base2int(S[i][j])] += I[i][k];
         else
           nb[0][base2int(S[i][j])] += I[i][k];
+    }
+    //--------
+    Q[i] = new_Q;
+    new_gamma += Q[i];
+    //--------
   }
+  //--------
+  gamma = max(new_gamma / n, std::numeric_limits<double>::min());
+  //--------
 
   for (size_t b = 0; b < alphabet_size; b++) {
     f[b] = max(nb[0][b] / total_bg_length, std::numeric_limits<double>::min());
@@ -396,7 +537,7 @@ void Model::maximization_seq(const vector<string> &S,
 }
 
 void Model::maximization_de(const vector<GenomicRegion> &regions,
-    const vector<vector<size_t> > &D, const vector<vector<double> > &I) {
+    const vector<vector<size_t> > &D, const vector<vector<double> > &I, vector<double> &Q) {
   const size_t n = I.size();
   double total_sum = 0.0;
   for (size_t i = 0; i < n; i++) {
@@ -416,7 +557,7 @@ void Model::maximization_de(const vector<GenomicRegion> &regions,
 
 void Model::expectation_seq_de(const vector<string> &S,
     const vector<GenomicRegion> &regions, const vector<vector<size_t> > &D,
-    vector<vector<double> > &I) {
+    vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
   vector<double> denominator;
@@ -424,11 +565,17 @@ void Model::expectation_seq_de(const vector<string> &S,
 
     const size_t l = S[i].length();
     vector<double> numerator(I[i].size(), 0.0);
+    //--------
+    double has_motif = 0.0;
+    //--------
 
     for (size_t k = 0; k < I[i].size(); k++) {
       vector<double> f_powers(alphabet_size, 0.0);
       for (size_t j = 0; j < l; j++) {
         const char base = base2int(S[i][j]);
+        //--------
+        has_motif += log(f[base]);
+        //--------
         if (j >= k && j < k + M.size()) {
           numerator[k] += log(M[j - k][base]);
         } else
@@ -453,8 +600,14 @@ void Model::expectation_seq_de(const vector<string> &S,
         }
         numerator[k] = (numerator[k]
             + ((power * log(1 - p)) + (D[i].size() * log(p))));
+        //--------
+        numerator[k] *= (gamma/(S[i].length()-M.size()+1));
+        //--------
       }
     }
+    //--------
+    numerator.push_back(has_motif*(1-gamma));
+    //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
     for (size_t k = 0; k < I[i].size(); k++)
@@ -468,10 +621,12 @@ void Model::expectation_maximization(const size_t max_iterations,
     vector<vector<double> > &I, vector<double> &Q, bool s, bool t, bool d,
     string &file_name_base) {
 
+  string starting_point = determineStartingPoint(S);
   if (d) {
     cerr << "Fitting the shifting parameter..." << endl;
     find_delta(S, regions, D);
   }
+  set_model(starting_point);
 
   if (s && t && !d)
     expectation_maximization_seq_str(
@@ -499,6 +654,7 @@ void Model::find_delta(const vector<string> &sequences,
     init_model(M.size(), delta_param);
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
+    vector<double> has_motif(sequences.size(), 1.0);
     vector<vector<double> > indicators;
     for (size_t i = 0; i < sequences.size(); ++i) {
       const size_t n_pos = sequences[i].length() - M.size() + 1;
@@ -506,10 +662,10 @@ void Model::find_delta(const vector<string> &sequences,
     }
     double prev_score = std::numeric_limits<double>::max();
     for (size_t i = 0; i < max_iterations; ++i) {
-      expectation_seq_de(sequences, regions, D, indicators);
-      maximization_seq(sequences, indicators);
-      maximization_de(regions, D, indicators);
-      const double score = calculateLogL(sequences, D, indicators);
+      expectation_seq_de(sequences, regions, D, indicators, has_motif);
+      maximization_seq(sequences, indicators, has_motif);
+      maximization_de(regions, D, indicators, has_motif);
+      const double score = calculateLogL(sequences, D, indicators, has_motif);
 
       if ((prev_score - score) / prev_score < tolerance) {
         break;
@@ -539,10 +695,10 @@ void Model::expectation_maximization_seq(const size_t max_iterations,
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq(S, I);
-    maximization_seq(S, I);
+    expectation_seq(S, I, Q);
+    maximization_seq(S, I, Q);
 
-    const double score = calculateLogL(S, I);
+    const double score = calculateLogL(S, I, Q);
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;
@@ -595,10 +751,10 @@ void Model::expectation_maximization_seq_str(const size_t max_iterations,
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq_str(S, fullStrVectorTable, wnSecStr, I);
-    maximization_seq_str(S, fullStrVectorTable, wnSecStr, I);
+    expectation_seq_str(S, fullStrVectorTable, wnSecStr, I, Q);
+    maximization_seq_str(S, fullStrVectorTable, wnSecStr, I, Q);
 
-    const double score = calculateLogL(S, I);
+    const double score = calculateLogL(S, I, Q);
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;
@@ -635,11 +791,11 @@ void Model::expectation_maximization_seq_de(const size_t max_iterations,
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq_de(S, regions, D, I);
-    maximization_seq(S, I);
-    maximization_de(regions, D, I);
+    expectation_seq_de(S, regions, D, I, Q);
+    maximization_seq(S, I, Q);
+    maximization_de(regions, D, I, Q);
 
-    const double score = calculateLogL(S, D, I);
+    const double score = calculateLogL(S, D, I, Q);
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;
@@ -690,11 +846,11 @@ void Model::expectation_maximization_str_de(const size_t max_iterations,
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_str_de(fullStrVectorTable, wnSecStr, D, I);
-    maximization_str(fullStrVectorTable, wnSecStr, I);
-    maximization_de(regions, D, I);
+    expectation_str_de(fullStrVectorTable, wnSecStr, D, I, Q);
+    maximization_str(fullStrVectorTable, wnSecStr, I, Q);
+    maximization_de(regions, D, I, Q);
 
-    const double score = calculateLogL(S, D, I);
+    const double score = calculateLogL(S, D, I, Q);
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;
@@ -746,11 +902,11 @@ void Model::expectation_maximization_seq_str_de(const size_t max_iterations,
 
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq_str_de(S, fullStrVectorTable, wnSecStr, D, I);
-    maximization_seq_str(S, fullStrVectorTable, wnSecStr, I);
-    maximization_de(regions, D, I);
+    expectation_seq_str_de(S, fullStrVectorTable, wnSecStr, D, I, Q);
+    maximization_seq_str(S, fullStrVectorTable, wnSecStr, I, Q);
+    maximization_de(regions, D, I, Q);
 
-    const double score = calculateLogL(S, D, I);
+    const double score = calculateLogL(S, D, I, Q);
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;

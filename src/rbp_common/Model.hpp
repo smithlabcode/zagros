@@ -47,64 +47,69 @@ public:
   void
   init_model(const size_t motif_width, const int delta_param);
 
+  void
+  set_model(const std::string &motif);
+
+  std::string
+  determineStartingPoint(const std::vector<std::string> &sequences);
   /*** parameter fitting ***/
 
   //----------------------------------------------------------------
   double calculateLogL(const std::vector<std::string> &S,
+      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
+
+  double calculateLogL(const std::vector<std::string> &S,
       const std::vector<std::vector<double> > &I);
 
   double calculateLogL(const std::vector<std::string> &S,
       const std::vector<std::vector<size_t> > &D,
-      const std::vector<std::vector<double> > &I);
+      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
-  double calculateLogL_seq(const std::vector<std::string> &S,
-      const std::vector<std::vector<size_t> > &D,
-      const std::vector<std::vector<double> > &I);
   //----------------------------------------------------------------
   void expectation_seq(const std::vector<std::string> &S,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void expectation_seq_de(const std::vector<std::string> &S,
       const std::vector<GenomicRegion> &regions,
       const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void
   expectation_str_de(const std::vector<std::vector<double> > &T,
       const std::vector<double> &wnSecStr,
       const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void
   expectation_seq_str(const std::vector<std::string> &S,
       const std::vector<std::vector<double> > &T,
       const std::vector<double> &wnSecStr,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void
   expectation_seq_str_de(const std::vector<std::string> &S,
       const std::vector<std::vector<double> > &T,
       const std::vector<double> &wnSecStr,
       const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I);
+      std::vector<std::vector<double> > &I, std::vector<double> &Q);
   //----------------------------------------------------------------
   void maximization_seq(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &I);
+      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void
   maximization_str(const std::vector<std::vector<double> > &T,
       const std::vector<double> &wnSecStr,
-      const std::vector<std::vector<double> > &I);
+      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void maximization_de(const std::vector<GenomicRegion> &regions,
       const std::vector<std::vector<size_t> > &D,
-      const std::vector<std::vector<double> > &I);
+      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
 
   void
   maximization_seq_str(const std::vector<std::string> &S,
       const std::vector<std::vector<double> > &T,
       const std::vector<double> &wnSecStr,
-      const std::vector<std::vector<double> > &I);
+      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
   //----------------------------------------------------------------
   void expectation_maximization_seq(const size_t max_iterations,
       const double tolerance, std::vector<std::string> &S,
