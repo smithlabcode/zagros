@@ -87,7 +87,8 @@ void Model::set_model(const string &motif) {
   }
 }
 
-string Model::determineStartingPoint(const vector<string> &sequences) {
+string Model::determineStartingPoint_highest_liklihood_kmer(
+    const vector<string> &sequences) {
   cerr << "Starting point determination..." << endl;
 
   const size_t N = sequences.size();
@@ -138,6 +139,45 @@ string Model::determineStartingPoint(const vector<string> &sequences) {
     }
     cerr << it->first << " => " << it->second << '\n';
   }
+  cerr << "done!" << endl;
+  return max_lm;
+}
+
+string Model::determineStartingPoint_most_abundant_kmer(
+    const vector<string> &sequences) {
+  cerr << "Starting point determination..." << endl;
+
+  const size_t N = sequences.size();
+  if (N <= 0) {
+    stringstream ss;
+    ss << "Calculating EM starting point failed. Reason: sequences vector "
+        << "is empty";
+    throw SMITHLABException(ss.str());
+  }
+
+  unordered_map<string, size_t> sp_lls;
+
+  for (size_t i = 0; i < sequences.size(); ++i)
+    for (size_t j = 0; j < sequences[i].length() - M.size() + 1; ++j) {
+      unordered_map<string, size_t>::const_iterator got = sp_lls.find(
+          sequences[i].substr(j, M.size()));
+      if (got == sp_lls.end())
+        sp_lls[sequences[i].substr(j, M.size())] = 1;
+      else
+        sp_lls[sequences[i].substr(j, M.size())]++;
+    }
+
+  size_t max_ll = 0;
+  string max_lm = "";
+
+  for (unordered_map<string, size_t>::iterator it = sp_lls.begin();
+      it != sp_lls.end(); ++it) {
+    if (it->second >= max_ll) {
+      max_ll = it->second;
+      max_lm = it->first;
+    }
+  }
+
   cerr << "done!" << endl;
   return max_lm;
 }
@@ -614,7 +654,7 @@ void Model::expectation_maximization(const size_t max_iterations,
     vector<vector<double> > &I, vector<double> &Q, bool s, bool t, bool d,
     string &file_name_base) {
 
-  string starting_point = determineStartingPoint(S);
+  string starting_point = determineStartingPoint_most_abundant_kmer(S);
   if (d) {
     cerr << "Fitting the shifting parameter..." << endl;
     find_delta(S, regions, D);

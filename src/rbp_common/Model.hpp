@@ -51,7 +51,12 @@ public:
   set_model(const std::string &motif);
 
   std::string
-  determineStartingPoint(const std::vector<std::string> &sequences);
+  determineStartingPoint_highest_liklihood_kmer(
+      const std::vector<std::string> &sequences);
+
+  std::string
+  determineStartingPoint_most_abundant_kmer(
+      const std::vector<std::string> &sequences);
   /*** parameter fitting ***/
 
   //----------------------------------------------------------------
