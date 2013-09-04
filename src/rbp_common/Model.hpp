@@ -83,8 +83,8 @@ public:
   void
   expectation_seq_str(const std::vector<std::string> &S,
       const std::vector<std::vector<double> > &T,
-      const std::vector<double> &wnSecStr,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
+      const std::vector<double> &wnSecStr, std::vector<std::vector<double> > &I,
+      std::vector<double> &Q);
 
   void
   expectation_seq_str_de(const std::vector<std::string> &S,

@@ -78,8 +78,7 @@ void Model::init_model(const size_t motif_width, const int delta_param) {
   set_delta(delta_param);
 }
 
-void
-Model::set_model(const string &motif) {
+void Model::set_model(const string &motif) {
 
   f.resize(alphabet_size, 1.0 / alphabet_size);
   for (size_t i = 0; i < motif.length(); ++i) {
@@ -88,8 +87,7 @@ Model::set_model(const string &motif) {
   }
 }
 
-string
-Model::determineStartingPoint(const vector<string> &sequences) {
+string Model::determineStartingPoint(const vector<string> &sequences) {
   cerr << "Starting point determination..." << endl;
 
   const size_t N = sequences.size();
@@ -99,27 +97,19 @@ Model::determineStartingPoint(const vector<string> &sequences) {
         << "is empty";
     throw SMITHLABException(ss.str());
   }
-  const size_t L = sequences[0].size();
-  for (size_t i = 0; i < N; i++) {
-    if (!(L == sequences[i].size())) {
-      stringstream ss;
-      ss << "Calculating EM starting point failed. Reason: sequences are "
-          << "not all the same length";
-      throw SMITHLABException(ss.str());
-    }
-  }
 
-  unordered_map<string,double> sp_lls;
+  unordered_map<string, double> sp_lls;
 
   srand(time(NULL));
   const size_t r = rand() % N;
 
-  for ( size_t j = 0; j < L - M.size() + 1; j+=1)
-    sp_lls[sequences[r].substr(j,M.size())] = 0.0;
+  for (size_t j = 0; j < sequences[r].length() - M.size() + 1; j += 1)
+    sp_lls[sequences[r].substr(j, M.size())] = 0.0;
 
   double max_ll = -1 * std::numeric_limits<double>::max();
   string max_lm = "";
-  for (unordered_map<string,double>::iterator it=sp_lls.begin(); it!=sp_lls.end(); ++it) {
+  for (unordered_map<string, double>::iterator it = sp_lls.begin();
+      it != sp_lls.end(); ++it) {
 
     set_model(it->first);
     const size_t max_iterations = 10;
@@ -146,7 +136,7 @@ Model::determineStartingPoint(const vector<string> &sequences) {
       max_ll = it->second;
       max_lm = it->first;
     }
-    cerr << it->first << " => " << it-> second << '\n';
+    cerr << it->first << " => " << it->second << '\n';
   }
   cerr << "done!" << endl;
   return max_lm;
@@ -205,7 +195,8 @@ double Model::calculateLogL(const vector<string> &S,
 }
 
 double Model::calculateLogL(const vector<string> &S,
-    const vector<vector<size_t> > &D, const vector<vector<double> > &I, vector<double> &Q) {
+    const vector<vector<size_t> > &D, const vector<vector<double> > &I,
+    vector<double> &Q) {
 
   const size_t n = S.size();
   vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
@@ -315,7 +306,6 @@ void Model::expectation_seq_str(const vector<string> &S,
     double has_motif = 0.0;
     //--------
 
-
     for (size_t k = 0; k < I[i].size(); k++) {
 
       vector<double> f_powers_ss(alphabet_size, 0.0);
@@ -337,7 +327,7 @@ void Model::expectation_seq_str(const vector<string> &S,
 
         assert(std::isfinite(f_powers_ss[base]));
         if (!std::isfinite(numerator[k])) {
-          cerr << "Here - Seq_Str!" << endl;
+          cerr << "Numerical error!" << endl;
           exit(1);
         }
       }
@@ -346,11 +336,11 @@ void Model::expectation_seq_str(const vector<string> &S,
         numerator[k] += f_powers_ds[b] * log(f[b] * 0.5);
       }
       //--------
-      numerator[k] = numerator[k]*(gamma/(S[i].length()-M.size()+1));
+      numerator[k] = numerator[k] * (gamma / (S[i].length() - M.size() + 1));
       //--------
     }
     //--------
-    numerator.push_back(has_motif*(1-gamma));
+    numerator.push_back(has_motif * (1 - gamma));
     //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
@@ -361,7 +351,8 @@ void Model::expectation_seq_str(const vector<string> &S,
 
 void Model::expectation_seq_str_de(const vector<string> &S,
     const vector<vector<double> > &T, const vector<double> &wnSecStr,
-    const vector<vector<size_t> > &D, vector<vector<double> > &I, vector<double> &Q) {
+    const vector<vector<size_t> > &D, vector<vector<double> > &I,
+    vector<double> &Q) {
 
   const size_t n = S.size();
   vector<vector<double> > Alpha = RNAUtils::calculateUnpairedState(
@@ -399,7 +390,7 @@ void Model::expectation_seq_str_de(const vector<string> &S,
 
         assert(std::isfinite(f_powers_ss[base]));
         if (!std::isfinite(numerator[k])) {
-          cerr << "Here - Seq_Str!" << endl;
+          cerr << "Numerical error!" << endl;
           exit(1);
         }
       }
@@ -414,18 +405,18 @@ void Model::expectation_seq_str_de(const vector<string> &S,
           power += abs(D[i][j] - (k + delta));
         assert(std::isfinite(power));
         if (!std::isfinite(numerator[k])) {
-          cerr << "DE __  Here!" << endl;
+          cerr << "Numerical error!" << endl;
           exit(1);
         }
         numerator[k] = (numerator[k]
             + ((power * log(1 - p)) + (D[i].size() * log(p))));
       }
       //--------
-      numerator[k] *= (gamma/(S[i].length()-M.size()+1));
+      numerator[k] *= (gamma / (S[i].length() - M.size() + 1));
       //--------
     }
     //--------
-    numerator.push_back(has_motif*(1-gamma));
+    numerator.push_back(has_motif * (1 - gamma));
     //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
@@ -441,12 +432,13 @@ void Model::expectation_str_de(const vector<vector<double> > &T,
 }
 
 void Model::maximization_str(const vector<vector<double> > &T,
-    const vector<double> &wnSecStr, const vector<vector<double> > &I, vector<double> &Q) {
+    const vector<double> &wnSecStr, const vector<vector<double> > &I,
+    vector<double> &Q) {
 
 }
 
-void Model::expectation_seq(const vector<string> &S,
-    vector<vector<double> > &I, vector<double> &Q) {
+void Model::expectation_seq(const vector<string> &S, vector<vector<double> > &I,
+    vector<double> &Q) {
 
   const size_t n = S.size();
   vector<double> denominator;
@@ -474,18 +466,18 @@ void Model::expectation_seq(const vector<string> &S,
 
         assert(std::isfinite(f_powers[base]));
         if (!std::isfinite(numerator[k])) {
-          cerr << "Here!" << endl;
+          cerr << "Numerical error!" << endl;
           exit(1);
         }
       }
       for (size_t b = 0; b < alphabet_size; b++)
         numerator[k] += f_powers[b] * log(f[b]);
       //--------
-      numerator[k] *= (gamma/(S[i].length()-M.size()+1));
+      numerator[k] *= (gamma / (S[i].length() - M.size() + 1));
       //--------
     }
     //--------
-    numerator.push_back(has_motif*(1-gamma));
+    numerator.push_back(has_motif * (1 - gamma));
     //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));
@@ -537,7 +529,8 @@ void Model::maximization_seq(const vector<string> &S,
 }
 
 void Model::maximization_de(const vector<GenomicRegion> &regions,
-    const vector<vector<size_t> > &D, const vector<vector<double> > &I, vector<double> &Q) {
+    const vector<vector<size_t> > &D, const vector<vector<double> > &I,
+    vector<double> &Q) {
   const size_t n = I.size();
   double total_sum = 0.0;
   for (size_t i = 0; i < n; i++) {
@@ -582,7 +575,7 @@ void Model::expectation_seq_de(const vector<string> &S,
           f_powers[base2int(S[i][j])]++;
         assert(std::isfinite(f_powers[base]));
         if (!std::isfinite(numerator[k])) {
-          cerr << "Here!" << endl;
+          cerr << "Numerical error!" << endl;
           exit(1);
         }
       }
@@ -595,18 +588,18 @@ void Model::expectation_seq_de(const vector<string> &S,
           power += abs(D[i][j] - (k + delta));
         assert(std::isfinite(power));
         if (!std::isfinite(numerator[k])) {
-          cerr << "DE __  Here!" << endl;
+          cerr << "Numerical error!" << endl;
           exit(1);
         }
         numerator[k] = (numerator[k]
             + ((power * log(1 - p)) + (D[i].size() * log(p))));
         //--------
-        numerator[k] *= (gamma/(S[i].length()-M.size()+1));
+        numerator[k] *= (gamma / (S[i].length() - M.size() + 1));
         //--------
       }
     }
     //--------
-    numerator.push_back(has_motif*(1-gamma));
+    numerator.push_back(has_motif * (1 - gamma));
     //--------
     denominator.push_back(
         smithlab::log_sum_log_vec(numerator, numerator.size()));

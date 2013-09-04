@@ -135,8 +135,7 @@ int main(int argc, const char **argv) {
     mkdir(outdir.c_str(), 0750);
 
     string dirname, base_name, suffix;
-    parse_dir_baseanme_suffix(targets_file,dirname,
-        base_name, suffix);
+    parse_dir_baseanme_suffix(targets_file, dirname, base_name, suffix);
     //Create the base file name for output files
     string base_file = outdir + base_name;
 
@@ -192,7 +191,8 @@ int main(int argc, const char **argv) {
 
       if (regions.size() == 0)
         throw SMITHLABException("No reads found...");
-      //Sorting the diagnostic events file and storing the file in output directory
+      //Sorting the diagnostic events file and storing the file in
+      //output directory
       sort(de_regions.begin(), de_regions.end(), region_less());
 
       IO::sift(targets, de_regions);
@@ -208,6 +208,7 @@ int main(int argc, const char **argv) {
     }
 
     Model model(motif_width);
+    IO::save_input_files(seqs, targets, de_regions, base_file);
 
     cerr << "Fitting started..." << endl;
     model.expectation_maximization(
