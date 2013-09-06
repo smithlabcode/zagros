@@ -645,7 +645,7 @@ void Model::expectation_maximization(const size_t max_iterations,
     vector<vector<double> > &I, vector<double> &Q, bool s, bool t, bool d,
     string &file_name_base) {
 
-  string starting_point = determineStartingPoint_highest_liklihood_kmer(S);
+  string starting_point = determineStartingPoint_most_abundant_kmer(S);
   cout << starting_point << endl;
   if (d) {
     cerr << "Fitting the shifting parameter..." << endl;
