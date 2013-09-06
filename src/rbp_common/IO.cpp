@@ -394,20 +394,32 @@ void IO::collapse_extended_regions(vector<ExtendedGenomicRegion> &regions,
 void IO::add_diagnostic_events_iCLIP(vector<GenomicRegion> &diagnostic_events,
     ExtendedGenomicRegion &region, const string name) {
 
-  size_t score = 1;
-  if (diagnostic_events.size() != 0)
-    if (diagnostic_events[diagnostic_events.size() - 1].get_name() == name)
-      score = diagnostic_events[diagnostic_events.size() - 1].get_score() + 1;
-  if (region.pos_strand()) {
-    GenomicRegion gr(
-        region.get_chrom(), region.get_start() - 1, region.get_start(), name,
-        score, region.get_strand());
-    diagnostic_events.push_back(gr);
-  } else {
-    GenomicRegion gr(
-        region.get_chrom(), region.get_start() - 2, region.get_start() - 1,
-        name, score, region.get_strand());
-    diagnostic_events.push_back(gr);
+  vector<DE> des;
+  parse_diagnostic_events(region.get_extra(), des);
+  bool contains_de = true;
+  if (des.size() > 0)
+    for (size_t i = 0; i < des.size(); ++i)
+      if ((region.pos_strand() && des[i].type == "insertion"
+          && des[i].base == "T")
+          || (!region.pos_strand() && des[i].type == "insertion"
+              && des[i].base == "A"))
+        contains_de = false;
+  if (contains_de) {
+    size_t score = 1;
+    if (diagnostic_events.size() != 0)
+      if (diagnostic_events[diagnostic_events.size() - 1].get_name() == name)
+        score = diagnostic_events[diagnostic_events.size() - 1].get_score() + 1;
+    if (region.pos_strand()) {
+      GenomicRegion gr(
+          region.get_chrom(), region.get_start(), region.get_start() + 1, name,
+          score, region.get_strand());
+      diagnostic_events.push_back(gr);
+    } else {
+      GenomicRegion gr(
+          region.get_chrom(), region.get_end(), region.get_end() + 1, name,
+          score, region.get_strand());
+      diagnostic_events.push_back(gr);
+    }
   }
 }
 
@@ -466,6 +478,8 @@ void IO::add_diagnostic_events_pCLIP(vector<GenomicRegion> &diagnostic_events,
             region.get_start() + des[j].position - 1, name, score,
             region.get_strand());
         diagnostic_events.push_back(gr);
+        cout << name << endl;
+        cout << region.tostring() << endl;
       }
     }
   }
@@ -975,7 +989,8 @@ void IO::trimTables(vector<string> &sequences, const string &file_name,
     for (size_t i = 0; i < L; i++) {
       fullStrMatrixTable[n][i].resize(L);
       for (size_t j = 0; j < L; j++)
-        fullStrMatrixTable[n][i][j] = exp_fullStrMatrixTable[n][i + flanking_regions_size][j + flanking_regions_size];
+        fullStrMatrixTable[n][i][j] = exp_fullStrMatrixTable[n][i
+            + flanking_regions_size][j + flanking_regions_size];
     }
   }
 }
@@ -1000,6 +1015,15 @@ void IO::saveTables(const vector<string> &sequences, const string &fileName,
 void IO::save_input_files(const vector<string> &seqs,
     const vector<GenomicRegion> &regions,
     const vector<GenomicRegion> &de_regions, const string base_file) {
+
+  string outfile = base_file + ".bed";
+  std::ostream* out2 =
+      (!outfile.empty()) ? new ofstream(outfile.c_str()) : &cout;
+  copy(
+      regions.begin(), regions.end(),
+      std::ostream_iterator<GenomicRegion>(*out2, "\n"));
+  if (out2 != &cout)
+    delete out2;
 
   string seqs_outfile = base_file + ".fa";
   std::ostream* out1 =
@@ -1186,12 +1210,10 @@ void IO::read_piranha_output(string filename,
   for (size_t i = 0; i < the_regions.size(); i += 1) {
     if (the_regions[i].get_width() > 0) {
       ExtendedGenomicRegion gr(
-          the_regions[i].get_chrom(),
-          the_regions[i].get_start(),
-          the_regions[i].get_end(),
-          the_regions[i].get_name(),
-          the_regions[i].get_score(),
-          the_regions[i].get_strand(), "ACGT", "2C>C");
+          the_regions[i].get_chrom(), the_regions[i].get_start(),
+          the_regions[i].get_end(), the_regions[i].get_name(),
+          the_regions[i].get_score(), the_regions[i].get_strand(), "ACGT",
+          "2C>C");
       regions.push_back(gr);
     }
   }
@@ -1202,15 +1224,12 @@ void IO::read_piranha_output(string filename, vector<GenomicRegion> &regions) {
   vector<GenomicRegion> the_regions;
   ReadBEDFile(filename, the_regions);
   for (size_t i = 0; i < the_regions.size(); i += 1) {
-      string name = "sequence_" + convertSizet(i+1);
-      GenomicRegion gr(
-          the_regions[i].get_chrom(),
-          the_regions[i].get_start(),
-          the_regions[i].get_end(),
-          name,
-          the_regions[i].get_score(),
-          the_regions[i].get_strand());
-      regions.push_back(gr);
+    string name = "sequence_" + convertSizet(i + 1);
+    GenomicRegion gr(
+        the_regions[i].get_chrom(), the_regions[i].get_start(),
+        the_regions[i].get_end(), name, the_regions[i].get_score(),
+        the_regions[i].get_strand());
+    regions.push_back(gr);
   }
 }
 
@@ -1291,7 +1310,6 @@ void IO::sift(vector<GenomicRegion> &other_regions,
 
   }
   regions.swap(good_regions);
-
 
   for (size_t i = 0; i < other_regions.size(); ++i) {
     for (size_t j = 0; j < regions.size(); ++j)

@@ -119,7 +119,7 @@ string Model::determineStartingPoint_highest_liklihood_kmer(
     vector<vector<double> > indicators;
     for (size_t i = 0; i < sequences.size(); ++i) {
       const size_t n_pos = sequences[i].length() - M.size() + 1;
-      indicators.push_back(vector<double>(n_pos, 1 / n_pos));
+      indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
     double prev_score = std::numeric_limits<double>::max();
     for (size_t i = 0; i < max_iterations; ++i) {
@@ -337,7 +337,6 @@ void Model::expectation_seq_str(const vector<string> &S,
   vector<vector<double> > Gamma = RNAUtils::calculatePairedState(
       S, T, wnSecStr);
 
-  vector<double> denominator;
   for (size_t i = 0; i < n; i++) {
 
     const size_t l = S[i].length();
@@ -382,10 +381,9 @@ void Model::expectation_seq_str(const vector<string> &S,
     //--------
     numerator.push_back(has_motif * (1 - gamma));
     //--------
-    denominator.push_back(
-        smithlab::log_sum_log_vec(numerator, numerator.size()));
+    double denominator = smithlab::log_sum_log_vec(numerator, numerator.size());
     for (size_t k = 0; k < I[i].size(); k++)
-      I[i][k] = exp(numerator[k] - denominator[i]);
+      I[i][k] = exp(numerator[k] - denominator);
   }
 }
 
@@ -400,7 +398,6 @@ void Model::expectation_seq_str_de(const vector<string> &S,
   vector<vector<double> > Gamma = RNAUtils::calculatePairedState(
       S, T, wnSecStr);
 
-  vector<double> denominator;
   for (size_t i = 0; i < n; i++) {
 
     const size_t l = S[i].length();
@@ -458,10 +455,9 @@ void Model::expectation_seq_str_de(const vector<string> &S,
     //--------
     numerator.push_back(has_motif * (1 - gamma));
     //--------
-    denominator.push_back(
-        smithlab::log_sum_log_vec(numerator, numerator.size()));
+    double denominator = smithlab::log_sum_log_vec(numerator, numerator.size());
     for (size_t k = 0; k < I[i].size(); k++)
-      I[i][k] = exp(numerator[k] - denominator[i]);
+      I[i][k] = exp(numerator[k] - denominator);
   }
 }
 
@@ -481,8 +477,6 @@ void Model::expectation_seq(const vector<string> &S, vector<vector<double> > &I,
     vector<double> &Q) {
 
   const size_t n = S.size();
-  vector<double> denominator;
-
   for (size_t i = 0; i < n; i++) {
 
     const size_t l = S[i].length();
@@ -519,10 +513,9 @@ void Model::expectation_seq(const vector<string> &S, vector<vector<double> > &I,
     //--------
     numerator.push_back(has_motif * (1 - gamma));
     //--------
-    denominator.push_back(
-        smithlab::log_sum_log_vec(numerator, numerator.size()));
+    double denominator = smithlab::log_sum_log_vec(numerator, numerator.size());
     for (size_t k = 0; k < I[i].size(); k++)
-      I[i][k] = exp(numerator[k] - denominator[i]);
+      I[i][k] = exp(numerator[k] - denominator);
   }
 }
 
@@ -593,7 +586,6 @@ void Model::expectation_seq_de(const vector<string> &S,
     vector<vector<double> > &I, vector<double> &Q) {
 
   const size_t n = S.size();
-  vector<double> denominator;
   for (size_t i = 0; i < n; i++) {
 
     const size_t l = S[i].length();
@@ -641,10 +633,9 @@ void Model::expectation_seq_de(const vector<string> &S,
     //--------
     numerator.push_back(has_motif * (1 - gamma));
     //--------
-    denominator.push_back(
-        smithlab::log_sum_log_vec(numerator, numerator.size()));
+    double denominator = smithlab::log_sum_log_vec(numerator, numerator.size());
     for (size_t k = 0; k < I[i].size(); k++)
-      I[i][k] = exp(numerator[k] - denominator[i]);
+      I[i][k] = exp(numerator[k] - denominator);
   }
 }
 
@@ -654,10 +645,11 @@ void Model::expectation_maximization(const size_t max_iterations,
     vector<vector<double> > &I, vector<double> &Q, bool s, bool t, bool d,
     string &file_name_base) {
 
-  string starting_point = determineStartingPoint_most_abundant_kmer(S);
+  string starting_point = determineStartingPoint_highest_liklihood_kmer(S);
+  cout << starting_point << endl;
   if (d) {
     cerr << "Fitting the shifting parameter..." << endl;
-    find_delta(S, regions, D);
+    find_delta(S, regions, D, starting_point);
   }
   set_model(starting_point);
 
@@ -678,20 +670,22 @@ void Model::expectation_maximization(const size_t max_iterations,
 }
 
 void Model::find_delta(const vector<string> &sequences,
-    const vector<GenomicRegion> &regions, const vector<vector<size_t> > &D) {
+    const vector<GenomicRegion> &regions, const vector<vector<size_t> > &D,
+    const string sp) {
 
   vector<double> ll_delta;
   for (int delta_param = -10; delta_param < 11; ++delta_param) {
     cerr << "\r" << int(100 * ll_delta.size() / 21) << "% completed..."
         << std::flush;
     init_model(M.size(), delta_param);
+    set_model(sp);
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
     vector<double> has_motif(sequences.size(), 1.0);
     vector<vector<double> > indicators;
     for (size_t i = 0; i < sequences.size(); ++i) {
       const size_t n_pos = sequences[i].length() - M.size() + 1;
-      indicators.push_back(vector<double>(n_pos, 1 / n_pos));
+      indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
     double prev_score = std::numeric_limits<double>::max();
     for (size_t i = 0; i < max_iterations; ++i) {
@@ -706,12 +700,13 @@ void Model::find_delta(const vector<string> &sequences,
       prev_score = score;
     }
     ll_delta.push_back(prev_score);
+    cout << delta_param << " => " << prev_score << endl;
   }
   cerr << "\r" << "100% completed..." << endl;
 
   double max_ll = -100000000;
   int max_i = 0;
-  for (size_t i = 0; i < ll_delta.size(); i++) {
+  for (size_t i = 1; i < ll_delta.size(); i++) {
     if (ll_delta[i] > max_ll) {
       max_ll = ll_delta[i];
       max_i = i - 10;

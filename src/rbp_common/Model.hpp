@@ -156,7 +156,8 @@ public:
   //----------------------------------------------------------------
   void find_delta(const std::vector<std::string> &sequences,
       const std::vector<GenomicRegion> &regions,
-      const std::vector<std::vector<size_t> > &D);
+      const std::vector<std::vector<size_t> > &D,
+      const std::string sp);
 
   void
   sampling(const std::vector<std::string> &S,
