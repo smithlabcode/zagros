@@ -674,8 +674,8 @@ void Model::find_delta(const vector<string> &sequences,
     const string sp) {
 
   vector<double> ll_delta;
-  for (int delta_param = -10; delta_param < 11; ++delta_param) {
-    cerr << "\r" << int(100 * ll_delta.size() / 21) << "% completed..."
+  for (int delta_param = -6; delta_param < 7; ++delta_param) {
+    cerr << "\r" << int(100 * ll_delta.size() / 13) << "% completed..."
         << std::flush;
     init_model(M.size(), delta_param);
     set_model(sp);
@@ -704,12 +704,12 @@ void Model::find_delta(const vector<string> &sequences,
   }
   cerr << "\r" << "100% completed..." << endl;
 
-  double max_ll = -100000000;
+  double max_ll = -1*std::numeric_limits<double>::max();
   int max_i = 0;
   for (size_t i = 1; i < ll_delta.size(); i++) {
     if (ll_delta[i] > max_ll) {
       max_ll = ll_delta[i];
-      max_i = i - 10;
+      max_i = i - 6;
     }
   }
   init_model(M.size(), max_i);
