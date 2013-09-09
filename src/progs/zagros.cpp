@@ -155,17 +155,6 @@ int main(int argc, const char **argv) {
     //Sorting the target file and storing the file in output directory
     sort(targets.begin(), targets.end(), region_less());
 
-    //Extracting the target sequences
-    if (use_structure_information) {
-      IO::expand_regions(targets);
-      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-      IO::unexpand_regions(targets);
-    } else
-      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-
-    unordered_map<string, size_t> names_table;
-    IO::make_sequence_names(names, seqs, targets, names_table);
-
     //Reading the mapped reads
     if (!reads_file.empty()) {
       vector<ExtendedGenomicRegion> mapped_reads;
@@ -196,6 +185,21 @@ int main(int argc, const char **argv) {
       sort(de_regions.begin(), de_regions.end(), region_less());
 
       IO::sift(targets, de_regions);
+//      IO::make_new_inputs(targets, de_regions);
+    }
+
+    sort(targets.begin(), targets.end(), region_less());
+    //Extracting the target sequences
+    if (use_structure_information) {
+      IO::expand_regions(targets);
+      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
+      IO::unexpand_regions(targets);
+    } else
+      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
+
+    if (use_de_information) {
+      unordered_map<string, size_t> names_table;
+      IO::make_sequence_names(names, seqs, targets, names_table);
       IO::load_diagnostic_events(
           de_regions, names_table, targets, diagnostic_events);
     }

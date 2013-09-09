@@ -21,7 +21,7 @@ ifndef SMITHLAB_CPP
 $(error Must define SMITHLAB_CPP variable)
 endif
 
-PROGS = zagros simotif sampleseqs zagros_debug pwm2mat
+PROGS = zagros simotif sampleseqs zagros_debug pwm2mat kmerzoops
 
 CXX = g++
 CFLAGS = -g -Wall -fPIC -fmessage-length=50
@@ -66,6 +66,9 @@ sampleseqs : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	   smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
 
 zagros_debug : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
+        smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
+
+kmerzoops : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
         smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
 
 zagros_debug : $(addprefix $(COMMON_DIR), Model.o part_func.o RNA_Utils.o IO.o \

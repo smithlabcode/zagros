@@ -57,6 +57,9 @@ public:
   std::string
   determineStartingPoint_most_abundant_kmer(
       const std::vector<std::string> &sequences);
+
+  std::string
+  determineStartingPoint_best_kmer(const std::vector<std::string> &sequences);
   /*** parameter fitting ***/
 
   //----------------------------------------------------------------
@@ -233,5 +236,22 @@ private:
 
   std::vector<double> structure_profile;
 };
+
+
+static double
+compute_kmer_prob(const std::string &kmer, const std::vector<double> &base_comp);
+
+static double
+prob_no_occurrence(const double prob, const size_t seq_len);
+
+static double
+expected_seqs_with_kmer(const std::string &kmer, const std::vector<double> &base_comp,
+    const std::vector<size_t> &lengths);
+
+static size_t
+count_seqs_with_kmer(const std::string &kmer, const std::vector<std::string> &sequences);
+
+static void
+compute_base_comp(const std::vector<std::string> &sequences, std::vector<double> &base_comp);
 
 #endif

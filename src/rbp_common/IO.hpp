@@ -49,8 +49,7 @@ struct DE {
 };
 
 struct region_less {
-  bool operator()(const GenomicRegion a,
-      const GenomicRegion b) const {
+  bool operator()(const GenomicRegion a, const GenomicRegion b) const {
     return (a) < (b);
   }
 };
@@ -61,6 +60,9 @@ public:
   static const size_t flanking_regions_size = 20;
 
 //  static const size_t regions_size = 120;
+  static void
+  make_new_inputs(std::vector<GenomicRegion> &regions,
+      std::vector<GenomicRegion> &de_regions);
 
   static size_t
   adjust_start_pos(const size_t orig_start, const std::string &chrom_name);

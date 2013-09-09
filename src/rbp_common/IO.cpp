@@ -656,13 +656,13 @@ void IO::make_sequence_names(const vector<string> &names, vector<string> &seqs,
     const vector<GenomicRegion> &regions,
     unordered_map<string, size_t> &names_table) {
 
+  unordered_map<string, size_t> names_index;
+  for ( size_t i = 0; i < names.size(); ++i)
+    names_index[names[i]] = i;
+
   vector<string> sorted_seqs;
   for (size_t i = 0; i < regions.size(); ++i) {
-    for (size_t j = 0; j < names.size(); ++j)
-      if (regions[i].get_name() == names[j]) {
-        sorted_seqs.push_back(seqs[j]);
-        break;
-      }
+    sorted_seqs.push_back(seqs[names_index[regions[i].get_name()]]);
     names_table[regions[i].get_name()] = i;
   }
   seqs.clear();
@@ -715,6 +715,43 @@ void IO::find_peak_de_regions_chrom(
           name_de[de_regions_chrom[i].get_name()] = 0;
         }
   }
+}
+
+void
+IO::make_new_inputs(vector<GenomicRegion> &regions,
+    vector<GenomicRegion> &de_regions) {
+
+  unordered_map<string, GenomicRegion> names_table;
+  for ( size_t j = 0; j < regions.size(); ++j)
+    names_table[regions[j].get_name()] = regions[j];
+
+  vector<GenomicRegion> new_des;
+  vector<GenomicRegion> new_targets;
+  for ( size_t i = 0; i < de_regions.size(); ++i) {
+    new_des.push_back(de_regions[i]);
+    string name = "sequence_" + convertSizet(i+1);
+    new_des[i].set_name(name);
+    new_targets.push_back(names_table[de_regions[i].get_name()]);
+    new_targets[i].set_name(new_des[i].get_name());
+  }
+
+  srand(time(0) + getpid());
+
+  regions.clear();
+  de_regions.clear();
+  for (size_t d = 0; d < 2000; d++) {
+    const size_t r = rand() % new_targets.size();
+    regions.push_back(new_targets[r]);
+    de_regions.push_back(new_des[r]);
+    new_targets.erase(new_targets.begin()+r);
+    new_des.erase(new_des.begin()+r);
+  }
+  for (size_t d = 0; d < 2000; d++) {
+    const size_t r = rand() % new_targets.size();
+    regions.push_back(new_targets[r]);
+    new_targets.erase(new_targets.begin()+r);
+  }
+
 }
 
 void IO::load_diagnostic_events(vector<GenomicRegion> &de_regions,
