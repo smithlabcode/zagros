@@ -36,7 +36,6 @@
 
 #include "Model.hpp"
 #include "IO.hpp"
-#include "ExtendedGenomicRegion.hpp"
 
 using std::tr1::unordered_map;
 
@@ -68,10 +67,8 @@ int main(int argc, const char **argv) {
     string experiment = "none";
     string mapper;
     bool use_sequence_information = false;
-    bool use_structure_information = false;
+    string structure_information_file = "";
     bool use_de_information = false;
-    size_t max_de = std::numeric_limits<size_t>::max();
-    size_t min_cluster_size = 1;
 
     string reads_file;
 
@@ -79,7 +76,7 @@ int main(int argc, const char **argv) {
     const double tolerance = 1e-10;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    OptionParser opt_parse(strip_path(argv[0]), "", "<targets>");
+    OptionParser opt_parse(strip_path(argv[0]), "", "<target regions/sequences>");
     opt_parse.add_opt(
         "output", 'o', "Name of output directory (default: zagros_output)",
         false, outdir);
@@ -100,7 +97,7 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt("reads", 'r', "Mapped reads file", false, reads_file);
     opt_parse.add_opt(
         "structure", 't', "Use the structure information", false,
-        use_structure_information);
+        structure_information_file);
     opt_parse.add_opt(
         "diagnostic_events", 'd', "Use the diagnostic events information",
         false, use_de_information);
@@ -136,7 +133,6 @@ int main(int argc, const char **argv) {
 
     string dirname, base_name, suffix;
     parse_dir_baseanme_suffix(targets_file, dirname, base_name, suffix);
-    //Create the base file name for output files
     string base_file = outdir + base_name;
 
     //Vectors to store primary information from the data
@@ -146,47 +142,17 @@ int main(int argc, const char **argv) {
     vector<GenomicRegion> targets;
     vector<vector<size_t> > diagnostic_events;
 
-    //Reading the targets
-    cerr << "Reading target regions...";
+    IO::
+
+    if (VERBOSE)
+      cerr << "Reading target regions...";
     IO::read_piranha_output(targets_file, targets);
-    cerr << "done!" << endl;
+    if (VERBOSE)
+      cerr << "done!" << endl;
     if (targets.size() == 0)
       throw SMITHLABException("No targets found...");
     //Sorting the target file and storing the file in output directory
     sort(targets.begin(), targets.end(), region_less());
-
-    //Reading the mapped reads
-    if (!reads_file.empty()) {
-      vector<ExtendedGenomicRegion> mapped_reads;
-
-      cerr << "Reading mapped reads..." << endl;
-      if (mapper == "rmap")
-        IO::read_rmap_output(reads_file, mapped_reads);
-      else if (mapper == "novoalign")
-        IO::read_novoalign_output(reads_file, mapped_reads);
-      else if (mapper == "bowtie")
-        IO::read_bowtie_output(reads_file, mapped_reads);
-      else
-        throw SMITHLABException("Mapper not recognized, please choose from "
-            "the options (rmap, novoalign or bowtie)");
-
-      //Making the regions and extracting the diagnostic events from the mapped
-      //reads
-      cerr << "Processing mapped reads..." << endl;
-      vector<GenomicRegion> regions;
-      IO::make_inputs(
-          mapped_reads, regions, de_regions, experiment, max_de,
-          min_cluster_size);
-
-      if (regions.size() == 0)
-        throw SMITHLABException("No reads found...");
-      //Sorting the diagnostic events file and storing the file in
-      //output directory
-      sort(de_regions.begin(), de_regions.end(), region_less());
-
-      IO::sift(targets, de_regions);
-//      IO::make_new_inputs(targets, de_regions);
-    }
 
     sort(targets.begin(), targets.end(), region_less());
     //Extracting the target sequences
