@@ -100,8 +100,8 @@ void Model::expectation_maximization(const vector<string> &sequences,
     const size_t max_iterations, const double tolerance) {
 
   vector<kmer_info> top_five_kmers;
-//  determineStartingPoint_best_kmer(sequences, top_five_kmers);
-  string starting_point = "GGCCCGCG";//top_five_kmers.front().kmer;
+  determineStartingPoint_best_kmer(sequences, top_five_kmers);
+  string starting_point = top_five_kmers.front().kmer;
   cout << starting_point << endl;
   set_model(starting_point);
   expectation_maximization_seq(

@@ -84,20 +84,20 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt(
         "chrom", 'c', "directory with chrom files (FASTA format)", false,
         chrom_dir);
-    opt_parse.add_opt(
-        "experiment",
-        'e',
-        "The type of experiment: iCLIP, hCLIP, pCLIP (default: no diagnostic events considered)",
-        false, experiment);
-    opt_parse.add_opt("mapper", 'm', "Mapped reads format: novoalign, "
-        "bowtie, rmap, piranha (default: none)", false, mapper);
-    opt_parse.add_opt("reads", 'r', "Mapped reads file", false, reads_file);
-    opt_parse.add_opt(
-        "structure", 't', "Use the structure information", false,
-        structure_information_file);
-    opt_parse.add_opt(
-        "diagnostic_events", 'd', "Use the diagnostic events information",
-        false, use_de_information);
+//    opt_parse.add_opt(
+//        "experiment",
+//        'e',
+//        "The type of experiment: iCLIP, hCLIP, pCLIP (default: no diagnostic events considered)",
+//        false, experiment);
+//    opt_parse.add_opt("mapper", 'm', "Mapped reads format: novoalign, "
+//        "bowtie, rmap, piranha (default: none)", false, mapper);
+//    opt_parse.add_opt("reads", 'r', "Mapped reads file", false, reads_file);
+//    opt_parse.add_opt(
+//        "structure", 't', "Use the structure information", false,
+//        structure_information_file);
+//    opt_parse.add_opt(
+//        "diagnostic_events", 'd', "Use the diagnostic events information",
+//        false, use_de_information);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
