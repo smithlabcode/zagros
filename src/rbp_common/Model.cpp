@@ -73,6 +73,7 @@ double Model::calculateLogL(const vector<string> &sequences,
   vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
 
   for (size_t i = 0; i < n; i++) {
+    if (zoops_i[i] > zoops_threshold) {
     const size_t l = sequences[i].length();
     for (size_t k = 0; k < indicators[i].size(); k++)
       for (size_t j = 0; j < l; j++)
@@ -80,6 +81,7 @@ double Model::calculateLogL(const vector<string> &sequences,
           nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
         else
           nb[0][base2int(sequences[i][j])] += indicators[i][k];
+    }
   }
 
   double ret = 0.0;

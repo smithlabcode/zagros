@@ -171,7 +171,9 @@ int main(int argc, const char **argv) {
     string output_model = base_file + ".mat";
     std::ostream* outf =
         (!output_model.empty()) ? new ofstream(output_model.c_str()) : &cout;
-    *outf << IO::print_model(model, "ME_EM", targets, seqs, indicators);
+    *outf
+        << IO::print_model(
+            model, "ME_EM", targets, seqs, indicators, has_motif);
     delete outf;
 
   } catch (const SMITHLABException &e) {

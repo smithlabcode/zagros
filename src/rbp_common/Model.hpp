@@ -44,6 +44,8 @@ public:
   /*** Constructors, destructors and object initialization ***/
   Model(const size_t motif_width);
 
+  static const double zoops_threshold = 0.0000001;
+
   static inline size_t base2int_RNA(char c) {
     switch (c) {
     case 'A':
@@ -85,14 +87,6 @@ public:
 
   void set_delta(int param) {
     delta = param;
-  }
-
-  int getDelta() const {
-    return delta;
-  }
-
-  void setDelta(int delta) {
-    this->delta = delta;
   }
 
   const std::vector<double>& getF() const {

@@ -60,7 +60,8 @@ public:
   print_model(const Model &model, const std::string &motif_name,
       const std::vector<GenomicRegion> &targets,
       const std::vector<std::string> &sequences,
-      const std::vector<std::vector<double> > &indicators);
+      const std::vector<std::vector<double> > &indicators,
+      const std::vector<double> &zoops_i);
 
 private:
 

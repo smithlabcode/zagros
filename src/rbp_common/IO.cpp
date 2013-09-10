@@ -225,7 +225,7 @@ void IO::unexpand_regions(vector<GenomicRegion> &regions,
 
 std::string IO::print_model(const Model &model, const string &motif_name,
     const vector<GenomicRegion> &targets, const vector<string> &sequences,
-    const vector<vector<double> > &indicators) {
+    const vector<vector<double> > &indicators, const vector<double> &zoops_i) {
   stringstream ss;
 
   const size_t N = sequences.size();
@@ -286,6 +286,7 @@ std::string IO::print_model(const Model &model, const string &motif_name,
       }
     }
     if (!targets.empty())
+      if (zoops_i[n] > model.zoops_threshold)
       ss << "BS\t" << sequences[n].substr(max_i, model.get_model_size()) << "; "
           << targets[n].get_chrom() << ":" << targets[n].get_start() << "-"
           << targets[n].get_end() << "; " << max_i + 1 << "; "
