@@ -66,7 +66,6 @@ int main(int argc, const char **argv) {
     size_t motif_width = 8;
     string experiment = "none";
     string mapper;
-    bool use_sequence_information = false;
     string structure_information_file = "";
     bool use_de_information = false;
 
@@ -76,13 +75,14 @@ int main(int argc, const char **argv) {
     const double tolerance = 1e-10;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    OptionParser opt_parse(strip_path(argv[0]), "", "<target regions/sequences>");
+    OptionParser opt_parse(
+        strip_path(argv[0]), "", "<target regions/sequences>");
     opt_parse.add_opt(
         "output", 'o', "Name of output directory (default: zagros_output)",
         false, outdir);
     opt_parse.add_opt("width", 'w', "motif width", false, motif_width);
     opt_parse.add_opt(
-        "chrom", 'c', "directory with chrom files (FASTA format)", true,
+        "chrom", 'c', "directory with chrom files (FASTA format)", false,
         chrom_dir);
     opt_parse.add_opt(
         "experiment",
@@ -91,9 +91,6 @@ int main(int argc, const char **argv) {
         false, experiment);
     opt_parse.add_opt("mapper", 'm', "Mapped reads format: novoalign, "
         "bowtie, rmap, piranha (default: none)", false, mapper);
-    opt_parse.add_opt(
-        "sequence", 's', "Use the sequence information", false,
-        use_sequence_information);
     opt_parse.add_opt("reads", 'r', "Mapped reads file", false, reads_file);
     opt_parse.add_opt(
         "structure", 't', "Use the structure information", false,
@@ -138,64 +135,45 @@ int main(int argc, const char **argv) {
     //Vectors to store primary information from the data
     vector<string> seqs;
     vector<string> names;
-    vector<GenomicRegion> de_regions;
     vector<GenomicRegion> targets;
     vector<vector<size_t> > diagnostic_events;
+    vector<double> secondary_structure;
 
-    IO::
-
-    if (VERBOSE)
-      cerr << "Reading target regions...";
-    IO::read_piranha_output(targets_file, targets);
-    if (VERBOSE)
-      cerr << "done!" << endl;
-    if (targets.size() == 0)
-      throw SMITHLABException("No targets found...");
-    //Sorting the target file and storing the file in output directory
-    sort(targets.begin(), targets.end(), region_less());
-
-    sort(targets.begin(), targets.end(), region_less());
-    //Extracting the target sequences
-    if (use_structure_information) {
-      IO::expand_regions(targets);
-      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-      IO::unexpand_regions(targets);
-    } else
-      IO::extract_regions_fasta(chrom_dir, targets, seqs, names);
-
-    if (use_de_information) {
-      unordered_map<string, size_t> names_table;
-      IO::make_sequence_names(names, seqs, targets, names_table);
-      IO::load_diagnostic_events(
-          de_regions, names_table, targets, diagnostic_events);
+    size_t padding = 0;
+    if (structure_information_file != "") {
+      std::ifstream in(structure_information_file.c_str(), std::ios::binary);
+      if (!in) {
+        throw SMITHLABException(
+            "cannot open input file " + string(structure_information_file));
+      } else {
+        in.close();
+        padding = IO::flanking_regions_size;
+      }
     }
 
-    vector<double> has_motif(targets.size(), 1.0);
+    IO::load_sequences(names, seqs, targets, chrom_dir, padding, targets_file);
+
+    vector<double> has_motif(seqs.size(), 1.0);
     vector<vector<double> > indicators;
-    for (size_t i = 0; i < targets.size(); ++i) {
-      const size_t n_pos = targets[i].get_width() - motif_width + 1;
+    for (size_t i = 0; i < seqs.size(); ++i) {
+      size_t window_size =
+          (targets.empty()) ? seqs[i].length() : targets[i].get_width();
+      const size_t n_pos = window_size - motif_width + 1;
       indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
     }
 
     Model model(motif_width);
-    IO::save_input_files(seqs, targets, de_regions, base_file);
-
-    cerr << "Fitting started..." << endl;
     model.expectation_maximization(
-        max_iterations, tolerance, targets, seqs, diagnostic_events, indicators,
-        has_motif, use_sequence_information, use_structure_information,
-        use_de_information, base_file);
+        seqs, diagnostic_events, secondary_structure, indicators, has_motif,
+        structure_information_file, use_de_information, base_file,
+        max_iterations, tolerance);
 
-    cerr << "Preparing output...";
-    IO::save_input_files(seqs, targets, de_regions, base_file);
-    if (use_de_information)
-      model.prepare_output(seqs, indicators, diagnostic_events, base_file);
-    else
-      model.prepare_output(seqs, indicators, base_file);
     string output_model = base_file + ".mat";
-    ofstream outf(output_model.c_str());
-    outf << model.print_model("DE_EM", targets, seqs, indicators);
-    cerr << "done!" << endl;
+    std::ostream* outf =
+        (!output_model.empty()) ? new ofstream(output_model.c_str()) : &cout;
+    *outf << IO::print_model(model, "ME_EM", targets, seqs, indicators);
+    delete outf;
+
   } catch (const SMITHLABException &e) {
     cerr << e.what() << endl;
     return EXIT_FAILURE;

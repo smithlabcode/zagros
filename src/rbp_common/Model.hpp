@@ -44,177 +44,40 @@ public:
   /*** Constructors, destructors and object initialization ***/
   Model(const size_t motif_width);
 
-  void
-  init_model(const size_t motif_width, const int delta_param);
+  static inline size_t base2int_RNA(char c) {
+    switch (c) {
+    case 'A':
+      return 0;
+    case 'C':
+      return 1;
+    case 'G':
+      return 2;
+    case 'T':
+      return 3;
+    case 'U':
+      return 3;
+    case 'a':
+      return 0;
+    case 'c':
+      return 1;
+    case 'g':
+      return 2;
+    case 't':
+      return 3;
+    case 'u':
+      return 3;
+    default:
+      return 4;
+    }
+  }
 
-  void
-  set_model(const std::string &motif);
-
-  std::string
-  determineStartingPoint_highest_liklihood_kmer(
-      const std::vector<std::string> &sequences);
-
-  std::string
-  determineStartingPoint_most_abundant_kmer(
-      const std::vector<std::string> &sequences);
-
-  std::string
-  determineStartingPoint_best_kmer(const std::vector<std::string> &sequences);
-  /*** parameter fitting ***/
-
-  //----------------------------------------------------------------
-  double calculateLogL(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  double calculateLogL(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &I);
-
-  double calculateLogL(const std::vector<std::string> &S,
-      const std::vector<std::vector<size_t> > &D,
-      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  //----------------------------------------------------------------
-  void expectation_seq(const std::vector<std::string> &S,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void expectation_seq_de(const std::vector<std::string> &S,
-      const std::vector<GenomicRegion> &regions,
-      const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void
-  expectation_str_de(const std::vector<std::vector<double> > &T,
-      const std::vector<double> &wnSecStr,
-      const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void
-  expectation_seq_str(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &T,
-      const std::vector<double> &wnSecStr, std::vector<std::vector<double> > &I,
-      std::vector<double> &Q);
-
-  void
-  expectation_seq_str_de(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &T,
-      const std::vector<double> &wnSecStr,
-      const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
-  //----------------------------------------------------------------
-  void maximization_seq(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void
-  maximization_str(const std::vector<std::vector<double> > &T,
-      const std::vector<double> &wnSecStr,
-      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void maximization_de(const std::vector<GenomicRegion> &regions,
-      const std::vector<std::vector<size_t> > &D,
-      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void
-  maximization_seq_str(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &T,
-      const std::vector<double> &wnSecStr,
-      const std::vector<std::vector<double> > &I, std::vector<double> &Q);
-  //----------------------------------------------------------------
-  void expectation_maximization_seq(const size_t max_iterations,
-      const double tolerance, std::vector<std::string> &S,
-      const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void expectation_maximization_seq_str(const size_t max_iterations,
-      const double tolerance, std::vector<std::string> &S,
-      const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q,
-      std::string &file_name_base);
-
-  void expectation_maximization_seq_de(const size_t max_iterations,
-      const double tolerance, const std::vector<GenomicRegion> &regions,
-      std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q);
-
-  void expectation_maximization_str_de(const size_t max_iterations,
-      const double tolerance, const std::vector<GenomicRegion> &regions,
-      std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q,
-      std::string &file_name_base);
-
-  void expectation_maximization_seq_str_de(const size_t max_iterations,
-      const double tolerance, const std::vector<GenomicRegion> &regions,
-      std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q,
-      std::string &file_name_base);
-  //----------------------------------------------------------------
-  //----------------------------------------------------------------
-  //----------------------------------------------------------------
-  void expectation_maximization(const size_t max_iterations,
-      const double tolerance, const std::vector<GenomicRegion> &regions,
-      std::vector<std::string> &S, const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I, std::vector<double> &Q, bool s,
-      bool t, bool d, std::string &file_name_base);
-  //----------------------------------------------------------------
-  //----------------------------------------------------------------
-  //----------------------------------------------------------------
-  void find_delta(const std::vector<std::string> &sequences,
-      const std::vector<GenomicRegion> &regions,
-      const std::vector<std::vector<size_t> > &D,
-      const std::string sp);
-
-  void
-  sampling(const std::vector<std::string> &S,
-      std::vector<std::vector<double> > &I);
-  void
-  update(const std::vector<std::string> &S,
-      const std::vector<std::vector<double> > &I);
-  void
-  gibbs_sampling(const size_t max_iterations, const double tolerance,
-      const std::vector<std::string> &S,
-      const std::vector<std::vector<size_t> > &D,
-      std::vector<std::vector<double> > &I);
-
-  std::string
-  print_model(const std::string &motif_name,
-      const std::vector<GenomicRegion> &regions,
-      const std::vector<std::string> &sequences,
-      const std::vector<std::vector<double> > &indicators);
-
-  void
-  prepare_output(std::vector<std::string> &seqs,
-      const std::vector<std::vector<double> > &indicators,
+  void expectation_maximization(const std::vector<std::string> &sequences,
       const std::vector<std::vector<size_t> > &diagnostic_events,
-      const std::string &base_file);
-
-  void
-  prepare_output(std::vector<std::string> &seqs,
-      const std::vector<std::vector<double> > &indicators,
-      const std::string &base_file);
-
-  std::string make_pwm();
-
-  std::string make_structure_profile();
-
-  std::string make_location_profile(
-      const std::vector<std::vector<double> > &indicators);
-
-  std::string make_seqs_profile(
-      const std::vector<std::vector<double> > &indicators,
-      const std::vector<std::string> &sequences);
-
-  std::string make_de_profile(
-      const std::vector<std::vector<double> > &indicators,
-      const std::vector<std::vector<size_t> > &diagnostic_events,
-      const std::vector<std::string> &sequences);
-
-  void generate_profile(const std::vector<std::vector<double> > &indicators,
-      const std::vector<std::vector<size_t> > &diagnostic_events,
-      const std::vector<std::string> &seqs, const std::string &base_file,
-      const std::string option);
-
-  void generate_profile(const std::vector<std::vector<double> > &indicators,
-      const std::vector<std::string> &seqs, const std::string &base_file,
-      const std::string option);
+      const std::vector<double> &secondary_structure,
+      std::vector<std::vector<double> > &indicators,
+      std::vector<double> &zoops_i, const std::string t, const bool d,
+      const std::string &file_name_base, const size_t max_iterations,
+      const double tolerance);
 
   int get_delta() {
     return delta;
@@ -224,7 +87,68 @@ public:
     delta = param;
   }
 
+  int getDelta() const {
+    return delta;
+  }
+
+  void setDelta(int delta) {
+    this->delta = delta;
+  }
+
+  const std::vector<double>& getF() const {
+    return f;
+  }
+
+  void setF(const std::vector<double>& f) {
+    this->f = f;
+  }
+
+  double getGamma() const {
+    return gamma;
+  }
+
+  void setGamma(double gamma) {
+    this->gamma = gamma;
+  }
+
+  const std::vector<double>& getLambda() const {
+    return lambda;
+  }
+
+  void setLambda(const std::vector<double>& lambda) {
+    this->lambda = lambda;
+  }
+
+  const std::vector<std::vector<double> >& getM() const {
+    return M;
+  }
+
+  double getM_element(const size_t i, const size_t j) const {
+    return M[i][j];
+  }
+
+  void setM_element(size_t i, size_t j, double val) {
+    this->M[i][j] = val;
+  }
+
+  size_t get_model_size() const {
+    return M.size();
+  }
+
+  void setM(const std::vector<std::vector<double> >& m) {
+    M = m;
+  }
+
+  double getP() const {
+    return p;
+  }
+
+  void setP(double p) {
+    this->p = p;
+  }
+
 private:
+
   /*** Private member constants ***/
   std::vector<std::vector<double> > M;
   std::vector<double> lambda;
@@ -234,24 +158,64 @@ private:
 
   double gamma;
 
-  std::vector<double> structure_profile;
+  struct kmer_info {
+    std::string kmer;
+    double expected;
+    size_t observed;
+    kmer_info(const std::string &km, const double ex, const double ob) :
+        kmer(km), expected(ex), observed(ob) {
+    }
+    double score() const {
+      return observed / expected;
+    }
+    bool operator>(const kmer_info &ki) const {
+      return score() > ki.score();
+    }
+  };
+
+  double calculateLogL(const std::vector<std::string> &sequences,
+      const std::vector<std::vector<double> > &indicators,
+      const std::vector<double> &zoops_i);
+
+  void expectation_maximization_seq(const std::vector<std::string> &sequences,
+      std::vector<std::vector<double> > &indicators,
+      std::vector<double> &zoops_i, const size_t max_iterations,
+      const double tolerance);
+
+  void expectation_seq(const std::vector<std::string> &sequences,
+      std::vector<std::vector<double> > &indicators,
+      std::vector<double> &zoops_i);
+
+  void maximization_seq(const std::vector<std::string> &sequences,
+      const std::vector<std::vector<double> > &indicators,
+      std::vector<double> &zoops_i);
+
+  void
+  determineStartingPoint_best_kmer(const std::vector<std::string> &sequences,
+      std::vector<kmer_info> &top_five_kmers);
+
+  void set_model(const std::string &motif);
+
+  double
+  compute_kmer_prob(const std::string &kmer,
+      const std::vector<double> &base_comp);
+
+  double
+  prob_no_occurrence(const double prob, const size_t seq_len);
+
+  double
+  expected_seqs_with_kmer(const std::string &kmer,
+      const std::vector<double> &base_comp, const std::vector<size_t> &lengths);
+
+  size_t
+  count_seqs_with_kmer(const std::string &kmer,
+      const std::vector<std::string> &sequences);
+
+  void
+  compute_base_comp(const std::vector<std::string> &sequences,
+      std::vector<double> &base_comp);
+
+
 };
-
-
-static double
-compute_kmer_prob(const std::string &kmer, const std::vector<double> &base_comp);
-
-static double
-prob_no_occurrence(const double prob, const size_t seq_len);
-
-static double
-expected_seqs_with_kmer(const std::string &kmer, const std::vector<double> &base_comp,
-    const std::vector<size_t> &lengths);
-
-static size_t
-count_seqs_with_kmer(const std::string &kmer, const std::vector<std::string> &sequences);
-
-static void
-compute_base_comp(const std::vector<std::string> &sequences, std::vector<double> &base_comp);
 
 #endif

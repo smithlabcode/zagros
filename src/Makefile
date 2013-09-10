@@ -44,4 +44,3 @@ clean:
 	        make -C $${i} SMITHLAB_CPP=$(SMITHLAB_CPP) clean; \
 	done;
 	@make -C rbp_common SMITHLAB_CPP=$(SMITHLAB_CPP) clean;
-	@make -C test SMITHLAB_CPP=$(SMITHLAB_CPP) clean;
