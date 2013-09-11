@@ -18,6 +18,8 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -31,6 +33,7 @@
 #include "GenomicRegion.hpp"
 #include "Model.hpp"
 #include "IO.hpp"
+#include "RNG.hpp"
 
 using std::string;
 using std::vector;
@@ -44,6 +47,14 @@ using smithlab::alphabet_size;
 
 using std::tr1::unordered_map;
 
+static char
+sample_nuc(const Runif &rng, vector<double> &probs) {
+  const double d = rng.runif(0.0, 1.0);
+  if (d < probs[0]) return 'A';
+  if (d < probs[1]) return 'C';
+  if (d < probs[2]) return 'G';
+  return 'T';
+}
 
 static void 
 read_piranha_output(const string filename, vector<GenomicRegion> &regions) {
@@ -204,4 +215,10 @@ load_sequences(const string &chrom_dir, const size_t padding,
     extract_regions_fasta(chrom_dir, targets, sequences, names);
     unexpand_regions(targets, padding);
   }
+
+  const Runif rng(std::numeric_limits<int>::max());
+  vector<double> probs(vector<double>(smithlab::alphabet_size,
+      1.0/smithlab::alphabet_size));
+  for (size_t i = 0; i < sequences.size(); ++i)
+    std::replace(sequences[i].begin(), sequences[i].end(), 'N', sample_nuc(rng, probs));
 }

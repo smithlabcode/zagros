@@ -23,6 +23,7 @@
 #include <iostream>
 #include <iterator>
 #include <numeric>
+#include <queue>
 #include <tr1/unordered_map>
 
 #include "OptionParser.hpp"
@@ -43,6 +44,115 @@ using std::max;
 using std::numeric_limits;
 
 
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+/////////////
+/////////////  STUFF FOR FINDING THE STARTING POINT BELOW HERE
+/////////////
+
+
+struct kmer_info {
+  std::string kmer;
+  double expected;
+  size_t observed;
+  kmer_info(const std::string &km, const double ex, const double ob) :
+    kmer(km), expected(ex), observed(ob) {
+  }
+  double 
+  score() const {return observed/expected;}
+  bool 
+  operator>(const kmer_info &ki) const {return score() > ki.score();}
+};
+
+
+// this is just Poisson probability for 0 observations
+static double
+prob_no_occurrence(const double prob, const size_t seq_len) {
+  return std::exp(-static_cast<int>(seq_len) * prob);
+}
+
+
+static void
+compute_base_comp(const vector<string> &sequences,
+		  vector<double> &base_comp) {
+  base_comp.resize(smithlab::alphabet_size, 0.0);
+  size_t total = 0;
+  for (size_t i = 0; i < sequences.size(); ++i) {
+    for (size_t j = 0; j < sequences[i].length(); ++j)
+      ++base_comp[base2int(sequences[i][j])];
+    total += sequences[i].length();
+  }
+  std::transform(base_comp.begin(), base_comp.end(), base_comp.begin(),
+		 std::bind2nd(std::divides<double>(), total));
+}
+
+
+static double
+compute_kmer_prob(const string &kmer, const vector<double> &base_comp) {
+  double prob = 1.0;
+  for (size_t i = 0; i < kmer.length(); ++i)
+    prob *= base_comp[base2int(kmer[i])];
+  return prob;
+}
+
+
+static double 
+expected_seqs_with_kmer(const string &kmer,
+			const vector<double> &base_comp, 
+			const vector<size_t> &lengths) {
+  const double p = compute_kmer_prob(kmer, base_comp);
+  double expected = 0.0;
+  for (size_t i = 0; i < lengths.size(); ++i)
+    expected += (1.0 - prob_no_occurrence(p, lengths[i]));
+  return expected;
+}
+
+
+static size_t 
+count_seqs_with_kmer(const string &kmer, const vector<string> &sequences) {
+  size_t count = 0;
+  for (size_t i = 0; i < sequences.size(); ++i) {
+    bool has_kmer = false;
+    const size_t lim = sequences[i].length() - kmer.length() + 1;
+    for (size_t j = 0; j < lim && !has_kmer; ++j)
+      has_kmer = !sequences[i].compare(j, kmer.length(), kmer);
+    count += has_kmer;
+  }
+  return count;
+}
+
+
+static void 
+find_best_kmers(const size_t k_value, const size_t n_top_kmers,
+		const vector<string> &sequences, vector<kmer_info> &top_kmers) {
+  
+  const size_t n_kmers = (1ul << 2 * k_value);
+
+  vector<double> base_comp;
+  compute_base_comp(sequences, base_comp);
+
+  vector<size_t> lengths;
+  for (size_t i = 0; i < sequences.size(); ++i)
+    lengths.push_back(sequences[i].length());
+
+  std::priority_queue<kmer_info, vector<kmer_info>, std::greater<kmer_info> > best_kmers;
+
+  for (size_t i = 0; i < n_kmers; ++i) {
+    const string kmer(i2mer(k_value, i));
+    const double expected = expected_seqs_with_kmer(kmer, base_comp, lengths);
+    const size_t observed = count_seqs_with_kmer(kmer, sequences);
+    best_kmers.push(kmer_info(kmer_info(kmer, expected, observed)));
+    if (best_kmers.size() > n_top_kmers)
+      best_kmers.pop();
+  }
+  
+  while (!best_kmers.empty()) {
+    top_kmers.push_back(best_kmers.top());
+    best_kmers.pop();
+  }
+  reverse(top_kmers.begin(), top_kmers.end());
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -54,7 +164,7 @@ using std::numeric_limits;
 static string 
 format_site(const Model &model, const GenomicRegion &region, 
 	    const string &seq, const size_t site_pos) {
-  const size_t width = model.get_model_size();
+  const size_t width = model.size();
   std::ostringstream ss;
   ss << "BS\t" << seq.substr(site_pos, width) << "; "
      << assemble_region_name(region) << "; " 
@@ -85,7 +195,7 @@ format_motif(const Model &model, const string &motif_name,
   std::ostringstream ss;
   ss << format_motif_header(motif_name) << endl;
   
-  vector<vector<double> > tmp_m = model.getM();
+  vector<vector<double> > tmp_m = model.matrix;
   for (size_t n = 0; n < sequences.size(); n++) {
     double max_X = -1;
     int max_i = -1;
@@ -95,8 +205,8 @@ format_motif(const Model &model, const string &motif_name,
         max_i = i;
       }
     }
-    for (size_t j = 0; j < model.get_model_size(); ++j)
-      tmp_m[j][model.base2int_RNA(sequences[n][max_i + j])] += 1;
+    for (size_t j = 0; j < model.size(); ++j)
+      tmp_m[j][base2int(sequences[n][max_i + j])] += 1;
   }
   
   for (size_t j = 0; j < tmp_m.size(); j++) {
@@ -107,7 +217,7 @@ format_motif(const Model &model, const string &motif_name,
     ss << endl;
   }
   ss << "XX" << endl
-     << "AT\tGEO_P=" << model.getP() << endl
+     << "AT\tGEO_P=" << model.p << endl
      << "XX" << endl;
   
   for (size_t n = 0; n < indicators.size(); ++n) {
@@ -121,7 +231,8 @@ format_motif(const Model &model, const string &motif_name,
     }
     if (!targets.empty())
       if (zoops_i[n] > model.zoops_threshold)
-	ss << format_site(model, targets[n], sequences[n], site_pos) << "\t" << zoops_i[n] << endl;
+	ss << format_site(model, targets[n], sequences[n], site_pos) << "\t" 
+	   << zoops_i[n] << endl;
   }
   ss << "XX" << endl
      << "//" << endl;
@@ -135,44 +246,29 @@ int main(int argc, const char **argv) {
 
   try {
 
-    static const size_t flanking_regions_size = 20;
-    
     bool VERBOSE = false;
-    string outdir = "zagros_output";
-    string chrom_dir;
     size_t motif_width = 8;
-    string experiment = "none";
-    string mapper;
-    string structure_information_file = "";
-    bool use_de_information = false;
+    size_t n_motifs = 1;
+    string outfile;
+    string chrom_dir;
+    string structure_file;
 
-    string reads_file;
-
+    size_t structure_computation_window = 0;
+    
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    OptionParser opt_parse(strip_path(argv[0]), "", 
-			   "<target regions/sequences>");
-    opt_parse.add_opt("output", 'o', "name of output directory "
-		      "(default: zagros_output)", false, outdir);
-    opt_parse.add_opt("width", 'w', "motif width", false, motif_width);
+    OptionParser opt_parse(strip_path(argv[0]), 
+			   "", "<target_regions/sequences>");
+    opt_parse.add_opt("output", 'o', "output file name (default: stdout)", 
+		      false, outfile);
+    opt_parse.add_opt("width", 'w', "width of motifs to find", 
+		      false, motif_width);
+    opt_parse.add_opt("number", 'n', "number of motifs to output", 
+		      false, n_motifs);
     opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)",
 		      false, chrom_dir);
-//    opt_parse.add_opt(
-//        "experiment",
-//        'e',
-//        "The type of experiment: iCLIP, hCLIP, pCLIP (default: no diagnostic events considered)",
-//        false, experiment);
-//    opt_parse.add_opt("mapper", 'm', "Mapped reads format: novoalign, "
-//        "bowtie, rmap, piranha (default: none)", false, mapper);
-//    opt_parse.add_opt("reads", 'r', "Mapped reads file", false, reads_file);
-//    opt_parse.add_opt(
-//        "structure", 't', "Use the structure information", false,
-//        structure_information_file);
-//    opt_parse.add_opt(
-//        "diagnostic_events", 'd', "Use the diagnostic events information",
-//        false, use_de_information);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -195,50 +291,59 @@ int main(int argc, const char **argv) {
     }
     const string targets_file(leftover_args.back());
     /****************** END COMMAND LINE OPTIONS *****************/
+
+    // Model::max_iterations = max_iterations;
+    // Model::tolerance = tolerance; // probably shouldn't be set by user
     
-    mkdir(outdir.c_str(), 0750);
+    const size_t padding = 
+      structure_file.empty() ? 0 : structure_computation_window;
     
-    string dirname, base_name, suffix;
-    parse_dir_baseanme_suffix(targets_file, dirname, base_name, suffix);
-    const string base_file(path_join(outdir, base_name));
-    
-    const size_t padding =
-      structure_information_file.empty() ? 0 : flanking_regions_size;
-    
-    if (!structure_information_file.empty()) {
-      std::ifstream in(structure_information_file.c_str(), std::ios::binary);
-      if (!in)
-        throw SMITHLABException("cannot open input file " + 
-				structure_information_file);
-    }
-    
+    // if (!structure_information_file.empty()) {
+    //   std::ifstream in(structure_information_file.c_str(), std::ios::binary);
+    //   if (!in)
+    //     throw SMITHLABException("cannot open input file " + 
+    // 				structure_information_file);
+    // }
+
+    if (VERBOSE) 
+      cerr << "LOADING SEQUENCES" << endl;
     //Vectors to store primary information from the data
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
     vector<vector<size_t> > diagnostic_events;
     vector<double> secondary_structure;
     load_sequences(chrom_dir, padding, targets_file, names, seqs, targets);
+
+    std::ofstream of;
+    if (!outfile.empty()) of.open(outfile.c_str());
+    std::ostream out(outfile.empty() ? cout.rdbuf() : of.rdbuf());
     
-    vector<double> has_motif(seqs.size(), 0.5);
-    vector<vector<double> > indicators;
-    for (size_t i = 0; i < seqs.size(); ++i) {
-      const size_t window_size =
-	targets.empty() ? seqs[i].length() : targets[i].get_width();
-      const size_t n_pos = window_size - motif_width + 1;
-      indicators.push_back(vector<double>(n_pos, 1.0/n_pos));
+    if (VERBOSE) 
+      cerr << "IDENTIFYING STARTING POINTS" << endl;
+    vector<kmer_info> top_kmers;
+    find_best_kmers(motif_width, n_motifs, seqs, top_kmers);
+    
+    if (VERBOSE) 
+      cerr << "FITTING MOTIF PARAMETERS" << endl;
+    for (size_t i = 0; i < top_kmers.size(); ++i) {
+
+      vector<double> has_motif(seqs.size(), 0.5);
+      vector<vector<double> > indicators;
+      for (size_t j = 0; j < seqs.size(); ++j) {
+	const size_t n_pos = seqs[j].length() - motif_width + 1;
+	indicators.push_back(vector<double>(n_pos, 1.0/n_pos));
+      }
+      
+      Model model;
+      Model::set_model_by_word(Model::pseudocount, top_kmers[i].kmer, model);
+      model.gamma = 0.9;
+      
+      model.expectation_maximization(seqs, diagnostic_events, secondary_structure,
+				     indicators, has_motif);
+      
+      out << format_motif(model, "ME_EM", targets, seqs, 
+			  indicators, has_motif);
     }
-    
-    Model model(motif_width);
-    model.expectation_maximization(seqs, diagnostic_events, 
-				   secondary_structure, indicators, 
-				   has_motif, structure_information_file, 
-				   use_de_information, base_file,
-				   max_iterations, tolerance);
-    
-    const string output_model(base_file + ".mat");
-    std::ofstream out(output_model.c_str());
-    out << format_motif(model, "ME_EM", targets, seqs, 
-			indicators, has_motif) << endl;
     
   }
   catch (const SMITHLABException &e) {

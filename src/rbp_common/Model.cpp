@@ -20,97 +20,106 @@
 
 #include <string>
 #include <vector>
-#include <iostream>
-#include <sstream>
 #include <iterator>
-#include <fstream>
 #include <numeric>
-#include <cfloat>
-#include <cmath>
-#include <iomanip>
-#include <queue>
 #include <tr1/unordered_map>
 
-#include "OptionParser.hpp"
 #include "smithlab_utils.hpp"
-#include "smithlab_os.hpp"
 #include "Model.hpp"
-#include "IO.hpp"
-
-using std::tr1::unordered_map;
 
 using std::string;
 using std::vector;
-using std::cout;
 using std::cerr;
 using std::endl;
 using std::max;
-using std::min;
-using std::ifstream;
-using std::ofstream;
-using std::stringstream;
-using std::istringstream;
-using std::ostringstream;
 using std::accumulate;
+
+using std::tr1::unordered_map;
 
 using smithlab::alphabet_size;
 
-Model::Model(const size_t motif_width) {
 
-  for (size_t i = 0; i < motif_width; ++i)
-    M.push_back(vector<double>(alphabet_size, 1.0 / alphabet_size));
-  lambda.resize(motif_width, 0.5);
-  f.resize(alphabet_size, 1.0 / alphabet_size);
-  p = 0.5;
-  delta = 0;
-  gamma = 0.5;
+// TO HELP WITH DEBUGGING:
+// static string
+// format_matrix(const vector<vector<double> > &matrix) {
+//   std::ostringstream oss;
+//   for (size_t i = 0; i < matrix.size(); ++i) {
+//     copy(matrix[i].begin(), matrix[i].end(), 
+// 	 std::ostream_iterator<double>(oss, "\t"));
+//     oss << endl;
+//   }
+//   oss << endl;
+//   return oss.str();
+// }
+
+
+void
+Model::set_model_uniform(const size_t width, Model &model) {
+  model.matrix.clear();
+  model.matrix.resize(width, vector<double>(alphabet_size, 1.0/alphabet_size));
+  model.lambda = vector<double>(width, 0.5);
+  model.f = vector<double>(alphabet_size, 1.0/alphabet_size);
+  model.p = 0.5;
+  model.delta = 0;
+  model.gamma = 0.5;
 }
 
-double Model::calculate_oops_log_l(const vector<string> &sequences,
-    const vector<vector<double> > &indicators) {
 
-  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
+void
+calculate_number_of_bases_fg_bg(const vector<string> &sequences,
+          const vector<vector<double> > &site_indic,
+          const size_t motif_width,
+          vector<vector<double> > &nb_fg,
+          vector<double> &nb_bg) {
 
-  for (size_t i = 0; i < sequences.size(); i++) {
-    const size_t l = sequences[i].length();
-    for (size_t k = 0; k < indicators[i].size(); k++)
-      for (size_t j = 0; j < l; j++)
-        if (j >= k && j < k + M.size())
-          nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
-        else
-          nb[0][base2int(sequences[i][j])] += indicators[i][k];
-  }
+  nb_fg.clear();
+  nb_fg.resize(motif_width,
+        // This value needs to be changed
+        vector<double>(alphabet_size, 0.0));
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    for (size_t j = 0; j < site_indic[i].size(); ++j)
+      for (size_t k = 0; k < motif_width; ++k)
+  nb_fg[k][base2int(sequences[i][j + k])] += site_indic[i][j];
+
+  nb_bg.clear();
+  nb_bg.resize(alphabet_size, 0.0);
+  for (size_t i = 0; i < sequences.size(); ++i)
+    for (size_t j = 0; j < sequences[i].length(); ++j)
+      nb_bg[base2int(sequences[i][j])] += motif_width;
+
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    for (size_t j = 0; j < site_indic[i].size(); ++j)
+      for (size_t k = 0; k < motif_width; ++k)
+  nb_bg[base2int(sequences[i][j + k])] -= site_indic[i][j];
+}
+
+double 
+Model::calculate_oops_log_l(const vector<string> &sequences,
+			    const vector<vector<double> > &site_indic,
+          const vector<vector<double> > &nb_fg,
+          const vector<double> &nb_bg) const{
 
   double ret = 0.0;
-  for (size_t b = 0; b < alphabet_size; b++) {
-    ret += nb[0][b] * log(f[b]);
-    for (size_t j = 0; j < M.size(); j++)
-      ret += nb[j + 1][b] * log(M[j][b]);
+  for (size_t i = 0; i < alphabet_size; ++i) {
+    ret += nb_bg[i] * log(f[i]);
+    for (size_t j = 0; j < matrix.size(); ++j)
+      ret += nb_fg[j][i] * log(matrix[j][i]);
   }
-
   return ret;
 }
 
-double Model::calculate_zoops_log_l(const vector<string> &sequences,
-    const vector<vector<double> > &indicators, const vector<double> &zoops_i) {
-
-  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
-
-  for (size_t i = 0; i < sequences.size(); i++) {
-    const size_t l = sequences[i].length();
-    for (size_t k = 0; k < indicators[i].size(); k++)
-      for (size_t j = 0; j < l; j++)
-        if (j >= k && j < k + M.size())
-          nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
-        else
-          nb[0][base2int(sequences[i][j])] += indicators[i][k];
-  }
+double
+Model::calculate_zoops_log_l(const vector<string> &sequences,
+           const vector<vector<double> > &site_indic,
+           const vector<double> &seq_indic,
+           const vector<vector<double> > &nb_fg,
+           const vector<double> &nb_bg) const {
 
   double ret = 0.0;
-  for (size_t b = 0; b < alphabet_size; b++) {
-    ret += nb[0][b] * log(f[b]);
-    for (size_t j = 0; j < M.size(); j++)
-      ret += nb[j + 1][b] * log(M[j][b]);
+  for (size_t i = 0; i < alphabet_size; ++i) {
+    ret += nb_bg[i] * log(f[i]);
+    for (size_t j = 0; j < matrix.size(); ++j)
+      ret += nb_fg[j][i] * log(matrix[j][i]);
   }
 
   //--------
@@ -118,218 +127,171 @@ double Model::calculate_zoops_log_l(const vector<string> &sequences,
     double has_no_motif = 0.0;
     for (size_t j = 0; j < sequences[i].length(); j++)
       has_no_motif += log(f[base2int(sequences[i][j])]);
-    ret += (1-zoops_i[i]) * has_no_motif;
-    ret += (1-zoops_i[i]) * log(1-gamma);
-    ret += zoops_i[i] * log(gamma / (sequences[i].length() - M.size() + 1));
+    ret += (1-seq_indic[i]) * has_no_motif;
+    ret += (1-seq_indic[i]) * log(1-gamma);
+    ret += seq_indic[i] * log(gamma / (sequences[i].length() - matrix.size() + 1));
   }
   //--------
 
   return ret;
 }
 
-void Model::expectation_maximization(const vector<string> &sequences,
-    const vector<vector<size_t> > &diagnostic_events,
-    const vector<double> &secondary_structure,
-    vector<vector<double> > &indicators, vector<double> &zoops_i,
-    const string t, const bool d, const string &file_name_base,
-    const size_t max_iterations, const double tolerance) {
+double
+Model::get_log_likelihood(const vector<string> &sequences,
+           const vector<vector<double> > &site_indic,
+           const vector<double> &seq_indic) {
 
-//  vector<kmer_info> top_five_kmers;
-//  determineStartingPoint_best_kmer(sequences, top_five_kmers);
-  string starting_point = "GGCCCGCG"; //top_five_kmers.front().kmer;
-  cout << starting_point << endl;
-  set_model(starting_point);
-  expectation_maximization_seq(
-      sequences, indicators, zoops_i, max_iterations, tolerance);
+  vector<vector<double> > nb_fg(matrix.size(),
+        // This value needs to be changed
+        vector<double>(alphabet_size, 0.0));
+  vector<double> nb_bg(alphabet_size, 0.0);
+  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), nb_fg, nb_bg);
+  return calculate_zoops_log_l(sequences, site_indic, seq_indic, nb_fg, nb_bg);
 }
 
-void Model::expectation_maximization_seq(const vector<string> &sequences,
-    vector<vector<double> > &indicators, vector<double> &zoops_i,
-    const size_t max_iterations, const double tolerance) {
+void
+Model::set_model_by_word(const double pseudocount, 
+			 const string &kmer, Model &model) {
+  
+  // initialize the matrix
+  const size_t len = kmer.length();
+  model.matrix.clear();
+  model.matrix.resize(len, vector<double>(alphabet_size, pseudocount));
+  
+  // set the matrix to the word
+  for (size_t i = 0; i < len; ++i)
+    model.matrix[i][base2int(kmer[i])] += 1.0;
+  
+  // normalize matrix columns
+  for (size_t i = 0; i < len; ++i)
+    for (size_t j = 0; j < alphabet_size; ++j) {
+      const double tot = 
+	accumulate(model.matrix[i].begin(), model.matrix[i].end(), 0.0);
+      transform(model.matrix[i].begin(), model.matrix[i].end(), 
+		model.matrix[i].begin(),
+		std::bind2nd(std::divides<double>(), tot));
+    }
+}
 
-  cerr << "Fitting the full model using sequence started...";
 
+void
+Model::expectation_maximization(const vector<string> &sequences,
+				const vector<vector<size_t> > &diagnostic_events,
+				const vector<double> &secondary_structure,
+				vector<vector<double> > &site_indic, 
+				vector<double> &seq_indic) {
+  expectation_maximization_seq(sequences, site_indic, seq_indic);
+}
+
+static void
+get_numerator_for_site(const string &seq,
+		       const vector<vector<double> > &matrix,
+		       const vector<double> &freqs,
+		       const double gamma,
+		       const size_t site,
+		       double &num) {
+  vector<double> f_powers(alphabet_size, 0.0);
+  for (size_t i = 0; i < seq.length(); ++i) {
+    const size_t base = base2int(seq[i]);
+    if (i >= site && i < site + matrix.size())
+      num += log(matrix[i - site][base]);
+    else f_powers[base]++;
+    assert(std::isfinite(f_powers[base]) && std::isfinite(num));
+  }
+  for (size_t b = 0; b < alphabet_size; b++)
+    num += f_powers[b]*log(freqs[b]);
+  num += log(gamma/(seq.length() - matrix.size() + 1.0));
+}
+
+
+
+static void
+expectation_for_single_seq(const string &seq,
+			   const vector<vector<double> > &matrix,
+			   const vector<double> &freqs,
+			   const double gamma,
+			   vector<double> &site_indic, 
+			   double &seq_indic) {
+  
+  // get log likelihood for each site
+  vector<double> numerator(site_indic.size(), 0.0);
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    get_numerator_for_site(seq, matrix, freqs, gamma, i, numerator[i]);
+  
+  double no_motif = 0.0;
+  for (size_t i = 0; i < seq.length(); i++)
+    no_motif += log(freqs[base2int(seq[i])]);
+  numerator.push_back(no_motif + log(1.0 - gamma));
+
+  const double denominator = 
+    smithlab::log_sum_log_vec(numerator, numerator.size());
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    site_indic[i] = exp(numerator[i] - denominator);
+
+  seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
+}
+
+
+
+static void
+expectation_seq(const vector<string> &sequences,
+		const vector<vector<double> > &matrix,
+		const vector<double> &freqs,
+		const double gamma,
+		vector<vector<double> > &site_indic, 
+		vector<double> &seq_indic) {
+  for (size_t i = 0; i < sequences.size(); i++)
+    expectation_for_single_seq(sequences[i], matrix, freqs, gamma, 
+			       site_indic[i], seq_indic[i]);
+}
+
+
+static void
+maximization_seq(const vector<string> &sequences,
+		 const vector<vector<double> > &site_indic, 
+		 vector<double> &seq_indic,
+		 vector<vector<double> > &matrix,
+		 vector<double> &freq,
+		 double &gamma) {
+  
+  static const double pseudocount = 1e-6;
+  
+  vector<vector<double> > nb_fg(matrix.size(),
+				// This value needs to be changed
+				vector<double>(alphabet_size, pseudocount));
+  vector<double> nb_bg(alphabet_size, pseudocount);
+  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), nb_fg, nb_bg);
+
+  for (size_t i = 0; i < matrix.size(); ++i) {
+    const double total = accumulate(nb_fg[i].begin(), nb_fg[i].end(), 0.0);
+    transform(nb_fg[i].begin(), nb_fg[i].end(), matrix[i].begin(),
+	      std::bind2nd(std::divides<double>(), total));
+  }
+
+
+  const double total = accumulate(nb_bg.begin(), nb_bg.end(), 0.0);
+  transform(nb_bg.begin(), nb_bg.end(), freq.begin(),
+	    std::bind2nd(std::divides<double>(), total));
+  
+  gamma = accumulate(seq_indic.begin(), seq_indic.end(), 0.0)/sequences.size();
+}
+
+
+void 
+Model::expectation_maximization_seq(const vector<string> &sequences,
+				    vector<vector<double> > &site_indic, 
+				    vector<double> &seq_indic) {
+  
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq(sequences, indicators, zoops_i);
-    maximization_seq(sequences, indicators, zoops_i);
-
-    const double score = calculate_zoops_log_l(sequences, indicators, zoops_i);
-
+    
+    expectation_seq(sequences, matrix, f, gamma, site_indic, seq_indic);
+    maximization_seq(sequences, site_indic, seq_indic, matrix, f, gamma);
+    
+    const double score = get_log_likelihood(sequences, site_indic, seq_indic);
+    
     if ((prev_score - score) / prev_score < tolerance) {
       break;
     }
-    prev_score = score;
   }
-
-  cerr << "done!" << endl;
-}
-
-void Model::expectation_seq(const vector<string> &sequences,
-    vector<vector<double> > &indicators, vector<double> &zoops_i) {
-
-  for (size_t i = 0; i < sequences.size(); i++) {
-
-    vector<double> numerator(indicators[i].size(), 0.0);
-    //--------
-    double no_motif = 0.0;
-    for (size_t j = 0; j < sequences[i].length(); j++)
-      no_motif += log(f[base2int(sequences[i][j])]);
-    //--------
-    for (size_t k = 0; k < indicators[i].size(); k++) {
-
-      vector<double> f_powers(alphabet_size, 0.0);
-      for (size_t j = 0; j < sequences[i].length(); j++) {
-        const size_t base = base2int(sequences[i][j]);
-        if (j >= k && j < k + M.size()) {
-          numerator[k] += log(M[j - k][base]);
-        } else
-          f_powers[base2int(sequences[i][j])]++;
-        assert(std::isfinite(f_powers[base]));
-        if (!std::isfinite(numerator[k])) {
-          cerr << "Numerical error!" << endl;
-          exit(1);
-        }
-      }
-      for (size_t b = 0; b < alphabet_size; b++)
-        numerator[k] += f_powers[b] * log(f[b]);
-      //--------
-      numerator[k] += log(gamma / (sequences[i].length() - M.size() + 1));
-      //--------
-    }
-    //--------
-    numerator.push_back(no_motif + log(1 - gamma));
-    //--------
-    double denominator = smithlab::log_sum_log_vec(numerator, numerator.size());
-    for (size_t k = 0; k < indicators[i].size(); k++)
-      indicators[i][k] = exp(numerator[k] - denominator);
-  }
-}
-
-void Model::maximization_seq(const vector<string> &sequences,
-    const vector<vector<double> > &indicators, vector<double> &zoops_i) {
-
-  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.02));
-
-  size_t total_bg_length = 0;
-  for (size_t i = 0; i < sequences.size(); i++) {
-    total_bg_length += (indicators[i].size() - 1);
-    for (size_t k = 0; k < indicators[i].size(); k++) {
-      for (size_t j = 0; j < sequences[i].length(); j++)
-        if (j >= k && j < k + M.size())
-          nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
-        else
-          nb[0][base2int(sequences[i][j])] += indicators[i][k];
-    }
-    //--------
-    zoops_i[i] = accumulate(indicators[i].begin(), indicators[i].end(), 0.0);
-    //--------
-  }
-  for (size_t b = 0; b < alphabet_size; b++) {
-    f[b] = max(nb[0][b] / total_bg_length, std::numeric_limits<double>::min());
-    for (size_t j = 0; j < M.size(); j++)
-      M[j][b] = max(nb[j + 1][b] / sequences.size(), std::numeric_limits<double>::min());
-  }
-  //--------
-  gamma = accumulate(zoops_i.begin(), zoops_i.end(), 0.0) / sequences.size();
-  //--------
-}
-
-void Model::set_model(const string &motif) {
-
-  f.resize(alphabet_size, 1.0 / alphabet_size);
-  for (size_t i = 0; i < motif.length(); ++i) {
-    M[i].resize(alphabet_size, 0.17);
-    M[i][base2int_RNA(motif[i])] = 0.49;
-  }
-}
-
-void Model::determineStartingPoint_best_kmer(const vector<string> &sequences,
-    vector<kmer_info> &top_five_kmers) {
-
-  size_t n_top_kmers = 5;
-  size_t k_value = M.size();
-
-  const size_t n_kmers = (1ul << 2 * k_value);
-  cerr << "N SEQUENCES:\t" << sequences.size() << endl
- << "K MERS TO CHECK:\t" << n_kmers << endl;
-
-  vector<double> base_comp;
-  compute_base_comp(sequences, base_comp);
-
-  cerr << "BASE COMP" << endl;
-  for (size_t i = 0; i < base_comp.size(); ++i)
-cerr << int2base(i) << '\t' << base_comp[i] << endl;
-
-  vector<size_t> lengths;
-  for (size_t i = 0; i < sequences.size(); ++i)
-    lengths.push_back(sequences[i].length());
-
-  std::priority_queue<kmer_info, vector<kmer_info>, std::greater<kmer_info> > best_kmers;
-
-  cerr << "EVALUATING K-MERS" << endl;
-
-  for (size_t i = 0; i < n_kmers; ++i) {
-    const string kmer(i2mer(k_value, i));
-    const double expected = expected_seqs_with_kmer(kmer, base_comp, lengths);
-    const size_t observed = count_seqs_with_kmer(kmer, sequences);
-    best_kmers.push(kmer_info(kmer_info(kmer, expected, observed)));
-    if (best_kmers.size() > n_top_kmers)
-      best_kmers.pop();
-  }
-
-  while (!best_kmers.empty()) {
-    top_five_kmers.push_back(best_kmers.top());
-    best_kmers.pop();
-  }
-  reverse(top_five_kmers.begin(), top_five_kmers.end());
-}
-
-double Model::compute_kmer_prob(const string &kmer,
-    const vector<double> &base_comp) {
-  double prob = 1.0;
-  for (size_t i = 0; i < kmer.length(); ++i)
-    prob *= base_comp[base2int(kmer[i])];
-  return prob;
-}
-
-// this is just Poisson probability for 0 observations
-double Model::prob_no_occurrence(const double prob, const size_t seq_len) {
-  return std::exp(-static_cast<int>(seq_len) * prob);
-}
-
-double Model::expected_seqs_with_kmer(const string &kmer,
-    const vector<double> &base_comp, const vector<size_t> &lengths) {
-  const double p = compute_kmer_prob(kmer, base_comp);
-  double expected = 0.0;
-  for (size_t i = 0; i < lengths.size(); ++i)
-    expected += (1.0 - prob_no_occurrence(p, lengths[i]));
-  return expected;
-}
-
-size_t Model::count_seqs_with_kmer(const string &kmer,
-    const vector<string> &sequences) {
-  size_t count = 0;
-  for (size_t i = 0; i < sequences.size(); ++i) {
-    bool has_kmer = false;
-    const size_t lim = sequences[i].length() - kmer.length() + 1;
-    for (size_t j = 0; j < lim && !has_kmer; ++j)
-      has_kmer = !sequences[i].compare(j, kmer.length(), kmer);
-    count += has_kmer;
-  }
-  return count;
-}
-
-void Model::compute_base_comp(const vector<string> &sequences,
-    vector<double> &base_comp) {
-  base_comp.resize(smithlab::alphabet_size, 0.0);
-  size_t total = 0;
-  for (size_t i = 0; i < sequences.size(); ++i) {
-    for (size_t j = 0; j < sequences[i].length(); ++j)
-      ++base_comp[base2int(sequences[i][j])];
-    total += sequences[i].length();
-  }
-  std::transform(
-      base_comp.begin(), base_comp.end(), base_comp.begin(),
-      std::bind2nd(std::divides<double>(), total));
 }
