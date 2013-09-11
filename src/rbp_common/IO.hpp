@@ -33,64 +33,20 @@
 #ifndef __INPUT_H_
 #define __INPUT_H_
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <iostream>
 #include <vector>
 #include <string>
 
 #include "GenomicRegion.hpp"
 
-struct region_less {
-  bool operator()(const GenomicRegion a, const GenomicRegion b) const {
-    return (a) < (b);
-  }
-};
 
-class IO {
-public:
-  static const size_t flanking_regions_size = 20;
+void 
+load_sequences(const std::string &chrom_dir, 
+	       const size_t padding,
+	       const std::string &targets_file,
+	       std::vector<std::string> &names,
+	       std::vector<std::string> &sequences, 
+	       std::vector<GenomicRegion> &targets);
 
-  static void load_sequences(std::vector<std::string> &names,
-      std::vector<std::string> &sequences, std::vector<GenomicRegion> &targets,
-      const std::string chrom_dir, const size_t padding,
-      const std::string targets_file);
-
-  static std::string
-  print_model(const Model &model, const std::string &motif_name,
-      const std::vector<GenomicRegion> &targets,
-      const std::vector<std::string> &sequences,
-      const std::vector<std::vector<double> > &indicators,
-      const std::vector<double> &zoops_i);
-
-private:
-
-  static void
-  read_piranha_output(const std::string filename,
-      std::vector<GenomicRegion> &regions);
-
-  static void extract_regions_fasta(const std::string &dirname,
-      const std::vector<GenomicRegion> &regions_in,
-      std::vector<std::string> &sequences, std::vector<std::string> &names);
-
-  static void extract_regions_chrom_fasta(const std::string &chrom_name,
-      const std::string &filename, const std::vector<GenomicRegion> &regions,
-      std::vector<std::string> &sequences, std::vector<std::string> &names);
-
-  static size_t adjust_start_pos(const size_t orig_start,
-      const std::string &chrom_name);
-
-  static size_t adjust_region_size(const size_t orig_start,
-      const std::string &chrom_name, const size_t orig_size);
-
-  static void expand_regions(std::vector<GenomicRegion> &regions,
-      const size_t padding);
-
-  static void unexpand_regions(std::vector<GenomicRegion> &regions,
-      const size_t padding);
-
-  IO();
-  /*** Private member constants ***/
-};
 
 #endif

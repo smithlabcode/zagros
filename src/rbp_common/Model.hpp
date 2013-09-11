@@ -44,7 +44,7 @@ public:
   /*** Constructors, destructors and object initialization ***/
   Model(const size_t motif_width);
 
-  static const double zoops_threshold = 0.0000001;
+  static const double zoops_threshold = 0.5;
 
   static inline size_t base2int_RNA(char c) {
     switch (c) {
@@ -167,7 +167,10 @@ private:
     }
   };
 
-  double calculateLogL(const std::vector<std::string> &sequences,
+  double calculate_oops_log_l(const std::vector<std::string> &sequences,
+      const std::vector<std::vector<double> > &indicators);
+
+  double calculate_zoops_log_l(const std::vector<std::string> &sequences,
       const std::vector<std::vector<double> > &indicators,
       const std::vector<double> &zoops_i);
 

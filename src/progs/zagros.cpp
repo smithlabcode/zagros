@@ -21,13 +21,8 @@
 #include <string>
 #include <vector>
 #include <iostream>
-#include <sstream>
 #include <iterator>
-#include <fstream>
 #include <numeric>
-#include <cfloat>
-#include <cmath>
-#include <iomanip>
 #include <tr1/unordered_map>
 
 #include "OptionParser.hpp"
@@ -45,21 +40,103 @@ using std::cout;
 using std::cerr;
 using std::endl;
 using std::max;
-using std::ofstream;
-using std::ostream;
-using std::stringstream;
-using std::istringstream;
-using std::ostringstream;
-using std::sort;
-using std::accumulate;
 using std::numeric_limits;
 
-using smithlab::alphabet_size;
+
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+/////////// 
+///////////  CODE FOR FORMATTING MOTIF / MODEL OUTPUT BELOW HERE
+///////////
+
+static string 
+format_site(const Model &model, const GenomicRegion &region, 
+	    const string &seq, const size_t site_pos) {
+  const size_t width = model.get_model_size();
+  std::ostringstream ss;
+  ss << "BS\t" << seq.substr(site_pos, width) << "; "
+     << assemble_region_name(region) << "; " 
+     << site_pos << "; "
+     << width << ";  ;"
+     << (region.pos_strand() ? "p;" : "n;");
+  return ss.str();
+}
+
+static string
+format_motif_header(const string &name) {
+  static const string the_rest("XX\nTY\tMotif\nXX\nP0\tA\tC\tG\tT");
+  std::ostringstream oss;
+  oss << "AC\t" << name << '\n' << the_rest;
+  return oss.str();
+}
+
+static string 
+format_motif(const Model &model, const string &motif_name,
+	     const vector<GenomicRegion> &targets, 
+	     const vector<string> &sequences,
+	     const vector<vector<double> > &indicators, 
+	     const vector<double> &zoops_i) {
+  
+  assert(sequences.size() == indicators.size() &&
+	 zoops_i.size() == sequences.size());
+  
+  std::ostringstream ss;
+  ss << format_motif_header(motif_name) << endl;
+  
+  vector<vector<double> > tmp_m = model.getM();
+  for (size_t n = 0; n < sequences.size(); n++) {
+    double max_X = -1;
+    int max_i = -1;
+    for (size_t i = 0; i < indicators[n].size(); i++) {
+      if (indicators[n][i] > max_X) {
+        max_X = indicators[n][i];
+        max_i = i;
+      }
+    }
+    for (size_t j = 0; j < model.get_model_size(); ++j)
+      tmp_m[j][model.base2int_RNA(sequences[n][max_i + j])] += 1;
+  }
+  
+  for (size_t j = 0; j < tmp_m.size(); j++) {
+    // AS: this is crazy below and will not work for motifs of width 11
+    ss << "0" << j + 1;
+    for (size_t b = 0; b < smithlab::alphabet_size; ++b)
+      ss << '\t' << static_cast<int>(tmp_m[j][b]);
+    ss << endl;
+  }
+  ss << "XX" << endl
+     << "AT\tGEO_P=" << model.getP() << endl
+     << "XX" << endl;
+  
+  for (size_t n = 0; n < indicators.size(); ++n) {
+    double max_X = -1;
+    size_t site_pos = 0;
+    for (size_t i = 0; i < indicators[n].size(); i++) {
+      if (indicators[n][i] > max_X) {
+        max_X = indicators[n][i];
+        site_pos = i;
+      }
+    }
+    if (!targets.empty())
+      if (zoops_i[n] > model.zoops_threshold)
+	ss << format_site(model, targets[n], sequences[n], site_pos) << "\t" << zoops_i[n] << endl;
+  }
+  ss << "XX" << endl
+     << "//" << endl;
+  
+  return ss.str();
+}
+
+
 
 int main(int argc, const char **argv) {
 
   try {
 
+    static const size_t flanking_regions_size = 20;
+    
     bool VERBOSE = false;
     string outdir = "zagros_output";
     string chrom_dir;
@@ -75,15 +152,13 @@ int main(int argc, const char **argv) {
     const double tolerance = 1e-10;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    OptionParser opt_parse(
-        strip_path(argv[0]), "", "<target regions/sequences>");
-    opt_parse.add_opt(
-        "output", 'o', "Name of output directory (default: zagros_output)",
-        false, outdir);
+    OptionParser opt_parse(strip_path(argv[0]), "", 
+			   "<target regions/sequences>");
+    opt_parse.add_opt("output", 'o', "name of output directory "
+		      "(default: zagros_output)", false, outdir);
     opt_parse.add_opt("width", 'w', "motif width", false, motif_width);
-    opt_parse.add_opt(
-        "chrom", 'c', "directory with chrom files (FASTA format)", false,
-        chrom_dir);
+    opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)",
+		      false, chrom_dir);
 //    opt_parse.add_opt(
 //        "experiment",
 //        'e',
@@ -118,68 +193,59 @@ int main(int argc, const char **argv) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
     }
-
     const string targets_file(leftover_args.back());
-
     /****************** END COMMAND LINE OPTIONS *****************/
-
-    //Create the output for directory
-    if (outdir.find_last_of("/\\") != outdir.length() - 1)
-      outdir += "/";
+    
     mkdir(outdir.c_str(), 0750);
-
+    
     string dirname, base_name, suffix;
     parse_dir_baseanme_suffix(targets_file, dirname, base_name, suffix);
-    string base_file = outdir + base_name;
-
+    const string base_file(path_join(outdir, base_name));
+    
+    const size_t padding =
+      structure_information_file.empty() ? 0 : flanking_regions_size;
+    
+    if (!structure_information_file.empty()) {
+      std::ifstream in(structure_information_file.c_str(), std::ios::binary);
+      if (!in)
+        throw SMITHLABException("cannot open input file " + 
+				structure_information_file);
+    }
+    
     //Vectors to store primary information from the data
-    vector<string> seqs;
-    vector<string> names;
+    vector<string> seqs, names;
     vector<GenomicRegion> targets;
     vector<vector<size_t> > diagnostic_events;
     vector<double> secondary_structure;
-
-    size_t padding = 0;
-    if (structure_information_file != "") {
-      std::ifstream in(structure_information_file.c_str(), std::ios::binary);
-      if (!in) {
-        throw SMITHLABException(
-            "cannot open input file " + string(structure_information_file));
-      } else {
-        in.close();
-        padding = IO::flanking_regions_size;
-      }
-    }
-
-    IO::load_sequences(names, seqs, targets, chrom_dir, padding, targets_file);
-
-    vector<double> has_motif(seqs.size(), 1.0);
+    load_sequences(chrom_dir, padding, targets_file, names, seqs, targets);
+    
+    vector<double> has_motif(seqs.size(), 0.5);
     vector<vector<double> > indicators;
     for (size_t i = 0; i < seqs.size(); ++i) {
-      size_t window_size =
-          (targets.empty()) ? seqs[i].length() : targets[i].get_width();
+      const size_t window_size =
+	targets.empty() ? seqs[i].length() : targets[i].get_width();
       const size_t n_pos = window_size - motif_width + 1;
-      indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
+      indicators.push_back(vector<double>(n_pos, 1.0/n_pos));
     }
-
+    
     Model model(motif_width);
-    model.expectation_maximization(
-        seqs, diagnostic_events, secondary_structure, indicators, has_motif,
-        structure_information_file, use_de_information, base_file,
-        max_iterations, tolerance);
-
-    string output_model = base_file + ".mat";
-    std::ostream* outf =
-        (!output_model.empty()) ? new ofstream(output_model.c_str()) : &cout;
-    *outf
-        << IO::print_model(
-            model, "ME_EM", targets, seqs, indicators, has_motif);
-    delete outf;
-
-  } catch (const SMITHLABException &e) {
+    model.expectation_maximization(seqs, diagnostic_events, 
+				   secondary_structure, indicators, 
+				   has_motif, structure_information_file, 
+				   use_de_information, base_file,
+				   max_iterations, tolerance);
+    
+    const string output_model(base_file + ".mat");
+    std::ofstream out(output_model.c_str());
+    out << format_motif(model, "ME_EM", targets, seqs, 
+			indicators, has_motif) << endl;
+    
+  }
+  catch (const SMITHLABException &e) {
     cerr << e.what() << endl;
     return EXIT_FAILURE;
-  } catch (std::bad_alloc &ba) {
+  }
+  catch (std::bad_alloc &ba) {
     cerr << "ERROR: could not allocate memory" << endl;
     return EXIT_FAILURE;
   }

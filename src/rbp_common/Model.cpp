@@ -63,17 +63,15 @@ Model::Model(const size_t motif_width) {
   f.resize(alphabet_size, 1.0 / alphabet_size);
   p = 0.5;
   delta = 0;
-  gamma = 1;
+  gamma = 0.5;
 }
 
-double Model::calculateLogL(const vector<string> &sequences,
-    const vector<vector<double> > &indicators, const vector<double> &zoops_i) {
+double Model::calculate_oops_log_l(const vector<string> &sequences,
+    const vector<vector<double> > &indicators) {
 
-  const size_t n = sequences.size();
   vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
 
-  for (size_t i = 0; i < n; i++) {
-    if (zoops_i[i] > zoops_threshold) {
+  for (size_t i = 0; i < sequences.size(); i++) {
     const size_t l = sequences[i].length();
     for (size_t k = 0; k < indicators[i].size(); k++)
       for (size_t j = 0; j < l; j++)
@@ -81,7 +79,6 @@ double Model::calculateLogL(const vector<string> &sequences,
           nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
         else
           nb[0][base2int(sequences[i][j])] += indicators[i][k];
-    }
   }
 
   double ret = 0.0;
@@ -94,6 +91,42 @@ double Model::calculateLogL(const vector<string> &sequences,
   return ret;
 }
 
+double Model::calculate_zoops_log_l(const vector<string> &sequences,
+    const vector<vector<double> > &indicators, const vector<double> &zoops_i) {
+
+  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
+
+  for (size_t i = 0; i < sequences.size(); i++) {
+    const size_t l = sequences[i].length();
+    for (size_t k = 0; k < indicators[i].size(); k++)
+      for (size_t j = 0; j < l; j++)
+        if (j >= k && j < k + M.size())
+          nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
+        else
+          nb[0][base2int(sequences[i][j])] += indicators[i][k];
+  }
+
+  double ret = 0.0;
+  for (size_t b = 0; b < alphabet_size; b++) {
+    ret += nb[0][b] * log(f[b]);
+    for (size_t j = 0; j < M.size(); j++)
+      ret += nb[j + 1][b] * log(M[j][b]);
+  }
+
+  //--------
+  for (size_t i = 0; i < sequences.size(); i++) {
+    double has_no_motif = 0.0;
+    for (size_t j = 0; j < sequences[i].length(); j++)
+      has_no_motif += log(f[base2int(sequences[i][j])]);
+    ret += (1-zoops_i[i]) * has_no_motif;
+    ret += (1-zoops_i[i]) * log(1-gamma);
+    ret += zoops_i[i] * log(gamma / (sequences[i].length() - M.size() + 1));
+  }
+  //--------
+
+  return ret;
+}
+
 void Model::expectation_maximization(const vector<string> &sequences,
     const vector<vector<size_t> > &diagnostic_events,
     const vector<double> &secondary_structure,
@@ -101,9 +134,9 @@ void Model::expectation_maximization(const vector<string> &sequences,
     const string t, const bool d, const string &file_name_base,
     const size_t max_iterations, const double tolerance) {
 
-  vector<kmer_info> top_five_kmers;
-  determineStartingPoint_best_kmer(sequences, top_five_kmers);
-  string starting_point = top_five_kmers.front().kmer;
+//  vector<kmer_info> top_five_kmers;
+//  determineStartingPoint_best_kmer(sequences, top_five_kmers);
+  string starting_point = "GGCCCGCG"; //top_five_kmers.front().kmer;
   cout << starting_point << endl;
   set_model(starting_point);
   expectation_maximization_seq(
@@ -121,7 +154,7 @@ void Model::expectation_maximization_seq(const vector<string> &sequences,
     expectation_seq(sequences, indicators, zoops_i);
     maximization_seq(sequences, indicators, zoops_i);
 
-    const double score = calculateLogL(sequences, indicators, zoops_i);
+    const double score = calculate_zoops_log_l(sequences, indicators, zoops_i);
 
     if ((prev_score - score) / prev_score < tolerance) {
       break;
@@ -135,23 +168,19 @@ void Model::expectation_maximization_seq(const vector<string> &sequences,
 void Model::expectation_seq(const vector<string> &sequences,
     vector<vector<double> > &indicators, vector<double> &zoops_i) {
 
-  const size_t n = sequences.size();
-  for (size_t i = 0; i < n; i++) {
-
-    const size_t l = sequences[i].length();
+  for (size_t i = 0; i < sequences.size(); i++) {
 
     vector<double> numerator(indicators[i].size(), 0.0);
     //--------
-    double has_motif = 0.0;
+    double no_motif = 0.0;
+    for (size_t j = 0; j < sequences[i].length(); j++)
+      no_motif += log(f[base2int(sequences[i][j])]);
     //--------
     for (size_t k = 0; k < indicators[i].size(); k++) {
 
       vector<double> f_powers(alphabet_size, 0.0);
-      for (size_t j = 0; j < l; j++) {
-        const char base = base2int(sequences[i][j]);
-        //--------
-        has_motif += log(f[base]);
-        //--------
+      for (size_t j = 0; j < sequences[i].length(); j++) {
+        const size_t base = base2int(sequences[i][j]);
         if (j >= k && j < k + M.size()) {
           numerator[k] += log(M[j - k][base]);
         } else
@@ -165,11 +194,11 @@ void Model::expectation_seq(const vector<string> &sequences,
       for (size_t b = 0; b < alphabet_size; b++)
         numerator[k] += f_powers[b] * log(f[b]);
       //--------
-      numerator[k] *= (gamma / (sequences[i].length() - M.size() + 1));
+      numerator[k] += log(gamma / (sequences[i].length() - M.size() + 1));
       //--------
     }
     //--------
-    numerator.push_back(has_motif * (1 - gamma));
+    numerator.push_back(no_motif + log(1 - gamma));
     //--------
     double denominator = smithlab::log_sum_log_vec(numerator, numerator.size());
     for (size_t k = 0; k < indicators[i].size(); k++)
@@ -180,43 +209,30 @@ void Model::expectation_seq(const vector<string> &sequences,
 void Model::maximization_seq(const vector<string> &sequences,
     const vector<vector<double> > &indicators, vector<double> &zoops_i) {
 
-  const size_t n = sequences.size();
-  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.0));
+  vector<vector<double> > nb(M.size() + 1, vector<double>(alphabet_size, 0.02));
 
   size_t total_bg_length = 0;
-  //--------
-  double new_gamma = 0.0;
-  //--------
-  for (size_t i = 0; i < n; i++) {
-    size_t l = sequences[i].length();
+  for (size_t i = 0; i < sequences.size(); i++) {
     total_bg_length += (indicators[i].size() - 1);
-    //--------
-    double new_Q = 0.0;
-    //--------
     for (size_t k = 0; k < indicators[i].size(); k++) {
-      //--------
-      new_Q += indicators[i][k];
-      //--------
-      for (size_t j = 0; j < l; j++)
+      for (size_t j = 0; j < sequences[i].length(); j++)
         if (j >= k && j < k + M.size())
           nb[j - k + 1][base2int(sequences[i][j])] += indicators[i][k];
         else
           nb[0][base2int(sequences[i][j])] += indicators[i][k];
     }
     //--------
-    zoops_i[i] = new_Q;
-    new_gamma += zoops_i[i];
+    zoops_i[i] = accumulate(indicators[i].begin(), indicators[i].end(), 0.0);
     //--------
   }
-  //--------
-  gamma = max(new_gamma / n, std::numeric_limits<double>::min());
-  //--------
-
   for (size_t b = 0; b < alphabet_size; b++) {
     f[b] = max(nb[0][b] / total_bg_length, std::numeric_limits<double>::min());
     for (size_t j = 0; j < M.size(); j++)
-      M[j][b] = max(nb[j + 1][b] / n, std::numeric_limits<double>::min());
+      M[j][b] = max(nb[j + 1][b] / sequences.size(), std::numeric_limits<double>::min());
   }
+  //--------
+  gamma = accumulate(zoops_i.begin(), zoops_i.end(), 0.0) / sequences.size();
+  //--------
 }
 
 void Model::set_model(const string &motif) {
