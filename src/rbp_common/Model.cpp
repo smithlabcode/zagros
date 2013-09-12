@@ -67,19 +67,19 @@ Model::set_model_uniform(const size_t width, Model &model) {
 
 void
 calculate_number_of_bases_fg_bg(const vector<string> &sequences,
-          const vector<vector<double> > &site_indic,
-          const size_t motif_width,
-          vector<vector<double> > &nb_fg,
-          vector<double> &nb_bg) {
+				const vector<vector<double> > &site_indic,
+				const size_t motif_width,
+				vector<vector<double> > &nb_fg,
+				vector<double> &nb_bg) {
 
   nb_fg.clear();
   nb_fg.resize(motif_width,
-        // This value needs to be changed
-        vector<double>(alphabet_size, 0.0));
+	       // This value needs to be changed
+	       vector<double>(alphabet_size, 0.0));
   for (size_t i = 0; i < site_indic.size(); ++i)
     for (size_t j = 0; j < site_indic[i].size(); ++j)
       for (size_t k = 0; k < motif_width; ++k)
-  nb_fg[k][base2int(sequences[i][j + k])] += site_indic[i][j];
+	nb_fg[k][base2int(sequences[i][j + k])] += site_indic[i][j];
 
   nb_bg.clear();
   nb_bg.resize(alphabet_size, 0.0);
@@ -90,15 +90,18 @@ calculate_number_of_bases_fg_bg(const vector<string> &sequences,
   for (size_t i = 0; i < site_indic.size(); ++i)
     for (size_t j = 0; j < site_indic[i].size(); ++j)
       for (size_t k = 0; k < motif_width; ++k)
-  nb_bg[base2int(sequences[i][j + k])] -= site_indic[i][j];
+	nb_bg[base2int(sequences[i][j + k])] -= site_indic[i][j];
 }
 
 double 
 Model::calculate_oops_log_l(const vector<string> &sequences,
-			    const vector<vector<double> > &site_indic,
-          const vector<vector<double> > &nb_fg,
-          const vector<double> &nb_bg) const{
-
+			    const vector<vector<double> > &site_indic) const{
+  
+  vector<vector<double> > nb_fg;
+  vector<double> nb_bg;
+  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), 
+				  nb_fg, nb_bg);
+  
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
     ret += nb_bg[i] * log(f[i]);
@@ -110,18 +113,22 @@ Model::calculate_oops_log_l(const vector<string> &sequences,
 
 double
 Model::calculate_zoops_log_l(const vector<string> &sequences,
-           const vector<vector<double> > &site_indic,
-           const vector<double> &seq_indic,
-           const vector<vector<double> > &nb_fg,
-           const vector<double> &nb_bg) const {
+			     const vector<vector<double> > &site_indic,
+			     const vector<double> &seq_indic) const {
+  
 
+  vector<vector<double> > nb_fg;
+  vector<double> nb_bg;
+  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), 
+				  nb_fg, nb_bg);
+  
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
     ret += nb_bg[i] * log(f[i]);
     for (size_t j = 0; j < matrix.size(); ++j)
       ret += nb_fg[j][i] * log(matrix[j][i]);
   }
-
+  
   //--------
   for (size_t i = 0; i < sequences.size(); i++) {
     double has_no_motif = 0.0;
@@ -136,18 +143,6 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
   return ret;
 }
 
-double
-Model::get_log_likelihood(const vector<string> &sequences,
-           const vector<vector<double> > &site_indic,
-           const vector<double> &seq_indic) {
-
-  vector<vector<double> > nb_fg(matrix.size(),
-        // This value needs to be changed
-        vector<double>(alphabet_size, 0.0));
-  vector<double> nb_bg(alphabet_size, 0.0);
-  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), nb_fg, nb_bg);
-  return calculate_zoops_log_l(sequences, site_indic, seq_indic, nb_fg, nb_bg);
-}
 
 void
 Model::set_model_by_word(const double pseudocount, 
@@ -232,7 +227,6 @@ expectation_for_single_seq(const string &seq,
 }
 
 
-
 static void
 expectation_seq(const vector<string> &sequences,
 		const vector<vector<double> > &matrix,
@@ -260,21 +254,23 @@ maximization_seq(const vector<string> &sequences,
 				// This value needs to be changed
 				vector<double>(alphabet_size, pseudocount));
   vector<double> nb_bg(alphabet_size, pseudocount);
-  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), nb_fg, nb_bg);
-
+  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), 
+				  nb_fg, nb_bg);
+  
   for (size_t i = 0; i < matrix.size(); ++i) {
     const double total = accumulate(nb_fg[i].begin(), nb_fg[i].end(), 0.0);
     transform(nb_fg[i].begin(), nb_fg[i].end(), matrix[i].begin(),
 	      std::bind2nd(std::divides<double>(), total));
   }
-
-
+  
+  
   const double total = accumulate(nb_bg.begin(), nb_bg.end(), 0.0);
   transform(nb_bg.begin(), nb_bg.end(), freq.begin(),
 	    std::bind2nd(std::divides<double>(), total));
   
   gamma = accumulate(seq_indic.begin(), seq_indic.end(), 0.0)/sequences.size();
 }
+
 
 
 void 
@@ -287,8 +283,9 @@ Model::expectation_maximization_seq(const vector<string> &sequences,
     
     expectation_seq(sequences, matrix, f, gamma, site_indic, seq_indic);
     maximization_seq(sequences, site_indic, seq_indic, matrix, f, gamma);
-    
-    const double score = get_log_likelihood(sequences, site_indic, seq_indic);
+
+    const double score = 
+      calculate_zoops_log_l(sequences, site_indic, seq_indic);
     
     if ((prev_score - score) / prev_score < tolerance) {
       break;

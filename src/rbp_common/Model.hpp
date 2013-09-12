@@ -42,7 +42,7 @@ struct Model {
   Model() : 
     f(std::vector<double>(smithlab::alphabet_size, 
 			  1.0/smithlab::alphabet_size)) {}
-
+  
   void
   expectation_maximization(const std::vector<std::string> &sequences,
 			   const std::vector<std::vector<size_t> > &diagnostic_events,
@@ -57,22 +57,13 @@ struct Model {
   
   double
   calculate_oops_log_l(const std::vector<std::string> &sequences,
-		       const std::vector<std::vector<double> > &site_indic,
-		       const std::vector<std::vector<double> > &nb_fg,
-		       const std::vector<double> &nb_bg) const;
+		       const std::vector<std::vector<double> > &site_indic) const;
   
   double
   calculate_zoops_log_l(const std::vector<std::string> &sequences,
 			const std::vector<std::vector<double> > &site_indic,
-			const std::vector<double> &seq_indic,
-      const std::vector<std::vector<double> > &nb_fg,
-      const std::vector<double> &nb_bg) const ;
-
-  double
-  get_log_likelihood(const std::vector<std::string> &sequences,
-      const std::vector<std::vector<double> > &site_indic,
-      const std::vector<double> &seq_indic);
-
+			const std::vector<double> &seq_indic) const;
+  
   size_t size() const {return matrix.size();}
   
   /* THESE COULD EASILY BE CONSTRUCTORS, BUT DANGEROUS TO GIVE
@@ -81,7 +72,7 @@ struct Model {
   set_model_uniform(const size_t width, Model &model);
   static void
   set_model_by_word(const double pseudo, const std::string &kmer, Model &model);
-
+  
   // instance variables
   std::vector<std::vector<double> > matrix;
   std::vector<double> lambda;
