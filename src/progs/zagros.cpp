@@ -246,6 +246,8 @@ int main(int argc, const char **argv) {
 
   try {
 
+    static const double zoops_expansion_factor = 0.75;
+
     bool VERBOSE = false;
     size_t motif_width = 8;
     size_t n_motifs = 1;
@@ -336,13 +338,15 @@ int main(int argc, const char **argv) {
       
       Model model;
       Model::set_model_by_word(Model::pseudocount, top_kmers[i].kmer, model);
-      model.gamma = 0.9;
+
+      model.gamma = (seqs.size() - 
+		     (zoops_expansion_factor*(seqs.size() - top_kmers[i].observed)))/
+	static_cast<double>(seqs.size());
       
       model.expectation_maximization(seqs, diagnostic_events, secondary_structure,
 				     indicators, has_motif);
       
-      out << format_motif(model, "ME_EM", targets, seqs, 
-			  indicators, has_motif);
+      out << format_motif(model, "ME_EM", targets, seqs, indicators, has_motif);
     }
     
   }
