@@ -57,7 +57,7 @@ void
 Model::set_model_uniform(const size_t width, Model &model) {
   model.matrix.clear();
   model.matrix.resize(width, vector<double>(alphabet_size, 1.0/alphabet_size));
-  model.lambda = vector<double>(width, 0.5);
+  model.motif_sec_str = vector<double>(width, 0.5);
   model.f = vector<double>(alphabet_size, 1.0/alphabet_size);
   model.p = 0.5;
   model.delta = 0;
@@ -172,7 +172,7 @@ Model::set_model_by_word(const double pseudocount,
 void
 Model::expectation_maximization(const vector<string> &sequences,
 				const vector<vector<size_t> > &diagnostic_events,
-				const vector<double> &secondary_structure,
+				const vector<vector<double> > &secondary_structure,
 				vector<vector<double> > &site_indic, 
 				vector<double> &seq_indic) {
   expectation_maximization_seq(sequences, site_indic, seq_indic);
