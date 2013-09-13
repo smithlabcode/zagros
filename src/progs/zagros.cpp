@@ -234,7 +234,7 @@ format_motif(const Model &model, const string &motif_name,
 	   << zoops_i[n] << endl;
   }
   ss << "XX" << endl
-     << "//" << endl;
+     << "//";
   
   return ss.str();
 }
@@ -313,10 +313,6 @@ int main(int argc, const char **argv) {
          throw SMITHLABException("inconsistent dimensions of "
 				 "sequence and structure data");
     }
-
-    std::ofstream of;
-    if (!outfile.empty()) of.open(outfile.c_str());
-    std::ostream out(outfile.empty() ? cout.rdbuf() : of.rdbuf());
     
     if (VERBOSE) 
       cerr << "IDENTIFYING STARTING POINTS" << endl;
@@ -325,6 +321,11 @@ int main(int argc, const char **argv) {
     
     if (VERBOSE) 
       cerr << "FITTING MOTIF PARAMETERS" << endl;
+
+    std::ofstream of;
+    if (!outfile.empty()) of.open(outfile.c_str());
+    std::ostream out(outfile.empty() ? cout.rdbuf() : of.rdbuf());
+    
     for (size_t i = 0; i < top_kmers.size(); ++i) {
 
       vector<double> has_motif(seqs.size(), 0.5);
@@ -338,13 +339,15 @@ int main(int argc, const char **argv) {
       Model::set_model_by_word(Model::pseudocount, top_kmers[i].kmer, model);
 
       model.gamma = (seqs.size() - 
-		     (zoops_expansion_factor*(seqs.size() - top_kmers[i].observed)))/
+		     (zoops_expansion_factor*
+		      (seqs.size() - top_kmers[i].observed)))/
 	static_cast<double>(seqs.size());
       
-      model.expectation_maximization(seqs, diagnostic_events, secondary_structure,
-				     indicators, has_motif);
+      model.expectation_maximization(seqs, diagnostic_events, 
+				     secondary_structure, indicators, has_motif);
       
-      out << format_motif(model, "ME_EM", targets, seqs, indicators, has_motif);
+      out << format_motif(model, "ZAGROS" + toa(i), targets, 
+			  seqs, indicators, has_motif) << endl;
     }
     
   }
