@@ -46,7 +46,7 @@ struct Model {
   void
   expectation_maximization(const std::vector<std::string> &sequences,
 			   const std::vector<std::vector<size_t> > &diagnostic_events,
-			   const std::vector<double> &secondary_structure,
+			   const std::vector<std::vector<double> > &secondary_structure,
 			   std::vector<std::vector<double> > &site_indic,
 			   std::vector<double> &seq_indic);
   
@@ -75,7 +75,7 @@ struct Model {
   
   // instance variables
   std::vector<std::vector<double> > matrix;
-  std::vector<double> lambda;
+  std::vector<double> motif_sec_str;
   std::vector<double> f;
   double p;
   double gamma;
