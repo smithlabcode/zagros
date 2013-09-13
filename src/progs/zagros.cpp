@@ -255,8 +255,6 @@ int main(int argc, const char **argv) {
     string chrom_dir;
     string structure_file;
 
-    size_t structure_computation_window = 0;
-    
     const size_t max_iterations = 10;
     const double tolerance = 1e-10;
 
@@ -271,6 +269,7 @@ int main(int argc, const char **argv) {
 		      false, n_motifs);
     opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)",
 		      false, chrom_dir);
+    opt_parse.add_opt("structure", 't', "structure information file", false, structure_file);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -296,16 +295,8 @@ int main(int argc, const char **argv) {
 
     // Model::max_iterations = max_iterations;
     // Model::tolerance = tolerance; // probably shouldn't be set by user
-    
-    const size_t padding = 
-      structure_file.empty() ? 0 : structure_computation_window;
-    
-    // if (!structure_information_file.empty()) {
-    //   std::ifstream in(structure_information_file.c_str(), std::ios::binary);
-    //   if (!in)
-    //     throw SMITHLABException("cannot open input file " + 
-    // 				structure_information_file);
-    // }
+
+    const size_t padding = 0;
 
     if (VERBOSE) 
       cerr << "LOADING SEQUENCES" << endl;
@@ -313,8 +304,15 @@ int main(int argc, const char **argv) {
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
     vector<vector<size_t> > diagnostic_events;
-    vector<double> secondary_structure;
+    vector<vector<double> > secondary_structure;
     load_sequences(chrom_dir, padding, targets_file, names, seqs, targets);
+    if (!structure_file.empty()) {
+       if (VERBOSE)
+         cerr << "LOADING STRUCTURE INFORMATION" << endl;
+       load_structures(structure_file, secondary_structure);
+       if (!structure_file_checks_out(seqs, secondary_structure))
+         throw SMITHLABException("The structural information does not match the sequences ");
+     }
 
     std::ofstream of;
     if (!outfile.empty()) of.open(outfile.c_str());
