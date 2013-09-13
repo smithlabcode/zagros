@@ -49,7 +49,8 @@ using smithlab::alphabet_size;
 
 using std::tr1::unordered_map;
 
-static char sample_nuc(const Runif &rng, vector<double> &probs) {
+static char 
+sample_nuc(const Runif &rng, vector<double> &probs) {
   const double d = rng.runif(0.0, 1.0);
   if (d < probs[0])
     return 'A';
@@ -60,58 +61,63 @@ static char sample_nuc(const Runif &rng, vector<double> &probs) {
   return 'T';
 }
 
-static void read_piranha_output(const string filename,
-    vector<GenomicRegion> &regions) {
+static void 
+read_piranha_output(const string filename,
+		    vector<GenomicRegion> &regions) {
   regions.clear();
   ReadBEDFile(filename, regions);
   for (size_t i = 0; i < regions.size(); ++i)
     regions[i].set_name("sequence_" + toa(i + 1));
 }
 
-static void expand_regions(vector<GenomicRegion> &regions,
-    const size_t padding) {
+static void 
+expand_regions(vector<GenomicRegion> &regions, const size_t padding) {
   for (size_t i = 0; i < regions.size(); ++i) {
     regions[i].set_start(regions[i].get_start() - padding);
     regions[i].set_end(regions[i].get_end() + padding);
   }
 }
 
-static void unexpand_regions(vector<GenomicRegion> &regions,
-    const size_t padding) {
+static void 
+unexpand_regions(vector<GenomicRegion> &regions, const size_t padding) {
   for (size_t i = 0; i < regions.size(); ++i) {
     regions[i].set_start(regions[i].get_start() + padding);
     regions[i].set_end(regions[i].get_end() - padding);
   }
 }
 
-static size_t adjust_start_pos(const size_t orig_start,
-    const string &chrom_name) {
+static size_t 
+adjust_start_pos(const size_t orig_start, const string &chrom_name) {
   static const double LINE_WIDTH = 50.0;
   // For the '>' and the '\n';
   const size_t name_offset = chrom_name.length() + 2;
-  const size_t preceding_newlines = static_cast<size_t>(std::floor(
-      orig_start / LINE_WIDTH));
+  const size_t preceding_newlines = 
+    static_cast<size_t>(std::floor(orig_start/LINE_WIDTH));
   return orig_start + preceding_newlines + name_offset;
 }
 
-static size_t adjust_region_size(const size_t orig_start,
-    const string &chrom_name, const size_t orig_size) {
+static size_t 
+adjust_region_size(const size_t orig_start, const string &chrom_name, 
+		   const size_t orig_size) {
   static const double LINE_WIDTH = 50.0;
-  const size_t preceding_newlines_start = static_cast<size_t>(std::floor(
-      orig_start / LINE_WIDTH));
-  const size_t preceding_newlines_end = static_cast<size_t>(std::floor(
-      (orig_start + orig_size) / LINE_WIDTH));
+  const size_t preceding_newlines_start = 
+    static_cast<size_t>(std::floor(orig_start/LINE_WIDTH));
+  const size_t preceding_newlines_end = 
+    static_cast<size_t>(std::floor((orig_start + orig_size)/LINE_WIDTH));
   return (orig_size + (preceding_newlines_end - preceding_newlines_start));
 }
 
-static void extract_regions_chrom_fasta(const string &chrom_name,
-    const string &filename, const vector<GenomicRegion> &regions,
-    vector<string> &sequences, vector<string> &names) {
+static void 
+extract_regions_chrom_fasta(const string &chrom_name,
+			    const string &filename, 
+			    const vector<GenomicRegion> &regions,
+			    vector<string> &sequences, 
+			    vector<string> &names) {
 
   std::ifstream in(filename.c_str());
   for (vector<GenomicRegion>::const_iterator i(regions.begin());
-      i != regions.end(); ++i) {
-
+       i != regions.end(); ++i) {
+    
     const size_t orig_start_pos = i->get_start();
     const size_t orig_region_size = i->get_end() - orig_start_pos;
 
@@ -126,16 +132,14 @@ static void extract_regions_chrom_fasta(const string &chrom_name,
     buffer[region_size] = '\0';
     in.read(buffer, region_size);
 
-    std::remove_if(
-        buffer, buffer + region_size,
-        std::bind2nd(std::equal_to<char>(), '\n'));
+    std::remove_if(buffer, buffer + region_size,
+		   std::bind2nd(std::equal_to<char>(), '\n'));
     buffer[orig_region_size] = '\0';
 
     sequences.push_back(buffer);
     names.push_back(i->get_name());
-    std::transform(
-        sequences.back().begin(), sequences.back().end(),
-        sequences.back().begin(), std::ptr_fun(&toupper));
+    std::transform(sequences.back().begin(), sequences.back().end(),
+		   sequences.back().begin(), std::ptr_fun(&toupper));
     if (i->neg_strand())
       revcomp_inplace(sequences.back());
     assert(i->get_width() == sequences.back().length());
@@ -143,10 +147,12 @@ static void extract_regions_chrom_fasta(const string &chrom_name,
   in.close();
 }
 
-static void extract_regions_fasta(const string &dirname,
-    const vector<GenomicRegion> &regions_in, vector<string> &sequences,
-    vector<string> &names) {
-
+static void 
+extract_regions_fasta(const string &dirname,
+		      const vector<GenomicRegion> &regions_in, 
+		      vector<string> &sequences,
+		      vector<string> &names) {
+  
   static const string FASTA_SUFFIX(".fa");
   assert(check_sorted(regions_in));
 
@@ -167,8 +173,8 @@ static void extract_regions_fasta(const string &dirname,
         chrom_regions_map.find(chrom_file);
     if (f_idx == chrom_regions_map.end())
       throw SMITHLABException("chrom not found:\t" + chrom_file);
-    extract_regions_chrom_fasta(
-        chrom_name, filenames[f_idx->second], regions[i], sequences, names);
+    extract_regions_chrom_fasta(chrom_name, filenames[f_idx->second], 
+				regions[i], sequences, names);
   }
 }
 

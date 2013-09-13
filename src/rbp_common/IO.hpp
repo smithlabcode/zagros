@@ -53,12 +53,12 @@ load_structures(const std::string structure_file,
                 std::vector<std::vector<double> > &structures);
 
 void
-save_structure_file(const std::vector<std::vector<double> > &secondary_structures,
+save_structure_file(const std::vector<std::vector<double> > &sec_struct,
                     const std::string outfile,
                     const size_t padding);
 
 bool
 structure_file_checks_out(const std::vector<std::string> &seqs,
-                          const std::vector<std::vector<double> > &secondary_structure);
+                          const std::vector<std::vector<double> > &sec_struct);
 
 #endif
