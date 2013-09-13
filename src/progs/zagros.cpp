@@ -32,7 +32,6 @@
 
 #include "Model.hpp"
 #include "IO.hpp"
-
 using std::tr1::unordered_map;
 
 using std::string;
@@ -310,9 +309,10 @@ int main(int argc, const char **argv) {
        if (VERBOSE)
          cerr << "LOADING STRUCTURE INFORMATION" << endl;
        load_structures(structure_file, secondary_structure);
-       if (!structure_file_checks_out(seqs, secondary_structure))
-         throw SMITHLABException("The structural information does not match the sequences ");
-     }
+       if (!seq_and_structure_are_consistent(seqs, secondary_structure))
+         throw SMITHLABException("inconsistent dimensions of "
+				 "sequence and structure data");
+    }
 
     std::ofstream of;
     if (!outfile.empty()) of.open(outfile.c_str());
