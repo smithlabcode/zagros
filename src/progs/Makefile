@@ -21,7 +21,7 @@ ifndef SMITHLAB_CPP
 $(error Must define SMITHLAB_CPP variable)
 endif
 
-PROGS = zagros
+PROGS = zagros thermo
 
 CXX = g++
 CFLAGS = -g -Wall -fPIC -fmessage-length=50
@@ -56,7 +56,12 @@ all:    $(PROGS)
 zagros : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
 
-zagros : $(addprefix $(COMMON_DIR), Model.o IO.o)
+zagros : $(addprefix $(COMMON_DIR), Model.o IO.o RNA_Utils.o Part_Func.o)
+
+thermo : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
+	smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
+
+thermo : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
 install: all
 	@mkdir -p ../../bin
