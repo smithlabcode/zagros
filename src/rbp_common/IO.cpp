@@ -178,10 +178,11 @@ extract_regions_fasta(const string &dirname,
   }
 }
 
-void load_sequences(const string &chrom_dir, const size_t padding,
-    const string &targets_file, vector<string> &names,
-    vector<string> &sequences, vector<GenomicRegion> &targets) {
-
+void 
+load_sequences(const string &chrom_dir, const size_t padding,
+	       const string &targets_file, vector<string> &names,
+	       vector<string> &sequences, vector<GenomicRegion> &targets) {
+  
   std::ifstream in(targets_file.c_str(), std::ios::binary);
   if (!in)
     throw SMITHLABException("cannot open input file " + string(targets_file));
@@ -193,8 +194,8 @@ void load_sequences(const string &chrom_dir, const size_t padding,
   if (buffer[0] == '>') {
     if (padding != 0)
       throw SMITHLABException("Input the genomic regions, "
-          "if you wish to use the "
-          "secondary structure!");
+			      "if you wish to use the "
+			      "secondary structure!");
     read_fasta_file(targets_file, names, sequences);
   } else {
     read_piranha_output(targets_file, targets);
@@ -216,11 +217,12 @@ void load_sequences(const string &chrom_dir, const size_t padding,
 }
 
 bool
-structure_file_checks_out(const vector<string> &seqs, const vector<vector<double> > &secondary_structure) {
-  if (seqs.size() != secondary_structure.size())
+seq_and_structure_are_consistent(const vector<string> &seqs, 
+				 const vector<vector<double> > &sec_structure) {
+  if (seqs.size() != sec_structure.size())
     return false;
   for (size_t i = 0; i < seqs.size(); ++i)
-    if (seqs[i].length() != secondary_structure[i].size())
+    if (seqs[i].length() != sec_structure[i].size())
       return false;
   return true;
 }
