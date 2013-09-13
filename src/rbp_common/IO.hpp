@@ -5,7 +5,7 @@
 
  Copyright (C) 2012
  University of Southern California,
- Emad Bahrami Samani, Philip J. Uren, Andrew D. Smith
+ Emad Bahrami-Samani, Philip J. Uren, Andrew D. Smith
 
  Authors: Emad Bahrami Samani, Philip J. Uren
 
@@ -40,13 +40,25 @@
 #include "GenomicRegion.hpp"
 
 
-void 
-load_sequences(const std::string &chrom_dir, 
+void
+load_sequences(const std::string &chrom_dir,
 	       const size_t padding,
 	       const std::string &targets_file,
 	       std::vector<std::string> &names,
-	       std::vector<std::string> &sequences, 
+	       std::vector<std::string> &sequences,
 	       std::vector<GenomicRegion> &targets);
 
+void
+load_structures(const std::string structure_file,
+                std::vector<std::vector<double> > &structures);
+
+void
+save_structure_file(const std::vector<std::vector<double> > &secondary_structures,
+                    const std::string outfile,
+                    const size_t padding);
+
+bool
+structure_file_checks_out(const std::vector<std::string> &seqs,
+                          const std::vector<std::vector<double> > &secondary_structure);
 
 #endif
