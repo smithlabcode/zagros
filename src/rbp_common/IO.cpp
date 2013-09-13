@@ -227,20 +227,21 @@ seq_and_structure_are_consistent(const vector<string> &seqs,
   return true;
 }
 
-void load_structures(const string structure_file,
-                     vector<vector<double> > &structures) {
+void 
+load_structures(const string structure_file,
+		vector<vector<double> > &structures) {
 
   std::ifstream in(structure_file.c_str(), std::ios::binary);
   if (!in)
     throw SMITHLABException("cannot open input file " +
-        structure_file);
+			    structure_file);
   string s;
-  while (getline( in, s )) {
-    istringstream ss( s );
-    vector <double> record;
+  while (getline(in, s)) {
+    istringstream ss(s);
+    vector<double> record;
     while (ss) {
       string s;
-      if (!getline( ss, s, ',' )) break;
+      if (!getline(ss, s, ',')) break;
       double d;
       stringstream s2d(s);
       s2d >> d;
@@ -248,20 +249,17 @@ void load_structures(const string structure_file,
     }
     structures.push_back(record);
   }
-  in.close();
 }
 
-void save_structure_file(const vector<vector<double> > &secondary_structure,
-    const string outfile, const size_t padding) {
-  std::ofstream of;
-  if (!outfile.empty())
-    of.open(outfile.c_str());
-  std::ostream out(outfile.empty() ? std::cout.rdbuf() : of.rdbuf());
-  for (size_t i = 0; i < secondary_structure.size(); ++i) {
-    for (size_t j = padding; j < secondary_structure[i].size() - padding - 1;
-        ++j)
-      out << secondary_structure[i][j] << ",";
-    out << secondary_structure[i][secondary_structure[i].size() - padding - 1]
-        << endl;
+void 
+save_structure_file(const vector<vector<double> > &sec_structure,
+		    const string &outfile, const size_t padding) {
+  assert(!outfile.empty());
+  std::ofstream out(outfile.c_str());
+  for (size_t i = 0; i < sec_structure.size(); ++i) {
+    assert(sec_structure.size() > 2*padding);
+    copy(sec_structure[i].begin() + padding, sec_structure[i].end() - padding,
+	 std::ostream_iterator<double>(out, ","));
+    out << endl;
   }
 }
