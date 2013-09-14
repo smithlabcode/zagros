@@ -51,7 +51,7 @@ using std::endl;
 const int RNAUtils::RNAPair[4][4] = { { 0, 0, 0, 5 }, { 0, 0, 1, 0 }, { 0, 2, 0,
     3 }, { 6, 0, 4, 0 } };
 
-double RNAUtils::getMinimumFreeEnergy(const string seq, const string cnstrnt) {
+double RNAUtils::get_minimum_free_energy(const string seq, const string cnstrnt) {
 
   vector<char> seqc(seq.size() + 1);
   copy(seq.begin(), seq.end(), seqc.begin());
@@ -69,7 +69,7 @@ double RNAUtils::getMinimumFreeEnergy(const string seq, const string cnstrnt) {
  * \return matrix V where V[i][j] is the probability that the jth base in
  *         ith sequence will be double-stranded (paired)
  */
-void RNAUtils::getBasePairProbabilityVector(bool VERBOSE,
+void RNAUtils::get_base_pair_probability_vector(bool VERBOSE,
     const vector<string> &seqs, vector<vector<double> > &bppvs) {
   bppvs.clear();
   bppvs.resize(seqs.size());
@@ -77,7 +77,7 @@ void RNAUtils::getBasePairProbabilityVector(bool VERBOSE,
     if (VERBOSE)
       cerr << "\r" << i * 100 / seqs.size() << "% completed..."
           << std::flush;
-    getBasePairProbabilityVector(seqs[i], bppvs[i]);
+    get_base_pair_probability_vector(seqs[i], bppvs[i]);
   }
   if (VERBOSE)
     cerr << "\r100% completed..."
@@ -90,10 +90,10 @@ void RNAUtils::getBasePairProbabilityVector(bool VERBOSE,
  * \return vector V where V[i] is the probability that the ith base will
  *         be double-stranded (paired)
  */
-void RNAUtils::getBasePairProbabilityVector(const string seq,
+void RNAUtils::get_base_pair_probability_vector(const string seq,
     vector<double> &bppv) {
   string constraint(seq.size(), '.');
-  getBasePairProbabilityVector(seq, constraint, bppv);
+  get_base_pair_probability_vector(seq, constraint, bppv);
 }
 
 /**
@@ -104,7 +104,7 @@ void RNAUtils::getBasePairProbabilityVector(const string seq,
  * \todo cache results
  * \todo make MC object static member
  */
-double RNAUtils::getBasePairProbabilityVector(const string seq,
+double RNAUtils::get_base_pair_probability_vector(const string seq,
     const string cnstrnt, vector<double> &bppv) {
 
   if (seq.size() != cnstrnt.size()) {
@@ -135,10 +135,10 @@ double RNAUtils::getBasePairProbabilityVector(const string seq,
  * \return matrix M where M[i][j] is the probability that the ith base will
  *         be paired with the jth base.
  */
-void RNAUtils::getBasePairProbabilityMatrix(const string seq,
+void RNAUtils::get_base_pair_probability_matrix(const string seq,
     vector<vector<double> > &bppm) {
   string constraint(seq.size(), '.');
-  getBasePairProbabilityMatrix(seq, constraint, bppm);
+  get_base_pair_probability_matrix(seq, constraint, bppm);
 }
 
 /**
@@ -149,7 +149,7 @@ void RNAUtils::getBasePairProbabilityMatrix(const string seq,
  * \todo cache results
  * \todo make MC object static member
  */
-double RNAUtils::getBasePairProbabilityMatrix(const string seq,
+double RNAUtils::get_base_pair_probability_matrix(const string seq,
     const string cnstrnt, vector<vector<double> > &bppm) {
 
   MC mc;
