@@ -28,6 +28,7 @@
 #include "Part_Func.hpp"
 #include "RNA_Utils.hpp"
 #include "IO.hpp"
+#include "RNG.hpp"
 
 using std::tr1::unordered_map;
 
@@ -38,6 +39,33 @@ using std::cerr;
 using std::endl;
 using std::max;
 using std::numeric_limits;
+
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+/////////////
+/////////////  REPLACING THE Ns IN SEQUENCING RANDOMLY
+/////////////
+
+static char sample_nuc(const Runif &rng, vector<double> &probs) {
+  const double d = rng.runif(0.0, 1.0);
+  if (d < probs[0])
+    return 'A';
+  if (d < probs[1])
+    return 'C';
+  if (d < probs[2])
+    return 'G';
+  return 'T';
+}
+
+static void replace_Ns(vector<string> &sequences) {
+  const Runif rng(std::numeric_limits<int>::max());
+  vector<double> probs(
+      vector<double>(smithlab::alphabet_size, 1.0 / smithlab::alphabet_size));
+  for (size_t i = 0; i < sequences.size(); ++i)
+    std::replace(
+        sequences[i].begin(), sequences[i].end(), 'N', sample_nuc(rng, probs));
+}
+
 
 int main(int argc, const char **argv) {
 
@@ -91,7 +119,9 @@ int main(int argc, const char **argv) {
         chrom_dir, structure_computation_window, targets_file, names, seqs,
         targets);
 
-    RNAUtils::getBasePairProbabilityVector(VERBOSE, seqs, secondary_structure);
+    replace_Ns(seqs);
+
+    RNAUtils::get_base_pair_probability_vector(VERBOSE, seqs, secondary_structure);
     save_structure_file(
         secondary_structure, outfile, structure_computation_window);
 
