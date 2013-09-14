@@ -51,29 +51,31 @@ public:
   static const double energy_pf = -1.0;
 
   /*** Static functions for counting structures ***/
-  static double getMinimumFreeEnergy(const std::string seq,
-      const std::string cnstrnt);
+  static double get_minimum_free_energy(const std::string seq,
+                                        const std::string cnstrnt);
 
   /*** static functions for determining the base pair probabilities ***/
 
-  static void getBasePairProbabilityVector(bool VERBOSE, const std::vector<std::string> &seqs,
-      std::vector<std::vector<double> > &bppvs);
+  static void
+  get_base_pair_probability_vector(bool VERBOSE,
+                                   const std::vector<std::string> &seqs,
+                                   std::vector<std::vector<double> > &bppvs);
 
-  static void getBasePairProbabilityVector(const std::string seq,
-      std::vector<double> &bppv);
+  static void get_base_pair_probability_vector(const std::string seq,
+                                               std::vector<double> &bppv);
 
   static void
-  getBasePairProbabilityMatrix(const std::string seq,
-      std::vector<std::vector<double> > &bppm);
+  get_base_pair_probability_matrix(const std::string seq,
+                                   std::vector<std::vector<double> > &bppm);
 
-  static double getBasePairProbabilityVector(const std::string seq,
-      const std::string cnstrnt, std::vector<double> &bppv);
+  static double get_base_pair_probability_vector(const std::string seq,
+                                                 const std::string cnstrnt,
+                                                 std::vector<double> &bppv);
 
   static double
-  getBasePairProbabilityMatrix(const std::string seq,
-      const std::string constraint, std::vector<std::vector<double> > &bppm);
-
-  static void fillExpLoopTable();
+  get_base_pair_probability_matrix(const std::string seq,
+                                   const std::string constraint,
+                                   std::vector<std::vector<double> > &bppm);
 
 private:
   /// Constructor is disabled
