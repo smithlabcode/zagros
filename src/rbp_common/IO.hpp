@@ -42,11 +42,11 @@
 
 void
 load_sequences(const std::string &chrom_dir,
-	       const size_t padding,
-	       const std::string &targets_file,
-	       std::vector<std::string> &names,
-	       std::vector<std::string> &sequences,
-	       std::vector<GenomicRegion> &targets);
+               const size_t padding,
+               const std::string &targets_file,
+               std::vector<std::string> &names,
+               std::vector<std::string> &sequences,
+               std::vector<GenomicRegion> &targets);
 
 void
 load_structures(const std::string structure_file,
@@ -54,11 +54,11 @@ load_structures(const std::string structure_file,
 
 void
 save_structure_file(const std::vector<std::vector<double> > &sec_structure,
-                    const std::string outfile,
+                    const std::string &outfile,
                     const size_t padding);
 
 bool
 seq_and_structure_are_consistent(const std::vector<std::string> &seqs,
-				 const std::vector<std::vector<double> > &sec_structure);
+                                 const std::vector<std::vector<double> > &sec_structure);
 
 #endif

@@ -49,28 +49,16 @@ using smithlab::alphabet_size;
 
 using std::tr1::unordered_map;
 
-static char 
-sample_nuc(const Runif &rng, vector<double> &probs) {
-  const double d = rng.runif(0.0, 1.0);
-  if (d < probs[0])
-    return 'A';
-  if (d < probs[1])
-    return 'C';
-  if (d < probs[2])
-    return 'G';
-  return 'T';
-}
-
-static void 
+static void
 read_piranha_output(const string filename,
-		    vector<GenomicRegion> &regions) {
+                    vector<GenomicRegion> &regions) {
   regions.clear();
   ReadBEDFile(filename, regions);
   for (size_t i = 0; i < regions.size(); ++i)
     regions[i].set_name("sequence_" + toa(i + 1));
 }
 
-static void 
+static void
 expand_regions(vector<GenomicRegion> &regions, const size_t padding) {
   for (size_t i = 0; i < regions.size(); ++i) {
     regions[i].set_start(regions[i].get_start() - padding);
@@ -78,7 +66,7 @@ expand_regions(vector<GenomicRegion> &regions, const size_t padding) {
   }
 }
 
-static void 
+static void
 unexpand_regions(vector<GenomicRegion> &regions, const size_t padding) {
   for (size_t i = 0; i < regions.size(); ++i) {
     regions[i].set_start(regions[i].get_start() + padding);
@@ -86,38 +74,38 @@ unexpand_regions(vector<GenomicRegion> &regions, const size_t padding) {
   }
 }
 
-static size_t 
+static size_t
 adjust_start_pos(const size_t orig_start, const string &chrom_name) {
   static const double LINE_WIDTH = 50.0;
   // For the '>' and the '\n';
   const size_t name_offset = chrom_name.length() + 2;
-  const size_t preceding_newlines = 
+  const size_t preceding_newlines =
     static_cast<size_t>(std::floor(orig_start/LINE_WIDTH));
   return orig_start + preceding_newlines + name_offset;
 }
 
-static size_t 
-adjust_region_size(const size_t orig_start, const string &chrom_name, 
-		   const size_t orig_size) {
+static size_t
+adjust_region_size(const size_t orig_start, const string &chrom_name,
+                   const size_t orig_size) {
   static const double LINE_WIDTH = 50.0;
-  const size_t preceding_newlines_start = 
+  const size_t preceding_newlines_start =
     static_cast<size_t>(std::floor(orig_start/LINE_WIDTH));
-  const size_t preceding_newlines_end = 
+  const size_t preceding_newlines_end =
     static_cast<size_t>(std::floor((orig_start + orig_size)/LINE_WIDTH));
   return (orig_size + (preceding_newlines_end - preceding_newlines_start));
 }
 
-static void 
+static void
 extract_regions_chrom_fasta(const string &chrom_name,
-			    const string &filename, 
-			    const vector<GenomicRegion> &regions,
-			    vector<string> &sequences, 
-			    vector<string> &names) {
+                            const string &filename,
+                            const vector<GenomicRegion> &regions,
+                            vector<string> &sequences,
+                            vector<string> &names) {
 
   std::ifstream in(filename.c_str());
   for (vector<GenomicRegion>::const_iterator i(regions.begin());
        i != regions.end(); ++i) {
-    
+
     const size_t orig_start_pos = i->get_start();
     const size_t orig_region_size = i->get_end() - orig_start_pos;
 
@@ -133,13 +121,13 @@ extract_regions_chrom_fasta(const string &chrom_name,
     in.read(buffer, region_size);
 
     std::remove_if(buffer, buffer + region_size,
-		   std::bind2nd(std::equal_to<char>(), '\n'));
+                   std::bind2nd(std::equal_to<char>(), '\n'));
     buffer[orig_region_size] = '\0';
 
     sequences.push_back(buffer);
     names.push_back(i->get_name());
     std::transform(sequences.back().begin(), sequences.back().end(),
-		   sequences.back().begin(), std::ptr_fun(&toupper));
+                   sequences.back().begin(), std::ptr_fun(&toupper));
     if (i->neg_strand())
       revcomp_inplace(sequences.back());
     assert(i->get_width() == sequences.back().length());
@@ -147,12 +135,12 @@ extract_regions_chrom_fasta(const string &chrom_name,
   in.close();
 }
 
-static void 
+static void
 extract_regions_fasta(const string &dirname,
-		      const vector<GenomicRegion> &regions_in, 
-		      vector<string> &sequences,
-		      vector<string> &names) {
-  
+                      const vector<GenomicRegion> &regions_in,
+                      vector<string> &sequences,
+                      vector<string> &names) {
+
   static const string FASTA_SUFFIX(".fa");
   assert(check_sorted(regions_in));
 
@@ -173,16 +161,16 @@ extract_regions_fasta(const string &dirname,
         chrom_regions_map.find(chrom_file);
     if (f_idx == chrom_regions_map.end())
       throw SMITHLABException("chrom not found:\t" + chrom_file);
-    extract_regions_chrom_fasta(chrom_name, filenames[f_idx->second], 
-				regions[i], sequences, names);
+    extract_regions_chrom_fasta(chrom_name, filenames[f_idx->second],
+                                regions[i], sequences, names);
   }
 }
 
-void 
+void
 load_sequences(const string &chrom_dir, const size_t padding,
-	       const string &targets_file, vector<string> &names,
-	       vector<string> &sequences, vector<GenomicRegion> &targets) {
-  
+               const string &targets_file, vector<string> &names,
+               vector<string> &sequences, vector<GenomicRegion> &targets) {
+
   std::ifstream in(targets_file.c_str(), std::ios::binary);
   if (!in)
     throw SMITHLABException("cannot open input file " + string(targets_file));
@@ -194,8 +182,8 @@ load_sequences(const string &chrom_dir, const size_t padding,
   if (buffer[0] == '>') {
     if (padding != 0)
       throw SMITHLABException("Input the genomic regions, "
-			      "if you wish to use the "
-			      "secondary structure!");
+                              "if you wish to use the "
+                              "secondary structure!");
     read_fasta_file(targets_file, names, sequences);
   } else {
     read_piranha_output(targets_file, targets);
@@ -207,18 +195,11 @@ load_sequences(const string &chrom_dir, const size_t padding,
     extract_regions_fasta(chrom_dir, targets, sequences, names);
     unexpand_regions(targets, padding);
   }
-
-  const Runif rng(std::numeric_limits<int>::max());
-  vector<double> probs(
-      vector<double>(smithlab::alphabet_size, 1.0 / smithlab::alphabet_size));
-  for (size_t i = 0; i < sequences.size(); ++i)
-    std::replace(
-        sequences[i].begin(), sequences[i].end(), 'N', sample_nuc(rng, probs));
 }
 
 bool
-seq_and_structure_are_consistent(const vector<string> &seqs, 
-				 const vector<vector<double> > &sec_structure) {
+seq_and_structure_are_consistent(const vector<string> &seqs,
+                                 const vector<vector<double> > &sec_structure) {
   if (seqs.size() != sec_structure.size())
     return false;
   for (size_t i = 0; i < seqs.size(); ++i)
@@ -227,14 +208,14 @@ seq_and_structure_are_consistent(const vector<string> &seqs,
   return true;
 }
 
-void 
+void
 load_structures(const string structure_file,
-		vector<vector<double> > &structures) {
+                vector<vector<double> > &structures) {
 
   std::ifstream in(structure_file.c_str(), std::ios::binary);
   if (!in)
     throw SMITHLABException("cannot open input file " +
-			    structure_file);
+                            structure_file);
   string s;
   while (getline(in, s)) {
     istringstream ss(s);
@@ -251,15 +232,15 @@ load_structures(const string structure_file,
   }
 }
 
-void 
+void
 save_structure_file(const vector<vector<double> > &sec_structure,
-		    const string &outfile, const size_t padding) {
+                    const string &outfile, const size_t padding) {
   assert(!outfile.empty());
   std::ofstream out(outfile.c_str());
   for (size_t i = 0; i < sec_structure.size(); ++i) {
     assert(sec_structure.size() > 2*padding);
     copy(sec_structure[i].begin() + padding, sec_structure[i].end() - padding,
-	 std::ostream_iterator<double>(out, ","));
+         std::ostream_iterator<double>(out, ","));
     out << endl;
   }
 }
