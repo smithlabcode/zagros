@@ -262,9 +262,7 @@ static void maximization_seq(const vector<string> &sequences,
       nb_bg.begin(), nb_bg.end(), freq.begin(),
       std::bind2nd(std::divides<double>(), total));
 
-  gamma = std::min(
-      accumulate(seq_indic.begin(), seq_indic.end(), 0.0) / sequences.size(),
-      0.999);
+  gamma = accumulate(seq_indic.begin(), seq_indic.end(), 0.0) / sequences.size();
 }
 
 void Model::expectation_maximization_seq(const vector<string> &sequences,
@@ -482,6 +480,7 @@ expectation_seq_str(const vector<string> &sequences,
 static void maximization_str(const vector<string> &sequences,
                              const vector<vector<double> > &secondary_structure,
                              const vector<vector<double> > &site_indic,
+                             const vector<double> &seq_indic,
                              vector<vector<double> > &matrix,
                              vector<double> &motif_sec_str,
                              double &f_sec_str) {
@@ -491,10 +490,10 @@ static void maximization_str(const vector<string> &sequences,
   for (size_t i = 0; i < matrix.size(); ++i) {
     for (size_t j = 0; j < site_indic.size(); ++j) {
       for (size_t site = 0; site < site_indic[i].size(); ++site)
-        motif_sec_str[i] += site_indic[j][site]
+        motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
             * secondary_structure[j][site + i];
     }
-    motif_sec_str[i] = motif_sec_str[i] / sequences.size();
+    motif_sec_str[i] = motif_sec_str[i] / accumulate(seq_indic.begin(), seq_indic.end(), 0.0);
   }
   //If we want to learn this parameter we have to calculate this:
   f_sec_str = 0.5;
@@ -513,7 +512,7 @@ Model::expectation_maximization_seq_str(const vector<string> &sequences,
         site_indic, seq_indic);
     maximization_seq(sequences, site_indic, seq_indic, matrix, f, gamma);
     maximization_str(
-        sequences, sec_structure, site_indic, matrix, motif_sec_str, f_sec_str);
+        sequences, sec_structure, site_indic, seq_indic, matrix, motif_sec_str, f_sec_str);
 
     const double score = calculate_zoops_log_l(
         sequences, sec_structure, site_indic, seq_indic);

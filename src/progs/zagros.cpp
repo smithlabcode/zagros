@@ -229,7 +229,7 @@ static string format_motif(const Model &model,
       }
     }
     for (size_t j = 0; j < model.size(); ++j)
-      tmp_m[j][base2int(sequences[n][max_i + j])] += 1;
+      tmp_m[j][base2int(sequences[n][max_i + j])] += zoops_i[n];
   }
 
   for (size_t j = 0; j < tmp_m.size(); j++) {

@@ -377,6 +377,10 @@ int main(int argc,
           << format_motif(
               model, "ZAGROS" + toa(i), targets, seqs, indicators, has_motif)
           << endl;
+
+      for (size_t ss = 0; ss < has_motif.size(); ++ss)
+        out << has_motif[ss] << "\t";
+      out << endl;
     }
 
   } catch (const SMITHLABException &e) {
