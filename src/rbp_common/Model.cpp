@@ -91,9 +91,8 @@ void calculate_number_of_bases_fg_bg(const vector<string> &sequences,
         nb_bg[base2int(sequences[i][j + k])] -= site_indic[i][j];
 }
 
-double
-Model::calculate_oops_log_l(const vector<string> &sequences,
-                            const vector<vector<double> > &site_indic) const {
+double Model::calculate_oops_log_l(const vector<string> &sequences,
+                                   const vector<vector<double> > &site_indic) const {
 
   vector<vector<double> > nb_fg;
   vector<double> nb_bg;
@@ -263,8 +262,8 @@ static void maximization_seq(const vector<string> &sequences,
       std::bind2nd(std::divides<double>(), total));
 
   gamma = std::min(
-      accumulate(seq_indic.begin(), seq_indic.end(), 0.0 / sequences.size()),
-      0.99);
+      accumulate(seq_indic.begin(), seq_indic.end(), 0.0) / sequences.size(),
+      0.999);
 }
 
 void Model::expectation_maximization_seq(const vector<string> &sequences,
@@ -302,46 +301,46 @@ calculate_number_of_bases_fg_bg_str(const vector<string> &sequences,
                                     vector<double> &nb_bg_ss,
                                     vector<vector<double> > &nb_fg_ds,
                                     vector<double> &nb_bg_ds) {
-  
+
   nb_fg_ss.clear();
   nb_fg_ss.resize(motif_width, vector<double>(alphabet_size, 0.0));
   nb_fg_ds.clear();
   nb_fg_ds.resize(motif_width, vector<double>(alphabet_size, 0.0));
-  
+
   // this loop calculates the number of bases occurring at a
   // particular location of the motif with particular secondary
   // structure
   for (size_t i = 0; i < site_indic.size(); ++i)
     for (size_t j = 0; j < site_indic[i].size(); ++j)
       for (size_t k = 0; k < motif_width; ++k) {
-	const char base_idx = base2int(sequences[i][j + k]);
-	const double curr_sec_str = secondary_structure[i][j + k];
-	const double curr_site_indic = site_indic[i][j];
-        nb_fg_ss[k][base_idx] += (1.0 - curr_sec_str)*curr_site_indic;
-        nb_fg_ds[k][base_idx] += curr_sec_str*curr_site_indic;
+        const char base_idx = base2int(sequences[i][j + k]);
+        const double curr_sec_str = secondary_structure[i][j + k];
+        const double curr_site_indic = site_indic[i][j];
+        nb_fg_ss[k][base_idx] += (1.0 - curr_sec_str) * curr_site_indic;
+        nb_fg_ds[k][base_idx] += curr_sec_str * curr_site_indic;
       }
-  
+
   nb_bg_ss.clear();
   nb_bg_ss.resize(alphabet_size, 0.0);
   nb_bg_ds.clear();
   nb_bg_ds.resize(alphabet_size, 0.0);
-  
+
   // the next two loop sets calculate the number of bases occurring in
   // the background with a particular secondary structure
   for (size_t i = 0; i < sequences.size(); ++i)
     for (size_t j = 0; j < sequences[i].length(); ++j) {
-      nb_bg_ss[base2int(sequences[i][j])] += 
-	(1.0 - secondary_structure[i][j]) * motif_width;
-      nb_bg_ds[base2int(sequences[i][j])] += 
-	(secondary_structure[i][j] * motif_width);
+      nb_bg_ss[base2int(sequences[i][j])] += (1.0 - secondary_structure[i][j])
+          * motif_width;
+      nb_bg_ds[base2int(sequences[i][j])] += (secondary_structure[i][j]
+          * motif_width);
     }
   for (size_t i = 0; i < site_indic.size(); ++i)
     for (size_t j = 0; j < site_indic[i].size(); ++j)
       for (size_t k = 0; k < motif_width; ++k) {
-        nb_bg_ss[base2int(sequences[i][j + k])] -= 
-	  (1.0 - secondary_structure[i][j + k]) * site_indic[i][j];
+        nb_bg_ss[base2int(sequences[i][j + k])] -= (1.0
+            - secondary_structure[i][j + k]) * site_indic[i][j];
         nb_bg_ds[base2int(sequences[i][j + k])] -=
-	  (secondary_structure[i][j + k] * site_indic[i][j]);
+            (secondary_structure[i][j + k] * site_indic[i][j]);
       }
 }
 
@@ -350,29 +349,29 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
                              const vector<vector<double> > &secondary_structure,
                              const vector<vector<double> > &site_indic,
                              const vector<double> &seq_indic) const {
-  
+
   vector<vector<double> > nb_fg_ss;
   vector<vector<double> > nb_fg_ds;
   vector<double> nb_bg_ss;
   vector<double> nb_bg_ds;
-  calculate_number_of_bases_fg_bg_str(sequences, secondary_structure, 
-				      site_indic, matrix.size(),
-				      nb_fg_ss, nb_bg_ss, nb_fg_ds, nb_bg_ds);
-  
+  calculate_number_of_bases_fg_bg_str(
+      sequences, secondary_structure, site_indic, matrix.size(), nb_fg_ss,
+      nb_bg_ss, nb_fg_ds, nb_bg_ds);
+
   // this loop calculates the log likelihood of the model using the
   // counts obtained from the previous function call. This loop is the
   // same as would work in an OOPS model, ZOOPS-specific stuff is
   // below.
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
-    ret += (nb_bg_ss[i] * (1 - f_sec_str) * log(f[i]));
-    ret += (nb_bg_ds[i] * f_sec_str * log(f[i]));
+    ret += (nb_bg_ss[i] * log(f[i] * (1 - f_sec_str)));
+    ret += (nb_bg_ds[i] * log(f[i] * f_sec_str));
     for (size_t j = 0; j < matrix.size(); ++j) {
-      ret += nb_fg_ss[j][i] * (1 - motif_sec_str[j]) * log(matrix[j][i]);
-      ret += nb_fg_ds[j][i] * motif_sec_str[j] * log(matrix[j][i]);
+      ret += (nb_fg_ss[j][i] * log(matrix[j][i] * (1 - motif_sec_str[j])));
+      ret += (nb_fg_ds[j][i] * log(matrix[j][i] * motif_sec_str[j]));
     }
   }
-  
+
   // this is the ZOOPS-specific part of the log likelihood
   for (size_t i = 0; i < sequences.size(); i++) {
     double has_no_motif = 0.0;
@@ -381,9 +380,9 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
     ret += (1.0 - seq_indic[i]) * has_no_motif;
     ret += (1.0 - seq_indic[i]) * log(1.0 - gamma);
     ret += seq_indic[i]
-      * log(gamma/(sequences[i].length() - matrix.size() + 1));
+        * log(gamma / (sequences[i].length() - matrix.size() + 1));
   }
-  
+
   return ret;
 }
 
@@ -397,7 +396,7 @@ get_numerator_seq_str_for_site(const string &seq,
                                const double gamma,
                                const size_t site,
                                double &num) {
-  
+
   // calculating the contribution of the foreground and the powers
   // that will be needed for the background calculations (below).
   vector<double> f_powers_ss(alphabet_size, 0.0);
@@ -405,24 +404,24 @@ get_numerator_seq_str_for_site(const string &seq,
   for (size_t i = 0; i < seq.length(); ++i) {
     const size_t base = base2int(seq[i]);
     if (i >= site && i < site + matrix.size()) {
-      num += (secondary_structure[i] * motif_sec_str[i - site]
-	      * log(matrix[i - site][base]));
-      num += ((1.0 - secondary_structure[i]) * (1.0 - motif_sec_str[i - site])
-	      * log(matrix[i - site][base]));
+      num += (secondary_structure[i]
+          * log(matrix[i - site][base] * motif_sec_str[i - site]));
+      num += ((1.0 - secondary_structure[i])
+          * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
     } else {
-      f_powers_ss[base] += (1 - f_sec_str);
-      f_powers_ds[base] += (f_sec_str);
+      f_powers_ss[base] += (1 - secondary_structure[i]);
+      f_powers_ds[base] += (secondary_structure[i]);
     }
-    assert(std::isfinite(f_powers_ss[base]) && 
-	   std::isfinite(f_powers_ds[base]) && 
-	   std::isfinite(num));
+    assert(
+        std::isfinite(f_powers_ss[base]) && std::isfinite(f_powers_ds[base])
+            && std::isfinite(num));
   }
 
   // calculating the contribution of the background (outside the motif
   // occurrences)
   for (size_t b = 0; b < alphabet_size; b++) {
-    num += f_powers_ss[b] * log(freqs[b]);
-    num += f_powers_ds[b] * log(freqs[b]);
+    num += f_powers_ss[b] * log(freqs[b] * (1 - f_sec_str));
+    num += f_powers_ds[b] * log(freqs[b] * (f_sec_str));
   }
   num += log(gamma / (seq.length() - matrix.size() + 1.0));
 }
@@ -441,20 +440,24 @@ expectation_seq_str_for_single_seq(const string &seq,
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i)
-    get_numerator_seq_str_for_site(seq, secondary_structure, matrix, 
-				   motif_sec_str, freqs, f_sec_str,
-				   gamma, i, numerator[i]);
-  
+    get_numerator_seq_str_for_site(
+        seq, secondary_structure, matrix, motif_sec_str, freqs, f_sec_str,
+        gamma, i, numerator[i]);
+
   double no_motif = 0.0;
-  for (size_t i = 0; i < seq.length(); i++)
-    no_motif += log(freqs[base2int(seq[i])]);
+  for (size_t i = 0; i < seq.length(); i++) {
+    no_motif += secondary_structure[i]
+        * log(freqs[base2int(seq[i])] * f_sec_str);
+    no_motif += ((1 - secondary_structure[i])
+        * log(freqs[base2int(seq[i])] * (1 - f_sec_str)));
+  }
   numerator.push_back(no_motif + log(1.0 - gamma));
-  
-  const double denominator = 
-    smithlab::log_sum_log_vec(numerator, numerator.size());
+
+  const double denominator = smithlab::log_sum_log_vec(
+      numerator, numerator.size());
   for (size_t i = 0; i < site_indic.size(); ++i)
     site_indic[i] = exp(numerator[i] - denominator);
-  
+
   seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
 }
 
@@ -470,18 +473,17 @@ expectation_seq_str(const vector<string> &sequences,
                     vector<double> &seq_indic) {
 
   for (size_t i = 0; i < sequences.size(); i++)
-    expectation_seq_str_for_single_seq(sequences[i], secondary_structure[i],
-				       matrix, motif_sec_str, freqs,
-				       f_sec_str, gamma, site_indic[i], seq_indic[i]);
+    expectation_seq_str_for_single_seq(
+        sequences[i], secondary_structure[i], matrix, motif_sec_str, freqs,
+        f_sec_str, gamma, site_indic[i], seq_indic[i]);
 }
 
-static void
-maximization_str(const vector<string> &sequences,
-                 const vector<vector<double> > &secondary_structure,
-                 const vector<vector<double> > &site_indic,
-                 vector<vector<double> > &matrix,
-                 vector<double> &motif_sec_str,
-                 double &f_sec_str) {
+static void maximization_str(const vector<string> &sequences,
+                             const vector<vector<double> > &secondary_structure,
+                             const vector<vector<double> > &site_indic,
+                             vector<vector<double> > &matrix,
+                             vector<double> &motif_sec_str,
+                             double &f_sec_str) {
 
   motif_sec_str.clear();
   motif_sec_str.resize(matrix.size(), 0.0);
@@ -489,7 +491,7 @@ maximization_str(const vector<string> &sequences,
     for (size_t j = 0; j < site_indic.size(); ++j) {
       for (size_t site = 0; site < site_indic[i].size(); ++site)
         motif_sec_str[i] += site_indic[j][site]
-	  * secondary_structure[j][site + i];
+            * secondary_structure[j][site + i];
     }
     motif_sec_str[i] = motif_sec_str[i] / sequences.size();
   }
@@ -502,19 +504,18 @@ Model::expectation_maximization_seq_str(const vector<string> &sequences,
                                         const vector<vector<double> > &sec_structure,
                                         vector<vector<double> > &site_indic,
                                         vector<double> &seq_indic) {
-  
+
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq_str(sequences, sec_structure, 
-			matrix, motif_sec_str, f, f_sec_str,
-			gamma, site_indic, seq_indic);
+    expectation_seq_str(
+        sequences, sec_structure, matrix, motif_sec_str, f, f_sec_str, gamma,
+        site_indic, seq_indic);
     maximization_seq(sequences, site_indic, seq_indic, matrix, f, gamma);
-    maximization_str(sequences, sec_structure, site_indic, 
-		     matrix, motif_sec_str, f_sec_str);
-    
-    const double score = 
-      calculate_zoops_log_l(sequences, sec_structure, site_indic, seq_indic);
+    maximization_str(
+        sequences, sec_structure, site_indic, matrix, motif_sec_str, f_sec_str);
 
+    const double score = calculate_zoops_log_l(
+        sequences, sec_structure, site_indic, seq_indic);
     if ((prev_score - score) / prev_score < tolerance) {
       break;
     }
