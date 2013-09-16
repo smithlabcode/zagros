@@ -22,6 +22,7 @@
 #include <vector>
 #include <iterator>
 #include <numeric>
+#include <limits>
 #include <tr1/unordered_map>
 
 #include "smithlab_utils.hpp"
