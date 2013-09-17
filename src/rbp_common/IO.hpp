@@ -38,6 +38,7 @@
 #include <string>
 
 #include "GenomicRegion.hpp"
+#include "MappedRead.hpp"
 
 
 void
@@ -47,6 +48,11 @@ load_sequences(const std::string &chrom_dir,
                std::vector<std::string> &names,
                std::vector<std::string> &sequences,
                std::vector<GenomicRegion> &targets);
+
+void
+load_mapped_reads(const std::string &reads_file,
+                  const std::string &mapper,
+                  std::vector<MappedRead> &mapped_reads);
 
 void
 load_structures(const std::string structure_file,
@@ -60,5 +66,6 @@ save_structure_file(const std::vector<std::vector<double> > &sec_structure,
 bool
 seq_and_structure_are_consistent(const std::vector<std::string> &seqs,
                                  const std::vector<std::vector<double> > &sec_structure);
+
 
 #endif
