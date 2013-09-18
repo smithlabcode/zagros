@@ -54,22 +54,22 @@ all:    $(PROGS)
 	$(CXX) $(CFLAGS) -o $@ $^ $(INCLUDEARGS) $(LIBS)
 
 zagros : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
-	smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
+	smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
 
 zagros : $(addprefix $(COMMON_DIR), Model.o IO.o RNA_Utils.o Part_Func.o)
 
 zagros_debug : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
-	smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
+	smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
 
 zagros_debug : $(addprefix $(COMMON_DIR), Model.o IO.o RNA_Utils.o Part_Func.o)
 
 thermo : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
-	smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
+	smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
 
 thermo : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
 thermo_debug : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
-	smithlab_utils.o OptionParser.o RNG.o FileIterator.o MappedRead.o)
+	smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
 
 thermo_debug : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
