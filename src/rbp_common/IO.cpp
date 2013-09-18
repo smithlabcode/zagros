@@ -57,7 +57,8 @@ using std::tr1::unordered_map;
 /////////////                FOR DIAGNOSTIC EVENTS
 /////////////
 
-static bool is_header_line(const string& line) {
+static bool
+is_header_line(const string& line) {
   if (line.substr(0, 1) == "#")
     return true;
   static const char *browser_label = "browser";
@@ -68,7 +69,8 @@ static bool is_header_line(const string& line) {
   return true;
 }
 
-static bool is_track_line(const char *line) {
+static bool
+is_track_line(const char *line) {
   static const char *track_label = "track";
   static const size_t track_label_len = 5;
   for (size_t i = 0; i < track_label_len; ++i)
@@ -77,10 +79,11 @@ static bool is_track_line(const char *line) {
   return true;
 }
 
-static vector<string> split_extended_whitespace_quoted(string to_split) {
+static vector<string>
+split_extended_whitespace_quoted(string to_split) {
+
   static const char *non_word_chars = "\t\"'";
   to_split = smithlab::strip(to_split);
-
   std::vector<std::string> words;
   size_t start_pos = 0, end_pos = 0;
   const size_t length_of_to_split = to_split.length();
@@ -124,113 +127,89 @@ static vector<string> split_extended_whitespace_quoted(string to_split) {
   return words;
 }
 
-static size_t convertString(const string& s) {
+static size_t
+convertString(const string& s) {
   istringstream buffer(s);
   size_t value;
   buffer >> value;
   return value;
 }
 
-static string convertSizet(const size_t number) {
+static string
+convertSizet(const size_t number) {
   stringstream ss;
   ss << number;
   return ss.str();
 }
 
-static void convertBowtieExtra(string &extra) {
+static void
+convert_bowtie_extra(string &extra) {
   std::replace(extra.begin(), extra.end(), ',', ' ');
   extra.erase(std::remove(extra.begin(), extra.end(), ':'), extra.end());
 }
 
-static void read_piranha_output(const string filename,
-                                vector<GenomicRegion> &regions) {
+static void
+read_piranha_output(const string filename,
+                    vector<GenomicRegion> &regions) {
   regions.clear();
   ReadBEDFile(filename, regions);
   for (size_t i = 0; i < regions.size(); ++i)
     regions[i].set_name("sequence_" + toa(i + 1));
 }
 
-static void read_rmap_output(string filename,
-                             vector<MappedRead> &regions) {
-  static const size_t buffer_size = 10000;
-
-  std::ifstream in(filename.c_str());
-  if (!in)
-    throw BEDFileException("cannot open input file " + filename);
-
-  std::ifstream::pos_type start_of_data = in.tellg();
-  in.seekg(0, std::ios::end);
-  std::ifstream::pos_type end_of_data = in.tellg();
-  in.seekg(start_of_data);
-
-  while (!in.eof()) {
-    char buffer[buffer_size];
-    in.getline(buffer, buffer_size);
-    if (in.gcount() == buffer_size - 1)
-      throw BEDFileException("Line too long in file: " + filename);
-    if (!is_header_line(buffer) && !is_track_line(buffer)) {
-      vector<string> parts(split_extended_whitespace_quoted(buffer));
-      string gr = parts[0] + "\t" + parts[1] + "\t" + parts[2] + "\t" + parts[3]
-          + "\t" + parts[4] + "\t" + parts[5];
-      string read = gr + "\t" + parts[6] + "\t2C>C";
-      MappedRead mr(read.c_str());
-      regions.push_back(mr);
-    }
-
-    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
-    std::cerr << "\r" << percent_done << "% completed..." << std::flush;
-    in.peek();
+static void
+read_rmap_output(const vector<string> &parts,
+                 vector<MappedRead> &regions) {
+  if (parts.size() == 7) {
+    string gr = parts[0] + "\t" + parts[1] + "\t" + parts[2] + "\t" + parts[3]
+        + "\t" + parts[4] + "\t" + parts[5];
+    string read = gr + "\t" + parts[6] + "\t2C>C";
+    MappedRead mr(read.c_str());
+    regions.push_back(mr);
   }
-  in.close();
-  std::cerr << std::endl;
 }
 
-static void read_bowtie_output(string filename,
-                               vector<MappedRead> &regions) {
-  static const size_t buffer_size = 10000;
-
-  std::ifstream in(filename.c_str());
-  if (!in)
-    throw BEDFileException("cannot open input file " + filename);
-
-  std::ifstream::pos_type start_of_data = in.tellg();
-  in.seekg(0, std::ios::end);
-  std::ifstream::pos_type end_of_data = in.tellg();
-  in.seekg(start_of_data);
-
-  while (!in.eof()) {
-    char buffer[buffer_size];
-    in.getline(buffer, buffer_size);
-    if (in.gcount() == buffer_size - 1)
-      throw BEDFileException("Line too long in file: " + filename);
-    if (!is_header_line(buffer) && !is_track_line(buffer)) {
-      vector<string> parts(split_extended_whitespace_quoted(buffer));
-      if (parts.size() == 8) {
-        vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
-        convertBowtieExtra(parts[7]);
-        string gr = parts[2] + "\t" + parts[3] + "\t"
-            + convertSizet(convertString(parts[3]) + parts[4].length()) + "\t"
-            + name[0] + "\t" + parts[6] + "\t" + parts[1];
-        string read = gr + "\t" + parts[4] + "\t" + parts[7];
-        MappedRead mr(read.c_str());
-        regions.push_back(mr);
-      }
-    }
-    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
-    std::cerr << "\r" << percent_done << "% completed..." << std::flush;
-    in.peek();
+static void
+read_bowtie_output(const vector<string> &parts,
+                   vector<MappedRead> &regions) {
+  if (parts.size() == 8) {
+    vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
+    string extra = parts[7];
+    convert_bowtie_extra(extra);
+    string gr = parts[2] + "\t" + parts[3] + "\t"
+        + convertSizet(convertString(parts[3]) + parts[4].length()) + "\t"
+        + name[0] + "\t" + parts[6] + "\t" + parts[1];
+    string read = gr + "\t" + parts[4] + "\t" + parts[7];
+    MappedRead mr(read.c_str());
+    regions.push_back(mr);
   }
-  in.close();
-  std::cerr << std::endl;
 }
 
-static void read_novoalign_output(string filename,
-                                  vector<MappedRead> &regions) {
+static void
+read_novoalign_output(const vector<string> &parts,
+                      vector<MappedRead> &regions) {
+  if (parts.size() == 14 && parts[4] == "U") {
+    vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
+    string strand = ((parts[9] == "F") ? "+" : "-");
+    string gr = parts[7].substr(1) + "\t" + parts[8] + "\t"
+        + convertSizet(convertString(parts[8]) + parts[2].length()) + "\t"
+        + name[0] + "\t" + parts[5] + "\t" + strand;
+    string read = gr + "\t" + parts[2] + "\t" + parts[13];
+    MappedRead mr(read.c_str());
+    regions.push_back(mr);
+  }
+}
+
+void
+load_mapped_reads(const string &reads_file,
+                  const string &mapper,
+                  vector<MappedRead> &mapped_reads) {
+
   static const size_t buffer_size = 10000;
 
-  std::ifstream in(filename.c_str());
+  std::ifstream in(reads_file.c_str());
   if (!in)
-    throw BEDFileException("cannot open input file " + filename);
+    throw SMITHLABException("cannot open input file " + reads_file);
 
   std::ifstream::pos_type start_of_data = in.tellg();
   in.seekg(0, std::ios::end);
@@ -241,20 +220,17 @@ static void read_novoalign_output(string filename,
     char buffer[buffer_size];
     in.getline(buffer, buffer_size);
     if (in.gcount() == buffer_size - 1)
-      throw BEDFileException("Line too long in file: " + filename);
-    if (!is_header_line(buffer)) {
+      throw SMITHLABException("Line too long in file: " + reads_file);
+    if (!is_header_line(buffer) && !is_track_line(buffer)) {
       vector<string> parts(split_extended_whitespace_quoted(buffer));
-      if (parts.size() == 14)
-        if (parts[4] == "U") {
-          vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
-          string strand = ((parts[9] == "F") ? "+" : "-");
-          string gr = parts[7].substr(1) + "\t" + parts[8] + "\t"
-              + convertSizet(convertString(parts[8]) + parts[2].length()) + "\t"
-              + name[0] + "\t" + parts[5] + "\t" + strand;
-          string read = gr + "\t" + parts[2] + "\t" + parts[13];
-          MappedRead mr(read.c_str());
-          regions.push_back(mr);
-        }
+      if (mapper == "novoalign")
+        read_novoalign_output(parts, mapped_reads);
+      else if (mapper == "bowtie")
+        read_bowtie_output(parts, mapped_reads);
+      else if (mapper == "rmap")
+        read_rmap_output(parts, mapped_reads);
+      else
+        throw SMITHLABException("The mapper was not recognized!");
     }
     size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
     std::cerr << "\r" << percent_done << "% completed..." << std::flush;
@@ -266,24 +242,27 @@ static void read_novoalign_output(string filename,
 
 ////////////////////////////////////////////////////////////////////////
 
-static void expand_regions(vector<GenomicRegion> &regions,
-                           const size_t padding) {
+static void
+expand_regions(vector<GenomicRegion> &regions,
+               const size_t padding) {
   for (size_t i = 0; i < regions.size(); ++i) {
     regions[i].set_start(regions[i].get_start() - padding);
     regions[i].set_end(regions[i].get_end() + padding);
   }
 }
 
-static void unexpand_regions(vector<GenomicRegion> &regions,
-                             const size_t padding) {
+static void
+unexpand_regions(vector<GenomicRegion> &regions,
+                 const size_t padding) {
   for (size_t i = 0; i < regions.size(); ++i) {
     regions[i].set_start(regions[i].get_start() + padding);
     regions[i].set_end(regions[i].get_end() - padding);
   }
 }
 
-static size_t adjust_start_pos(const size_t orig_start,
-                               const string &chrom_name) {
+static size_t
+adjust_start_pos(const size_t orig_start,
+                 const string &chrom_name) {
   static const double LINE_WIDTH = 50.0;
   // For the '>' and the '\n';
   const size_t name_offset = chrom_name.length() + 2;
@@ -292,9 +271,10 @@ static size_t adjust_start_pos(const size_t orig_start,
   return orig_start + preceding_newlines + name_offset;
 }
 
-static size_t adjust_region_size(const size_t orig_start,
-                                 const string &chrom_name,
-                                 const size_t orig_size) {
+static size_t
+adjust_region_size(const size_t orig_start,
+                   const string &chrom_name,
+                   const size_t orig_size) {
   static const double LINE_WIDTH = 50.0;
   const size_t preceding_newlines_start = static_cast<size_t>(std::floor(
       orig_start / LINE_WIDTH));
@@ -303,11 +283,12 @@ static size_t adjust_region_size(const size_t orig_start,
   return (orig_size + (preceding_newlines_end - preceding_newlines_start));
 }
 
-static void extract_regions_chrom_fasta(const string &chrom_name,
-                                        const string &filename,
-                                        const vector<GenomicRegion> &regions,
-                                        vector<string> &sequences,
-                                        vector<string> &names) {
+static void
+extract_regions_chrom_fasta(const string &chrom_name,
+                            const string &filename,
+                            const vector<GenomicRegion> &regions,
+                            vector<string> &sequences,
+                            vector<string> &names) {
 
   std::ifstream in(filename.c_str());
   for (vector<GenomicRegion>::const_iterator i(regions.begin());
@@ -344,10 +325,11 @@ static void extract_regions_chrom_fasta(const string &chrom_name,
   in.close();
 }
 
-static void extract_regions_fasta(const string &dirname,
-                                  const vector<GenomicRegion> &regions_in,
-                                  vector<string> &sequences,
-                                  vector<string> &names) {
+static void
+extract_regions_fasta(const string &dirname,
+                      const vector<GenomicRegion> &regions_in,
+                      vector<string> &sequences,
+                      vector<string> &names) {
 
   static const string FASTA_SUFFIX(".fa");
   assert(check_sorted(regions_in));
@@ -374,23 +356,13 @@ static void extract_regions_fasta(const string &dirname,
   }
 }
 
-void load_mapped_reads(const string &reads_file,
-                       const string &mapper,
-                       vector<MappedRead> &mapped_reads) {
-  if (mapper == "novoalign")
-    read_novoalign_output(reads_file, mapped_reads);
-  else if (mapper == "bowtie")
-    read_bowtie_output(reads_file, mapped_reads);
-  else if (mapper == "rmap")
-    read_rmap_output(reads_file, mapped_reads);
-}
-
-void load_sequences(const string &chrom_dir,
-                    const size_t padding,
-                    const string &targets_file,
-                    vector<string> &names,
-                    vector<string> &sequences,
-                    vector<GenomicRegion> &targets) {
+void
+load_sequences(const string &chrom_dir,
+               const size_t padding,
+               const string &targets_file,
+               vector<string> &names,
+               vector<string> &sequences,
+               vector<GenomicRegion> &targets) {
 
   std::ifstream in(targets_file.c_str(), std::ios::binary);
   if (!in)
@@ -429,8 +401,9 @@ seq_and_structure_are_consistent(const vector<string> &seqs,
   return true;
 }
 
-void load_structures(const string structure_file,
-                     vector<vector<double> > &structures) {
+void
+load_structures(const string structure_file,
+                vector<vector<double> > &structures) {
 
   std::ifstream in(structure_file.c_str(), std::ios::binary);
   if (!in)
@@ -452,9 +425,10 @@ void load_structures(const string structure_file,
   }
 }
 
-void save_structure_file(const vector<vector<double> > &sec_structure,
-                         const string &outfile,
-                         const size_t padding) {
+void
+save_structure_file(const vector<vector<double> > &sec_structure,
+                    const string &outfile,
+                    const size_t padding) {
   assert(!outfile.empty());
   std::ofstream out(outfile.c_str());
   for (size_t i = 0; i < sec_structure.size(); ++i) {
