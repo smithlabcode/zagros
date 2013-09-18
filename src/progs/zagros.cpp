@@ -57,7 +57,8 @@ struct DE {
   std::string read;
 };
 
-static size_t convertString(const string& s) {
+static size_t
+convertString(const string& s) {
   std::istringstream buffer(s);
   size_t value;
   buffer >> value;
@@ -65,9 +66,10 @@ static size_t convertString(const string& s) {
 }
 
 
-void
+static void
 sift_single_chrom(vector<GenomicRegion> &other_regions,
-    vector<GenomicRegion> &regions, vector<GenomicRegion> &good_regions) {
+                  vector<GenomicRegion> &regions,
+                  vector<GenomicRegion> &good_regions) {
 
   typedef vector<GenomicRegion>::iterator region_itr;
 
@@ -75,14 +77,14 @@ sift_single_chrom(vector<GenomicRegion> &other_regions,
     region_itr closest(find_closest(other_regions, regions[i]));
     if (closest->overlaps(regions[i])) {
       good_regions.push_back(regions[i]);
-      good_regions[good_regions.size() - 1].set_name(closest->get_name());
+      good_regions.back().set_name(closest->get_name());
     }
   }
 }
 
-void
+static void
 sift(vector<GenomicRegion> &other_regions,
-    vector<GenomicRegion> &regions) {
+     vector<GenomicRegion> &regions) {
 
   vector<vector<GenomicRegion> > other_regions_by_chrom;
   separate_chromosomes(other_regions, other_regions_by_chrom);
@@ -108,34 +110,22 @@ sift(vector<GenomicRegion> &other_regions,
   }
   regions.swap(good_regions);
 
-  for (size_t i = 0; i < other_regions.size(); ++i) {
-    for (size_t j = 0; j < regions.size(); ++j)
-      if (other_regions[i].get_name() == regions[j].get_name()) {
-        other_regions[i].set_strand(regions[j].get_strand());
-        break;
-      }
-  }
+  unordered_map<string, size_t> name_lookup;
+  for (size_t i = 0; i < other_regions.size(); ++i)
+    name_lookup[other_regions[i].get_name()] = i;
+
+  string prev_name = "";
+  for (size_t i = 0; i < regions.size(); ++i)
+    if (regions[i].get_name() != prev_name) {
+      other_regions[name_lookup[regions[i].get_name()]].set_strand(
+          regions[i].get_strand());
+      prev_name = regions[i].get_name();
+    }
 }
 
 static void
-separate_mapped_reads_chromosomes(const vector<MappedRead>& regions,
-                                  vector<vector<MappedRead> >& separated_by_chrom) {
-  typedef unordered_map<string, vector<MappedRead> > Separator;
-  Separator separator;
-  for (vector<MappedRead>::const_iterator i = regions.begin();
-      i != regions.end(); ++i) {
-    const string the_chrom(i->r.get_chrom());
-    if (separator.find(the_chrom) == separator.end())
-      separator[the_chrom] = vector<MappedRead>();
-    separator[the_chrom].push_back(*i);
-  }
-  separated_by_chrom.clear();
-  for (Separator::iterator i = separator.begin(); i != separator.end(); ++i)
-    separated_by_chrom.push_back(i->second);
-}
-
-void
-parse_diagnostic_events(const string &de_string, vector<DE> &des) {
+parse_diagnostic_events(const string &de_string,
+                        vector<DE> &des) {
   vector<string> parts(smithlab::split_whitespace_quoted(de_string));
   if (parts.size() > 0)
     for (size_t i = 0; i < parts.size(); ++i) {
@@ -165,11 +155,12 @@ parse_diagnostic_events(const string &de_string, vector<DE> &des) {
     }
 }
 
-void
-add_diagnostic_events_iCLIP(const MappedRead &region, const string name,
+static void
+add_diagnostic_events_iCLIP(const MappedRead &region,
                             vector<GenomicRegion> &diagnostic_events) {
 
   vector<DE> des;
+  const string name("X");
   parse_diagnostic_events(region.scr, des);
   bool contains_de = true;
   if (des.size() > 0)
@@ -182,33 +173,34 @@ add_diagnostic_events_iCLIP(const MappedRead &region, const string name,
   if (contains_de) {
     size_t score = 1;
     if (diagnostic_events.size() != 0)
-      if (diagnostic_events[diagnostic_events.size() - 1].get_name() == name)
-        score = diagnostic_events[diagnostic_events.size() - 1].get_score() + 1;
+      if (diagnostic_events.back().get_name() == name)
+        score = diagnostic_events.back().get_score() + 1;
     if (region.r.pos_strand()) {
       GenomicRegion gr(
-          region.r.get_chrom(), region.r.get_start(), region.r.get_start() + 1, name,
-          score, region.r.get_strand());
+          region.r.get_chrom(), region.r.get_start(), region.r.get_start() + 1,
+          name, score, region.r.get_strand());
       diagnostic_events.push_back(gr);
     } else {
       GenomicRegion gr(
-          region.r.get_chrom(), region.r.get_end(), region.r.get_end() + 1, name,
-          score, region.r.get_strand());
+          region.r.get_chrom(), region.r.get_end(), region.r.get_end() + 1,
+          name, score, region.r.get_strand());
       diagnostic_events.push_back(gr);
     }
   }
 }
 
-void
-add_diagnostic_events_hCLIP(const MappedRead &region, const string name,
+static void
+add_diagnostic_events_hCLIP(const MappedRead &region,
                             vector<GenomicRegion> &diagnostic_events) {
 
   vector<DE> des;
+  const string name("X");
   parse_diagnostic_events(region.scr, des);
   if (des.size() == 1) {
     size_t score = 1;
     if (diagnostic_events.size() != 0)
-      if (diagnostic_events[diagnostic_events.size() - 1].get_name() == name)
-        score = diagnostic_events[diagnostic_events.size() - 1].get_score() + 1;
+      if (diagnostic_events.back().get_name() == name)
+        score = diagnostic_events.back().get_score() + 1;
     for (size_t j = 0; j < des.size(); ++j) {
       if (region.r.pos_strand() && des[j].type == "insertion"
           && des[j].base == "T") {
@@ -229,20 +221,20 @@ add_diagnostic_events_hCLIP(const MappedRead &region, const string name,
   }
 }
 
-void
-add_diagnostic_events_pCLIP(const MappedRead &region, const string name,
+static void
+add_diagnostic_events_pCLIP(const MappedRead &region,
                             vector<GenomicRegion> &diagnostic_events) {
-
   vector<DE> des;
   parse_diagnostic_events(region.scr, des);
+  const string name("X");
   if (des.size() == 1) {
     size_t score = 1;
     if (diagnostic_events.size() != 0)
-      if (diagnostic_events[diagnostic_events.size() - 1].get_name() == name)
-        score = diagnostic_events[diagnostic_events.size() - 1].get_score() + 1;
+      if (diagnostic_events.back().get_name() == name)
+        score = diagnostic_events.back().get_score() + 1;
     for (size_t j = 0; j < des.size(); ++j) {
-      if (region.r.pos_strand() && des[j].type == "mutation" && des[j].base == "T"
-          && des[j].read == "C") {
+      if (region.r.pos_strand() && des[j].type == "mutation"
+          && des[j].base == "T" && des[j].read == "C") {
         GenomicRegion gr(
             region.r.get_chrom(), region.r.get_start() + des[j].position - 1,
             region.r.get_start() + des[j].position, name, score,
@@ -260,34 +252,52 @@ add_diagnostic_events_pCLIP(const MappedRead &region, const string name,
   }
 }
 
-static void add_diagnostic_events(const MappedRead &region,
-                                  const std::string name,
-                                  const std::string experiment,
-                                  vector<GenomicRegion> &diagnostic_events) {
+static void
+add_diagnostic_events(const MappedRead &region,
+                      const string experiment,
+                      vector<GenomicRegion> &diagnostic_events) {
   if (experiment == "iCLIP")
-    add_diagnostic_events_iCLIP(region, name, diagnostic_events);
+    add_diagnostic_events_iCLIP(region, diagnostic_events);
   else if (experiment == "hCLIP")
-    add_diagnostic_events_hCLIP(region, name, diagnostic_events);
+    add_diagnostic_events_hCLIP(region, diagnostic_events);
   else if (experiment == "pCLIP")
-    add_diagnostic_events_pCLIP(region, name, diagnostic_events);
+    add_diagnostic_events_pCLIP(region, diagnostic_events);
+  else
+    throw SMITHLABException("The technology was not recognized!");
 }
 
-void add_diagnostic_events(const vector<MappedRead> &regions,
+static void
+add_diagnostic_events(const vector<MappedRead> &regions,
                       const string experiment,
                       vector<GenomicRegion> &diagnostic_events) {
 
-  const string FAKE_NAME("X");
   for (size_t i = 0; i < regions.size(); ++i) {
-    add_diagnostic_events(
-        regions[i], FAKE_NAME, experiment, diagnostic_events);
+    add_diagnostic_events(regions[i], experiment, diagnostic_events);
   }
+}
+
+
+static void
+separate_mapped_reads_chromosomes(const vector<MappedRead> &regions,
+                                  vector<vector<MappedRead> > &separated_by_chrom) {
+  typedef unordered_map<string, vector<MappedRead> > Separator;
+  Separator separator;
+  for (vector<MappedRead>::const_iterator i = regions.begin();
+      i != regions.end(); ++i) {
+    const string the_chrom(i->r.get_chrom());
+    if (separator.find(the_chrom) == separator.end())
+      separator[the_chrom] = vector<MappedRead>();
+    separator[the_chrom].push_back(*i);
+  }
+  separated_by_chrom.clear();
+  for (Separator::iterator i = separator.begin(); i != separator.end(); ++i)
+    separated_by_chrom.push_back(i->second);
 }
 
 static void
 make_inputs(const vector<MappedRead> &mapped_reads,
             const string experiment,
             vector<GenomicRegion> &diagnostic_events) {
-
   vector<vector<MappedRead> > separated_by_chrom;
   separate_mapped_reads_chromosomes(mapped_reads, separated_by_chrom);
   for (size_t i = 0; i < separated_by_chrom.size(); ++i) {
@@ -295,6 +305,30 @@ make_inputs(const vector<MappedRead> &mapped_reads,
     separated_by_chrom[i].clear();
   }
 }
+
+static void
+load_diagnostic_events(const vector<GenomicRegion> &regions,
+                       const vector<GenomicRegion> &de_regions,
+                       vector<vector<size_t> > &D) {
+
+  unordered_map<string, size_t> name_lookup;
+  for (size_t i = 0; i < regions.size(); ++i)
+    name_lookup[regions[i].get_name()] = i;
+
+  D.resize(regions.size());
+  for (size_t i = 0; i < de_regions.size(); ++i)
+    if (regions[name_lookup[de_regions[i].get_name()]].pos_strand())
+      D[name_lookup[de_regions[i].get_name()]].push_back(
+          de_regions[i].get_start()
+              - regions[name_lookup[de_regions[i].get_name()]].get_start() - 1);
+    else
+      D[name_lookup[de_regions[i].get_name()]].push_back(
+          regions[name_lookup[de_regions[i].get_name()]].get_width()
+              - (de_regions[i].get_start()
+                  - regions[name_lookup[de_regions[i].get_name()]].get_start()
+                  + 1));
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -322,13 +356,15 @@ struct kmer_info {
 };
 
 // this is just Poisson probability for 0 observations
-static double prob_no_occurrence(const double prob,
-                                 const size_t seq_len) {
+static double
+prob_no_occurrence(const double prob,
+                   const size_t seq_len) {
   return std::exp(-static_cast<int>(seq_len) * prob);
 }
 
-static void compute_base_comp(const vector<string> &sequences,
-                              vector<double> &base_comp) {
+static void
+compute_base_comp(const vector<string> &sequences,
+                  vector<double> &base_comp) {
   base_comp.resize(smithlab::alphabet_size, 0.0);
   size_t total = 0;
   for (size_t i = 0; i < sequences.size(); ++i) {
@@ -341,17 +377,19 @@ static void compute_base_comp(const vector<string> &sequences,
       std::bind2nd(std::divides<double>(), total));
 }
 
-static double compute_kmer_prob(const string &kmer,
-                                const vector<double> &base_comp) {
+static double
+compute_kmer_prob(const string &kmer,
+                  const vector<double> &base_comp) {
   double prob = 1.0;
   for (size_t i = 0; i < kmer.length(); ++i)
     prob *= base_comp[base2int(kmer[i])];
   return prob;
 }
 
-static double expected_seqs_with_kmer(const string &kmer,
-                                      const vector<double> &base_comp,
-                                      const vector<size_t> &lengths) {
+static double
+expected_seqs_with_kmer(const string &kmer,
+                        const vector<double> &base_comp,
+                        const vector<size_t> &lengths) {
   const double p = compute_kmer_prob(kmer, base_comp);
   double expected = 0.0;
   for (size_t i = 0; i < lengths.size(); ++i)
@@ -372,10 +410,11 @@ static size_t count_seqs_with_kmer(const string &kmer,
   return count;
 }
 
-static void find_best_kmers(const size_t k_value,
-                            const size_t n_top_kmers,
-                            const vector<string> &sequences,
-                            vector<kmer_info> &top_kmers) {
+static void
+find_best_kmers(const size_t k_value,
+                const size_t n_top_kmers,
+                const vector<string> &sequences,
+                vector<kmer_info> &top_kmers) {
 
   const size_t n_kmers = (1ul << 2 * k_value);
 
@@ -407,11 +446,45 @@ static void find_best_kmers(const size_t k_value,
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 /////////////
-/////////////  REPLACING THE Ns IN SEQUENCING RANDOMLY
+/////////////  INPUT DATA TEST AND REFINEMENT
 /////////////
 
-static char sample_nuc(const Runif &rng,
-                       vector<double> &probs) {
+static bool
+check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
+
+  vector<pair<size_t, bool> > boundaries;
+  for (size_t i = 0; i < targets_chrom.size(); ++i) {
+    boundaries.push_back(std::make_pair(targets_chrom[i].get_start(), false));
+    boundaries.push_back(std::make_pair(targets_chrom[i].get_end(), true));
+  }
+  sort(boundaries.begin(), boundaries.end());
+
+  size_t count = 0;
+  for (size_t i = 0; i < boundaries.size(); ++i)
+    if (boundaries[i].second)
+      --count;
+    else {
+      ++count;
+      if (count > 1)
+        return true;
+    }
+  return false;
+}
+
+static bool
+check_overlapping(const vector<GenomicRegion> &targets) {
+
+  vector<vector<GenomicRegion> > targets_chroms;
+  separate_chromosomes(targets, targets_chroms);
+  bool ret_val = false;
+  for (size_t i = 0; i < targets_chroms.size() && !ret_val; ++i)
+    ret_val |= check_overlapping_chrom(targets_chroms[i]);
+  return ret_val;
+}
+
+static char
+sample_nuc(const Runif &rng,
+           vector<double> &probs) {
   const double d = rng.runif(0.0, 1.0);
   if (d < probs[0])
     return 'A';
@@ -422,7 +495,8 @@ static char sample_nuc(const Runif &rng,
   return 'T';
 }
 
-static void replace_Ns(vector<string> &sequences) {
+static void
+replace_Ns(vector<string> &sequences) {
   const Runif rng(std::numeric_limits<int>::max());
   vector<double> probs(
       vector<double>(smithlab::alphabet_size, 1.0 / smithlab::alphabet_size));
@@ -438,10 +512,11 @@ static void replace_Ns(vector<string> &sequences) {
 ///////////  CODE FOR FORMATTING MOTIF / MODEL OUTPUT BELOW HERE
 ///////////
 
-static string format_site(const Model &model,
-                          const GenomicRegion &region,
-                          const string &seq,
-                          const size_t site_pos) {
+static string
+format_site(const Model &model,
+            const GenomicRegion &region,
+            const string &seq,
+            const size_t site_pos) {
   const size_t width = model.size();
   std::ostringstream ss;
   ss << "BS\t" << seq.substr(site_pos, width) << "; "
@@ -450,19 +525,21 @@ static string format_site(const Model &model,
   return ss.str();
 }
 
-static string format_motif_header(const string &name) {
+static string
+format_motif_header(const string &name) {
   static const string the_rest("XX\nTY\tMotif\nXX\nP0\tA\tC\tG\tT");
   std::ostringstream oss;
   oss << "AC\t" << name << '\n' << the_rest;
   return oss.str();
 }
 
-static string format_motif(const Model &model,
-                           const string &motif_name,
-                           const vector<GenomicRegion> &targets,
-                           const vector<string> &sequences,
-                           const vector<vector<double> > &indicators,
-                           const vector<double> &zoops_i) {
+static string
+format_motif(const Model &model,
+             const string &motif_name,
+             const vector<GenomicRegion> &targets,
+             const vector<string> &sequences,
+             const vector<vector<double> > &indicators,
+             const vector<double> &zoops_i) {
 
   assert(
       sequences.size() == indicators.size()
@@ -589,15 +666,16 @@ int main(int argc,
     std::ostream out(outfile.empty() ? cout.rdbuf() : of.rdbuf());
 
 
+    // Data structures and input preparation for sequence
     if (VERBOSE)
       cerr << "LOADING SEQUENCES" << endl;
-    //Vectors to store primary information from the data
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
-    vector<vector<size_t> > diagnostic_events;
-    vector<vector<double> > secondary_structure;
     load_sequences(chrom_dir, padding, targets_file, names, seqs, targets);
     replace_Ns(seqs);
+
+    // Data structures and input preparation for secondary structure
+    vector<vector<double> > secondary_structure;
     if (!structure_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING STRUCTURE INFORMATION" << endl;
@@ -607,8 +685,9 @@ int main(int argc,
             "sequence and structure data");
     }
 
+    // Data structures and input preparation for diagnostic events
     vector<GenomicRegion> de_regions;
-
+    vector<vector<size_t> > diagnostic_events;
     if (!reads_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING MAPPING INFORMATION" << endl;
@@ -619,8 +698,12 @@ int main(int argc,
       make_inputs(mapped_reads, experiment, de_regions);
       if (de_regions.size() > 0) {
         sort(de_regions.begin(), de_regions.end());
-        sift(targets, de_regions);
+        if (check_overlapping(targets))
+          throw SMITHLABException("Target regions are overlapping!");
+        else
+          sift(targets, de_regions);
       }
+      load_diagnostic_events(targets, de_regions, diagnostic_events);
     }
 
     if (VERBOSE)
@@ -630,7 +713,6 @@ int main(int argc,
 
     if (VERBOSE)
       cerr << "FITTING MOTIF PARAMETERS" << endl;
-
 
     for (size_t i = 0; i < top_kmers.size(); ++i) {
 
