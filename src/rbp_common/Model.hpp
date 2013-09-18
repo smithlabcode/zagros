@@ -63,6 +63,19 @@ struct Model {
                                    std::vector<std::vector<double> > &site_indic,
                                    std::vector<double> &seq_indic);
 
+  void
+  expectation_maximization_seq_de(const std::vector<std::string> &sequences,
+                                   const std::vector<std::vector<size_t> > &diagnostic_events,
+                                   std::vector<std::vector<double> > &site_indic,
+                                   std::vector<double> &seq_indic);
+
+  void
+  expectation_maximization_seq_str_de(const std::vector<std::string> &sequences,
+                                      const std::vector<std::vector<double> > &secondary_structure,
+                                      const std::vector<std::vector<size_t> > &diagnostic_events,
+                                      std::vector<std::vector<double> > &site_indic,
+                                      std::vector<double> &seq_indic);
+
   double
   calculate_oops_log_l(const std::vector<std::string> &sequences,
                        const std::vector<std::vector<double> > &site_indic) const;
@@ -75,6 +88,12 @@ struct Model {
   double
   calculate_zoops_log_l(const std::vector<std::string> &sequences,
                         const std::vector<std::vector<double> > &secondary_structure,
+                        const std::vector<std::vector<double> > &site_indic,
+                        const std::vector<double> &seq_indic) const;
+
+  double
+  calculate_zoops_log_l(const std::vector<std::string> &sequences,
+                        const std::vector<std::vector<size_t> > &diagnostic_events,
                         const std::vector<std::vector<double> > &site_indic,
                         const std::vector<double> &seq_indic) const;
 
