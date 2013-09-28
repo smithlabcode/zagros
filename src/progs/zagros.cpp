@@ -100,11 +100,11 @@ sift(vector<GenomicRegion> &other_regions,
 
   vector<GenomicRegion> good_regions;
   for (size_t i = 0; i < regions_by_chrom.size(); ++i) {
-    const unordered_map<string, size_t>::const_iterator j = chrom_lookup.find(
-        regions_by_chrom[i].front().get_chrom());
+    const unordered_map<string, size_t>::const_iterator j = 
+      chrom_lookup.find(regions_by_chrom[i].front().get_chrom());
     if (j != chrom_lookup.end()) {
-      sift_single_chrom(
-          other_regions_by_chrom[j->second], regions_by_chrom[i], good_regions);
+      sift_single_chrom(other_regions_by_chrom[j->second], 
+			regions_by_chrom[i], good_regions);
     }
 
   }
@@ -117,8 +117,8 @@ sift(vector<GenomicRegion> &other_regions,
   string prev_name = "";
   for (size_t i = 0; i < regions.size(); ++i)
     if (regions[i].get_name() != prev_name) {
-      other_regions[name_lookup[regions[i].get_name()]].set_strand(
-          regions[i].get_strand());
+      const size_t idx(name_lookup[regions[i].get_name()]);
+      other_regions[idx].set_strand(regions[i].get_strand());
       prev_name = regions[i].get_name();
     }
 }
@@ -136,13 +136,15 @@ parse_diagnostic_events(const string &de_string,
         de.position = convertString(parts[i].substr(0, index - 1));
         de.base = parts[i].substr(index - 1, 1);
         de.read = parts[i].substr(index + 1, 1);
-      } else {
+      } 
+      else {
         index = parts[i].find("+");
         if (index != string::npos) {
           de.type = "deletion";
           de.position = convertString(parts[i].substr(0, index));
           de.base = parts[i].substr(index + 1, parts[i].length() - index - 1);
-        } else {
+        } 
+	else {
           index = parts[i].find("-");
           if (index != string::npos) {
             de.type = "insertion";
@@ -166,7 +168,7 @@ add_diagnostic_events_iCLIP(const MappedRead &region,
   if (des.size() > 0)
     for (size_t i = 0; i < des.size(); ++i)
       if ((region.r.pos_strand() && des[i].type == "insertion"
-          && des[i].base == "T")
+	   && des[i].base == "T")
           || (!region.r.pos_strand() && des[i].type == "insertion"
               && des[i].base == "A"))
         contains_de = false;
@@ -176,14 +178,16 @@ add_diagnostic_events_iCLIP(const MappedRead &region,
       if (diagnostic_events.back().get_name() == name)
         score = diagnostic_events.back().get_score() + 1;
     if (region.r.pos_strand()) {
-      GenomicRegion gr(
-          region.r.get_chrom(), region.r.get_start(), region.r.get_start() + 1,
-          name, score, region.r.get_strand());
+      GenomicRegion gr(region.r.get_chrom(), 
+		       region.r.get_start(), 
+		       region.r.get_start() + 1,
+		       name, score, region.r.get_strand());
       diagnostic_events.push_back(gr);
-    } else {
-      GenomicRegion gr(
-          region.r.get_chrom(), region.r.get_end(), region.r.get_end() + 1,
-          name, score, region.r.get_strand());
+    } 
+    else {
+      GenomicRegion gr(region.r.get_chrom(), region.r.get_end(), 
+		       region.r.get_end() + 1,
+		       name, score, region.r.get_strand());
       diagnostic_events.push_back(gr);
     }
   }
@@ -192,7 +196,7 @@ add_diagnostic_events_iCLIP(const MappedRead &region,
 static void
 add_diagnostic_events_hCLIP(const MappedRead &region,
                             vector<GenomicRegion> &diagnostic_events) {
-
+  
   vector<DE> des;
   const string name("X");
   parse_diagnostic_events(region.scr, des);
@@ -202,19 +206,20 @@ add_diagnostic_events_hCLIP(const MappedRead &region,
       if (diagnostic_events.back().get_name() == name)
         score = diagnostic_events.back().get_score() + 1;
     for (size_t j = 0; j < des.size(); ++j) {
-      if (region.r.pos_strand() && des[j].type == "insertion"
-          && des[j].base == "T") {
-        GenomicRegion gr(
-            region.r.get_chrom(), region.r.get_start() + des[j].position - 1,
-            region.r.get_start() + des[j].position, name, score,
-            region.r.get_strand());
+      if (region.r.pos_strand() && 
+	  des[j].type == "insertion" && des[j].base == "T") {
+        GenomicRegion gr(region.r.get_chrom(), 
+			 region.r.get_start() + des[j].position - 1,
+			 region.r.get_start() + des[j].position, name, score,
+			 region.r.get_strand());
         diagnostic_events.push_back(gr);
-      } else if (!region.r.pos_strand() && des[j].type == "insertion"
-          && des[j].base == "A") {
-        GenomicRegion gr(
-            region.r.get_chrom(), region.r.get_start() + des[j].position - 2,
-            region.r.get_start() + des[j].position - 1, name, score,
-            region.r.get_strand());
+      } 
+      else if (!region.r.pos_strand() && 
+	       des[j].type == "insertion" && des[j].base == "A") {
+        GenomicRegion gr(region.r.get_chrom(), 
+			 region.r.get_start() + des[j].position - 2,
+			 region.r.get_start() + des[j].position - 1, name, score,
+			 region.r.get_strand());
         diagnostic_events.push_back(gr);
       }
     }
@@ -235,17 +240,17 @@ add_diagnostic_events_pCLIP(const MappedRead &region,
     for (size_t j = 0; j < des.size(); ++j) {
       if (region.r.pos_strand() && des[j].type == "mutation"
           && des[j].base == "T" && des[j].read == "C") {
-        GenomicRegion gr(
-            region.r.get_chrom(), region.r.get_start() + des[j].position - 1,
-            region.r.get_start() + des[j].position, name, score,
-            region.r.get_strand());
+        GenomicRegion gr(region.r.get_chrom(), 
+			 region.r.get_start() + des[j].position - 1,
+			 region.r.get_start() + des[j].position, name, score,
+			 region.r.get_strand());
         diagnostic_events.push_back(gr);
       } else if (!region.r.pos_strand() && des[j].type == "mutation"
-          && des[j].base == "A" && des[j].read == "G") {
-        GenomicRegion gr(
-            region.r.get_chrom(), region.r.get_start() + des[j].position - 2,
-            region.r.get_start() + des[j].position - 1, name, score,
-            region.r.get_strand());
+		 && des[j].base == "A" && des[j].read == "G") {
+        GenomicRegion gr(region.r.get_chrom(), 
+			 region.r.get_start() + des[j].position - 2,
+			 region.r.get_start() + des[j].position - 1, name, score,
+			 region.r.get_strand());
         diagnostic_events.push_back(gr);
       }
     }
@@ -283,7 +288,7 @@ separate_mapped_reads_chromosomes(const vector<MappedRead> &regions,
   typedef unordered_map<string, vector<MappedRead> > Separator;
   Separator separator;
   for (vector<MappedRead>::const_iterator i = regions.begin();
-      i != regions.end(); ++i) {
+       i != regions.end(); ++i) {
     const string the_chrom(i->r.get_chrom());
     if (separator.find(the_chrom) == separator.end())
       separator[the_chrom] = vector<MappedRead>();
@@ -316,19 +321,16 @@ load_diagnostic_events(const vector<GenomicRegion> &regions,
     name_lookup[regions[i].get_name()] = i;
 
   D.resize(regions.size());
-  for (size_t i = 0; i < de_regions.size(); ++i)
-    if (regions[name_lookup[de_regions[i].get_name()]].pos_strand())
-      D[name_lookup[de_regions[i].get_name()]].push_back(
-          de_regions[i].get_start()
-              - regions[name_lookup[de_regions[i].get_name()]].get_start() - 1);
-    else
-      D[name_lookup[de_regions[i].get_name()]].push_back(
-          regions[name_lookup[de_regions[i].get_name()]].get_width()
-              - (de_regions[i].get_start()
-                  - regions[name_lookup[de_regions[i].get_name()]].get_start()
-                  + 1));
+  for (size_t i = 0; i < de_regions.size(); ++i) {
+    const size_t idx = name_lookup[de_regions[i].get_name()];
+    if (regions[idx].pos_strand())
+      D[idx].push_back(de_regions[i].get_start() - 
+		       regions[idx].get_start() - 1);
+    else D[idx].push_back(regions[idx].get_width() - 
+			   (de_regions[i].get_start() - 
+			    regions[idx].get_start() + 1));
+  }
 }
-
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -340,15 +342,10 @@ struct kmer_info {
   std::string kmer;
   double expected;
   size_t observed;
-  kmer_info(const std::string &km,
-            const double ex,
-            const double ob) :
-      kmer(km),
-          expected(ex),
-          observed(ob) {
-  }
+  kmer_info(const std::string &km, const double ex, const double ob) :
+    kmer(km), expected(ex), observed(ob) {}
   double score() const {
-    return observed / expected;
+    return observed/expected;
   }
   bool operator>(const kmer_info &ki) const {
     return score() > ki.score();
@@ -373,8 +370,8 @@ compute_base_comp(const vector<string> &sequences,
     total += sequences[i].length();
   }
   std::transform(
-      base_comp.begin(), base_comp.end(), base_comp.begin(),
-      std::bind2nd(std::divides<double>(), total));
+		 base_comp.begin(), base_comp.end(), base_comp.begin(),
+		 std::bind2nd(std::divides<double>(), total));
 }
 
 static double
@@ -425,8 +422,9 @@ find_best_kmers(const size_t k_value,
   for (size_t i = 0; i < sequences.size(); ++i)
     lengths.push_back(sequences[i].length());
 
-  std::priority_queue<kmer_info, vector<kmer_info>, std::greater<kmer_info> > best_kmers;
-
+  std::priority_queue<kmer_info, vector<kmer_info>, 
+		      std::greater<kmer_info> > best_kmers;
+  
   for (size_t i = 0; i < n_kmers; ++i) {
     const string kmer(i2mer(k_value, i));
     const double expected = expected_seqs_with_kmer(kmer, base_comp, lengths);
@@ -435,7 +433,7 @@ find_best_kmers(const size_t k_value,
     if (best_kmers.size() > n_top_kmers)
       best_kmers.pop();
   }
-
+  
   while (!best_kmers.empty()) {
     top_kmers.push_back(best_kmers.top());
     best_kmers.pop();
@@ -498,11 +496,11 @@ sample_nuc(const Runif &rng,
 static void
 replace_Ns(vector<string> &sequences) {
   const Runif rng(std::numeric_limits<int>::max());
-  vector<double> probs(
-      vector<double>(smithlab::alphabet_size, 1.0 / smithlab::alphabet_size));
+  vector<double> probs(vector<double>(smithlab::alphabet_size, 
+				      1.0/smithlab::alphabet_size));
   for (size_t i = 0; i < sequences.size(); ++i)
-    std::replace(
-        sequences[i].begin(), sequences[i].end(), 'N', sample_nuc(rng, probs));
+    std::replace(sequences[i].begin(), sequences[i].end(), 'N', 
+		 sample_nuc(rng, probs));
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -520,8 +518,8 @@ format_site(const Model &model,
   const size_t width = model.size();
   std::ostringstream ss;
   ss << "BS\t" << seq.substr(site_pos, width) << "; "
-      << assemble_region_name(region) << "; " << site_pos << "; " << width
-      << ";  ;" << (region.pos_strand() ? "p;" : "n;");
+     << assemble_region_name(region) << "; " << site_pos << "; " << width
+     << ";  ;" << (region.pos_strand() ? "p;" : "n;");
   return ss.str();
 }
 
@@ -542,8 +540,8 @@ format_motif(const Model &model,
              const vector<double> &zoops_i) {
 
   assert(
-      sequences.size() == indicators.size()
-          && zoops_i.size() == sequences.size());
+	 sequences.size() == indicators.size()
+	 && zoops_i.size() == sequences.size());
 
   std::ostringstream ss;
   ss << format_motif_header(motif_name) << endl;
@@ -591,7 +589,7 @@ format_motif(const Model &model,
     if (!targets.empty())
       if (zoops_i[n] > model.zoops_threshold)
         ss << format_site(model, targets[n], sequences[n], site_pos) << "\t"
-            << zoops_i[n] << endl;
+	   << zoops_i[n] << endl;
   }
   ss << "XX" << endl << "//";
 
@@ -616,31 +614,30 @@ int main(int argc,
     string experiment;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    OptionParser opt_parse(
-        strip_path(argv[0]), "", "<target_regions/sequences>");
-    opt_parse.add_opt(
-        "output", 'o', "output file name (default: stdout)", false, outfile);
-    opt_parse.add_opt(
-        "width", 'w', "width of motifs to find", false, motif_width);
-    opt_parse.add_opt(
-        "number", 'n', "number of motifs to output", false, n_motifs);
-    opt_parse.add_opt(
-        "chrom", 'c', "directory with chrom files (FASTA format)", false,
-        chrom_dir);
-    opt_parse.add_opt(
-        "structure", 't', "structure information file", false, structure_file);
-    opt_parse.add_opt(
-        "diagnostic_events", 'd', "mapped reads file", false, reads_file);
-    opt_parse.add_opt(
-        "mapper", 'm', "Mapper (novoaling, bowtie, rmap)", false, mapper);
-    opt_parse.add_opt(
-        "experiment", 'e', "Type of experiment (hCLIP, pCLIP, iCLIP)", false, experiment);
+    OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
+    opt_parse.add_opt("output", 'o', "output file name (default: stdout)", 
+		      false, outfile);
+    opt_parse.add_opt("width", 'w', "width of motifs to find", 
+		      false, motif_width);
+    opt_parse.add_opt("number", 'n', "number of motifs to output", 
+		      false, n_motifs);
+    opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)", 
+		      false, chrom_dir);
+    opt_parse.add_opt("structure", 't', "structure information file", 
+		      false, structure_file);
+    opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
+		      false, reads_file);
+    opt_parse.add_opt("mapper", 'm', "Mapper (novoaling, bowtie, rmap)", 
+		      false, mapper);
+    opt_parse.add_opt("experiment", 'e', 
+		      "Type of experiment (hCLIP, pCLIP, iCLIP)", 
+		      false, experiment);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
     if (argc == 1 || opt_parse.help_requested()) {
       cerr << opt_parse.help_message() << endl << opt_parse.about_message()
-          << endl;
+	   << endl;
       return EXIT_SUCCESS;
     }
     if (opt_parse.about_requested()) {
@@ -682,7 +679,7 @@ int main(int argc,
       load_structures(structure_file, secondary_structure);
       if (!seq_and_structure_are_consistent(seqs, secondary_structure))
         throw SMITHLABException("inconsistent dimensions of "
-            "sequence and structure data");
+				"sequence and structure data");
     }
 
     // Data structures and input preparation for diagnostic events
@@ -719,9 +716,9 @@ int main(int argc,
       Model model;
       Model::set_model_by_word(Model::pseudocount, top_kmers[i].kmer, model);
 
-      model.gamma = (seqs.size()
-          - (zoops_expansion_factor * (seqs.size() - top_kmers[i].observed)))
-          / static_cast<double>(seqs.size());
+      model.gamma = ((seqs.size() - (zoops_expansion_factor*
+				     (seqs.size() - top_kmers[i].observed)))/ 
+		     static_cast<double>(seqs.size()));
       if (!secondary_structure.empty()) {
         model.motif_sec_str = vector<double>(motif_width, 0.5);
         model.f_sec_str = 0.5;
@@ -734,19 +731,18 @@ int main(int argc,
         indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
       }
 
-      model.expectation_maximization(
-          seqs, diagnostic_events, secondary_structure, indicators, has_motif);
+      model.expectation_maximization(seqs, diagnostic_events, 
+				     secondary_structure, indicators, has_motif);
 
-      out
-          << format_motif(
-              model, "ZAGROS" + toa(i), targets, seqs, indicators, has_motif)
-          << endl;
+      out << format_motif(model, "ZAGROS" + toa(i), targets, seqs, 
+			  indicators, has_motif) << endl;
     }
-
-  } catch (const SMITHLABException &e) {
+  } 
+  catch (const SMITHLABException &e) {
     cerr << e.what() << endl;
     return EXIT_FAILURE;
-  } catch (std::bad_alloc &ba) {
+  } 
+  catch (std::bad_alloc &ba) {
     cerr << "ERROR: could not allocate memory" << endl;
     return EXIT_FAILURE;
   }
