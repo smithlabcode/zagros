@@ -314,6 +314,7 @@ make_inputs(const vector<MappedRead> &mapped_reads,
 static void
 load_diagnostic_events(const vector<GenomicRegion> &regions,
                        const vector<GenomicRegion> &de_regions,
+                       const size_t max_de,
                        vector<vector<size_t> > &D) {
 
   unordered_map<string, size_t> name_lookup;
@@ -323,12 +324,13 @@ load_diagnostic_events(const vector<GenomicRegion> &regions,
   D.resize(regions.size());
   for (size_t i = 0; i < de_regions.size(); ++i) {
     const size_t idx = name_lookup[de_regions[i].get_name()];
-    if (regions[idx].pos_strand())
-      D[idx].push_back(de_regions[i].get_start() - 
-		       regions[idx].get_start() - 1);
-    else D[idx].push_back(regions[idx].get_width() - 
-			   (de_regions[i].get_start() - 
-			    regions[idx].get_start() + 1));
+    if (D[idx].size() < max_de)
+      if (regions[idx].pos_strand())
+        D[idx].push_back(de_regions[i].get_start() -
+		         regions[idx].get_start() - 1);
+      else D[idx].push_back(regions[idx].get_width() -
+		  	   (de_regions[i].get_start() -
+	  		    regions[idx].get_start() + 1));
   }
 }
 
@@ -575,7 +577,8 @@ format_motif(const Model &model,
     ss << model.motif_sec_str[model.motif_sec_str.size() - 1] << endl;
   }
 
-  ss << "XX" << endl << "AT\tGEO_P=" << model.p << endl << "XX" << endl;
+  ss << "XX" << endl << "AT\tGEO_P=" << model.p << endl;
+  ss << "AT\tGEO_DELTA=" << model.delta << endl << "XX" << endl;
 
   for (size_t n = 0; n < indicators.size(); ++n) {
     double max_X = -1;
@@ -612,6 +615,7 @@ int main(int argc,
     string reads_file;
     string mapper;
     string experiment;
+    size_t max_de = 100000;
 
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
@@ -662,7 +666,6 @@ int main(int argc,
       of.open(outfile.c_str());
     std::ostream out(outfile.empty() ? cout.rdbuf() : of.rdbuf());
 
-
     // Data structures and input preparation for sequence
     if (VERBOSE)
       cerr << "LOADING SEQUENCES" << endl;
@@ -700,7 +703,7 @@ int main(int argc,
         else
           sift(targets, de_regions);
       }
-      load_diagnostic_events(targets, de_regions, diagnostic_events);
+      load_diagnostic_events(targets, de_regions, max_de, diagnostic_events);
     }
 
     if (VERBOSE)
@@ -717,7 +720,7 @@ int main(int argc,
       Model::set_model_by_word(Model::pseudocount, top_kmers[i].kmer, model);
 
       model.gamma = ((seqs.size() - (zoops_expansion_factor*
-				     (seqs.size() - top_kmers[i].observed)))/ 
+				     (seqs.size() - top_kmers[i].observed)))/
 		     static_cast<double>(seqs.size()));
       if (!secondary_structure.empty()) {
         model.motif_sec_str = vector<double>(motif_width, 0.5);
@@ -731,10 +734,10 @@ int main(int argc,
         indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
       }
 
-      model.expectation_maximization(seqs, diagnostic_events, 
+      model.expectation_maximization(seqs, diagnostic_events,
 				     secondary_structure, indicators, has_motif);
 
-      out << format_motif(model, "ZAGROS" + toa(i), targets, seqs, 
+      out << format_motif(model, "ZAGROS" + toa(i), targets, seqs,
 			  indicators, has_motif) << endl;
     }
   } 

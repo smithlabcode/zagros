@@ -1,6 +1,7 @@
 #ifndef __INTLOOPS_H_
 #define __INTLOOPS_H_
 
+
 #define NST 0
 #define DEF -50
 #define NSM 0
