@@ -324,13 +324,14 @@ load_diagnostic_events(const vector<GenomicRegion> &regions,
   D.resize(regions.size());
   for (size_t i = 0; i < de_regions.size(); ++i) {
     const size_t idx = name_lookup[de_regions[i].get_name()];
-    if (D[idx].size() < max_de)
+    if (D[idx].size() < max_de) {
       if (regions[idx].pos_strand())
         D[idx].push_back(de_regions[i].get_start() -
 		         regions[idx].get_start() - 1);
       else D[idx].push_back(regions[idx].get_width() -
 		  	   (de_regions[i].get_start() -
 	  		    regions[idx].get_start() + 1));
+    }
   }
 }
 
@@ -615,7 +616,7 @@ int main(int argc,
     string reads_file;
     string mapper;
     string experiment;
-    size_t max_de = 100000;
+    size_t max_de = 5;
 
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
@@ -714,11 +715,11 @@ int main(int argc,
     if (VERBOSE)
       cerr << "FITTING MOTIF PARAMETERS" << endl;
 
-    for (size_t i = 0; i < top_kmers.size(); ++i) {
+    for (size_t i = 0; i < top_kmers.size() ; ++i) {
 
       Model model;
       Model::set_model_by_word(Model::pseudocount, top_kmers[i].kmer, model);
-
+      model.p = 0.5;
       model.gamma = ((seqs.size() - (zoops_expansion_factor*
 				     (seqs.size() - top_kmers[i].observed)))/
 		     static_cast<double>(seqs.size()));

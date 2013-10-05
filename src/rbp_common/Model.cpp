@@ -33,6 +33,7 @@ using std::vector;
 using std::cerr;
 using std::endl;
 using std::max;
+using std::min;
 using std::accumulate;
 
 using std::tr1::unordered_map;
@@ -637,16 +638,15 @@ maximization_de(const vector<string> &sequences,
   for (size_t i = 0; i < site_indic.size(); i++) {
     numerator += diagnostic_events[i].size();
     for (size_t k = 0; k < site_indic[i].size(); k++) {
-      double site_sum = 1.0;
-      if (diagnostic_events[i].size() > 0) {
-        site_sum = 0.0;
+      double site_sum = 0.0;
+      if (diagnostic_events[i].size() > 0)
         for (size_t j = 0; j < diagnostic_events[i].size(); j++)
           site_sum += abs(diagnostic_events[i][j] - (k + geo_delta));
-      }
       denominator += site_indic[i][k] * site_sum;
     }
+    denominator += diagnostic_events[i].size();
   }
-  geo_p = max(numerator / denominator, std::numeric_limits<double>::min());
+  geo_p = max(min(numerator / denominator, 0.999), std::numeric_limits<double>::min());
 }
 
 double
@@ -740,7 +740,7 @@ find_delta(const vector<string> &sequences,
 
   double max_ll = -1.0 * std::numeric_limits<double>::max();
   int max_i = 0;
-  for (size_t i = 1; i < ll_delta.size(); i++) {
+  for (size_t i = 0; i < ll_delta.size(); i++) {
     if (ll_delta[i] > max_ll) {
       max_ll = ll_delta[i];
       max_i = i - 10;
