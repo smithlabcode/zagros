@@ -187,9 +187,9 @@ Model::expectation_maximization(const vector<string> &sequences,
   else if (diagnostic_events.empty())
     expectation_maximization_seq_str(sequences, secondary_structure, site_indic,
                                      seq_indic);
-//  else
-//    expectation_maximization_seq_str_de(
-//          sequences, secondary_structure, site_indic, seq_indic);
+  else
+    expectation_maximization_seq_str_de(sequences, secondary_structure,
+                                        diagnostic_events, site_indic, seq_indic);
 }
 
 static void
@@ -715,7 +715,6 @@ find_delta(const vector<string> &sequences,
     Model m;
     Model::set_model_uniform(matrix.size(), m);
     m.delta = delta_param;
-    m.gamma = 0.27;
 
     vector<double> has_motif(sequences.size(), m.gamma);
     vector<vector<double> > indicators;
@@ -779,3 +778,210 @@ Model::expectation_maximization_seq_de(const vector<string> &sequences,
   }
 }
 
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+///////////
+///////////  CODE FOR SEQUENCE, STRUCTURE AND DIAGNOSTIC EVENTS
+///////////
+
+
+double
+Model::calculate_zoops_log_l(const vector<string> &sequences,
+                             const vector<vector<double> > &secondary_structure,
+                             const vector<vector<size_t> > &diagnostic_events,
+                             const vector<vector<double> > &site_indic,
+                             const vector<double> &seq_indic) const {
+
+  vector<vector<double> > nb_fg_ss;
+  vector<vector<double> > nb_fg_ds;
+  vector<double> nb_bg_ss;
+  vector<double> nb_bg_ds;
+  calculate_number_of_bases_fg_bg_str(sequences, secondary_structure,
+                                      site_indic, matrix.size(), nb_fg_ss,
+                                      nb_bg_ss, nb_fg_ds, nb_bg_ds);
+
+  // this loop calculates the log likelihood of the model using the
+  // counts obtained from the previous function call. This loop is the
+  // same as would work in an OOPS model, ZOOPS-specific stuff is
+  // below.
+  double ret = 0.0;
+  for (size_t i = 0; i < alphabet_size; ++i) {
+    ret += (nb_bg_ss[i] * log(f[i] * (1 - f_sec_str)));
+    ret += (nb_bg_ds[i] * log(f[i] * f_sec_str));
+    for (size_t j = 0; j < matrix.size(); ++j) {
+      ret += (nb_fg_ss[j][i] * log(matrix[j][i] * (1 - motif_sec_str[j])));
+      ret += (nb_fg_ds[j][i] * log(matrix[j][i] * motif_sec_str[j]));
+    }
+  }
+
+  //--------
+  for (size_t i = 0; i < sequences.size(); i++) {
+    if (diagnostic_events[i].size() > 0) {
+      for (size_t k = 0; k < site_indic[i].size(); k++) {
+        double power = 0.0;
+        for (size_t j = 0; j < diagnostic_events[i].size(); j++)
+          power += abs(diagnostic_events[i][j] - (k + delta));
+        assert(std::isfinite(power));
+        ret += site_indic[i][k]
+            * ((power * log(1 - p)) + (diagnostic_events[i].size() * log(p)));
+      }
+    }
+  }
+
+  for (size_t i = 0; i < sequences.size(); i++) {
+    double has_no_motif = 0.0;
+    for (size_t j = 0; j < sequences[i].length(); j++)
+      has_no_motif += log(f[base2int(sequences[i][j])]);
+    if (diagnostic_events[i].size() > 0)
+      has_no_motif -=
+          (diagnostic_events[i].size() * log(sequences[i].length()));
+    ret += (1 - seq_indic[i]) * has_no_motif;
+    ret += (1 - seq_indic[i]) * log(1 - gamma);
+    ret += seq_indic[i] * log(gamma / site_indic[i].size());
+  }
+  //--------
+
+  return ret;
+}
+
+static void
+get_numerator_seq_str_de_for_site(const string &seq,
+                               const vector<double> &secondary_structure,
+                               const vector<size_t> &diagnostic_events,
+                               const vector<vector<double> > &matrix,
+                               const vector<double> &motif_sec_str,
+                               const vector<double> &freqs,
+                               const double f_sec_str,
+                               const double geo_p,
+                               const int geo_delta,
+                               const double gamma,
+                               const size_t site,
+                               double &num) {
+
+  // calculating the contribution of the foreground and the powers
+  // that will be needed for the background calculations (below).
+  vector<double> f_powers_ss(alphabet_size, 0.0);
+  vector<double> f_powers_ds(alphabet_size, 0.0);
+  for (size_t i = 0; i < seq.length(); ++i) {
+    const size_t base = base2int(seq[i]);
+    if (i >= site && i < site + matrix.size()) {
+      num += (secondary_structure[i]
+          * log(matrix[i - site][base] * motif_sec_str[i - site]));
+      num += ((1.0 - secondary_structure[i])
+          * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
+    } else {
+      f_powers_ss[base] += (1 - secondary_structure[i]);
+      f_powers_ds[base] += (secondary_structure[i]);
+    }
+    assert(
+        std::isfinite(f_powers_ss[base]) && std::isfinite(f_powers_ds[base])
+        && std::isfinite(num));
+  }
+
+  // calculating the contribution of the background (outside the motif
+  // occurrences)
+  for (size_t b = 0; b < alphabet_size; b++) {
+    num += f_powers_ss[b] * log(freqs[b] * (1 - f_sec_str));
+    num += f_powers_ds[b] * log(freqs[b] * (f_sec_str));
+  }
+  if (diagnostic_events.size() > 0) {
+    double power = 0.0;
+    for (size_t j = 0; j < diagnostic_events.size(); j++)
+      power += abs(diagnostic_events[j] - (site + geo_delta));
+    num += ((power * log(1 - geo_p)) + (diagnostic_events.size() * log(geo_p)));
+  }
+  num += log(gamma / (seq.length() - matrix.size() + 1.0));
+}
+
+
+static void
+expectation_seq_str_de_for_single_seq(const string &seq,
+                                      const vector<double> &secondary_structure,
+                                      const vector<size_t> &diagnostic_events,
+                                      const vector<vector<double> > &matrix,
+                                      const vector<double> &motif_sec_str,
+                                      const vector<double> &freqs,
+                                      const double f_sec_str,
+                                      const double geo_p,
+                                      const int geo_delta,
+                                      const double gamma,
+                                      vector<double> &site_indic,
+                                      double &seq_indic) {
+
+
+  // get log likelihood for each site
+  vector<double> numerator(site_indic.size(), 0.0);
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    get_numerator_seq_str_de_for_site(seq, secondary_structure,
+                                      diagnostic_events, matrix, motif_sec_str,
+                                      freqs, f_sec_str, geo_p, geo_delta, gamma,
+                                      i, numerator[i]);
+
+  double no_motif = 0.0;
+  for (size_t i = 0; i < seq.length(); i++) {
+    no_motif += secondary_structure[i]
+        * log(freqs[base2int(seq[i])] * f_sec_str);
+    no_motif += ((1 - secondary_structure[i])
+        * log(freqs[base2int(seq[i])] * (1 - f_sec_str)));
+    if (diagnostic_events.size() > 0)
+      no_motif -= (diagnostic_events.size() * log(seq.length()));
+  }
+  numerator.push_back(no_motif + log(1.0 - gamma));
+
+  const double denominator = smithlab::log_sum_log_vec(numerator,
+                                                       numerator.size());
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    site_indic[i] = exp(numerator[i] - denominator);
+
+  seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
+}
+
+static void
+expectation_seq_str_de(const vector<string> &sequences,
+                       const vector<vector<double> > &secondary_structure,
+                       const vector<vector<size_t> > &diagnostic_events,
+                       const vector<vector<double> > &matrix,
+                       const vector<double> &motif_sec_str,
+                       const vector<double> &freqs,
+                       const double f_sec_str,
+                       const double geo_p,
+                       const int geo_delta,
+                       const double gamma,
+                       vector<vector<double> > &site_indic,
+                       vector<double> &seq_indic) {
+  for (size_t i = 0; i < sequences.size(); i++)
+    expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
+                                          diagnostic_events[i], matrix,
+                                          motif_sec_str, freqs, f_sec_str,
+                                          geo_p, geo_delta, gamma,
+                                          site_indic[i], seq_indic[i]);
+}
+
+
+void
+Model::expectation_maximization_seq_str_de(const vector<string> &sequences,
+                                           const vector<vector<double> > &secondary_structure,
+                                           const vector<vector<size_t> > &diagnostic_events,
+                                           vector<vector<double> > &site_indic,
+                                           vector<double> &seq_indic) {
+  delta = find_delta(sequences, diagnostic_events, matrix);
+  double prev_score = std::numeric_limits<double>::max();
+  double score = 0.0;
+  for (size_t i = 0; i < max_iterations; ++i) {
+    expectation_seq_str_de(sequences, secondary_structure, diagnostic_events,
+                           matrix, motif_sec_str, f, f_sec_str, p, delta, gamma,
+                           site_indic, seq_indic);
+    maximization_seq(sequences, site_indic, seq_indic, matrix, f, gamma);
+    maximization_str(sequences, secondary_structure, site_indic, seq_indic,
+                     matrix, motif_sec_str, f_sec_str);
+    maximization_de(sequences, diagnostic_events, site_indic, seq_indic, matrix,
+                    p, delta);
+
+    score = calculate_zoops_log_l(sequences, secondary_structure,
+                                  diagnostic_events, site_indic, seq_indic);
+    if (abs(prev_score - score) / prev_score < tolerance) {
+      break;
+    }
+  }
+}
