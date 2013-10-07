@@ -109,6 +109,10 @@ Model::calculate_oops_log_l(const vector<string> &sequences,
     for (size_t j = 0; j < matrix.size(); ++j)
       ret += nb_fg[j][i] * log(matrix[j][i]);
   }
+
+  for (size_t i = 0; i < site_indic.size(); ++i)
+    ret -= log(site_indic[i].size());
+
   return ret;
 }
 
@@ -137,7 +141,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
     ret += (1 - seq_indic[i]) * has_no_motif;
     ret += (1 - seq_indic[i]) * log(1 - gamma);
     ret += seq_indic[i]
-        * log(gamma / (sequences[i].length() - matrix.size() + 1));
+        * log(gamma / site_indic.size());
   }
   //--------
 
@@ -573,8 +577,8 @@ get_numerator_seq_de_for_site(const string &seq,
       power += abs(diagnostic_events[j] - (site + geo_delta));
     num += ((power * log(1 - geo_p)) + (diagnostic_events.size() * log(geo_p)));
   }
-  if (diagnostic_events.size() == 0)
-    num += log(gamma / (seq.length() - matrix.size() + 1.0));
+
+  num += log(gamma / (seq.length() - matrix.size() + 1.0));
 }
 
 static void
@@ -594,11 +598,11 @@ expectation_seq_de_for_single_seq(const string &seq,
                                   geo_delta, gamma, i, numerator[i]);
 
   double no_motif = 0.0;
-  if (diagnostic_events.size() == 0) {
-    for (size_t i = 0; i < seq.length(); i++)
-      no_motif += log(freqs[base2int(seq[i])]);
-    numerator.push_back(no_motif + log(1.0 - gamma));
-  }
+  for (size_t i = 0; i < seq.length(); i++)
+    no_motif += log(freqs[base2int(seq[i])]);
+  if (diagnostic_events.size() > 0)
+    no_motif -= (diagnostic_events.size() * log(seq.length()));
+  numerator.push_back(no_motif + log(1.0 - gamma));
 
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
@@ -636,15 +640,16 @@ maximization_de(const vector<string> &sequences,
   double numerator = 0.0;
   double denominator = 0.0;
   for (size_t i = 0; i < site_indic.size(); i++) {
-    numerator += diagnostic_events[i].size();
+    double seq_sum = 0.0;
     for (size_t k = 0; k < site_indic[i].size(); k++) {
+      numerator += (seq_indic[i] * site_indic[i][k] * diagnostic_events[i].size());
       double site_sum = 0.0;
       if (diagnostic_events[i].size() > 0)
         for (size_t j = 0; j < diagnostic_events[i].size(); j++)
           site_sum += abs(diagnostic_events[i][j] - (k + geo_delta));
-      denominator += site_indic[i][k] * site_sum;
+      seq_sum += site_indic[i][k] * ( diagnostic_events[i].size() + site_sum);
     }
-    denominator += diagnostic_events[i].size();
+    denominator += seq_indic[i] * seq_sum;
   }
   geo_p = max(min(numerator / denominator, 0.999), std::numeric_limits<double>::min());
 }
@@ -682,15 +687,15 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
 
   //--------
   for (size_t i = 0; i < sequences.size(); i++) {
-    if (diagnostic_events[i].size() == 0) {
-      double has_no_motif = 0.0;
-      for (size_t j = 0; j < sequences[i].length(); j++)
-        has_no_motif += log(f[base2int(sequences[i][j])]);
-      ret += (1 - seq_indic[i]) * has_no_motif;
-      ret += (1 - seq_indic[i]) * log(1 - gamma);
-      ret += seq_indic[i]
-          * log(gamma / (sequences[i].length() - matrix.size() + 1));
-    }
+    double has_no_motif = 0.0;
+    for (size_t j = 0; j < sequences[i].length(); j++)
+      has_no_motif += log(f[base2int(sequences[i][j])]);
+    if (diagnostic_events[i].size() > 0)
+      has_no_motif -= (diagnostic_events[i].size() * log(sequences[i].length()));
+    ret += (1 - seq_indic[i]) * has_no_motif;
+    ret += (1 - seq_indic[i]) * log(1 - gamma);
+    ret += seq_indic[i]
+        * log(gamma / site_indic[i].size());
   }
   //--------
 
