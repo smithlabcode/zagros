@@ -616,7 +616,8 @@ int main(int argc,
     string reads_file;
     string mapper;
     string experiment;
-    size_t max_de = 5;
+    size_t max_de = std::numeric_limits<size_t>::max();
+    size_t level = std::numeric_limits<size_t>::max();
 
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
@@ -632,6 +633,8 @@ int main(int argc,
 		      false, structure_file);
     opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
 		      false, reads_file);
+    opt_parse.add_opt("level", 'l', "level of influence by diagnostic events",
+          false, level);
     opt_parse.add_opt("mapper", 'm', "Mapper (novoaling, bowtie, rmap)", 
 		      false, mapper);
     opt_parse.add_opt("experiment", 'e', 
@@ -704,7 +707,17 @@ int main(int argc,
         else
           sift(targets, de_regions);
       }
-      load_diagnostic_events(targets, de_regions, max_de, diagnostic_events);
+      int random_number_seed = numeric_limits<int>::max();
+      const Runif rng(random_number_seed);
+
+      vector<GenomicRegion> de_regions_sampled;
+      if (de_regions.size() > level * targets.size())
+        for (size_t i = 0; i < level*targets.size(); ++i) {
+          const size_t r = rng.runif((size_t)0, de_regions.size());
+          de_regions_sampled.push_back(de_regions[r]);
+          de_regions.erase(de_regions.begin() + r);
+        }
+      load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
     }
 
     if (VERBOSE)
