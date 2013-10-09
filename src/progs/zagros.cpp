@@ -711,12 +711,20 @@ int main(int argc,
       const Runif rng(random_number_seed);
 
       vector<GenomicRegion> de_regions_sampled;
-      if (de_regions.size() > level * targets.size())
-        for (size_t i = 0; i < level*targets.size(); ++i) {
+      if (de_regions.size() > std::floor(level * targets.size()))
+        for (size_t i = 0; i < std::floor(level*targets.size()); ++i) {
           const size_t r = rng.runif((size_t)0, de_regions.size());
           de_regions_sampled.push_back(de_regions[r]);
           de_regions.erase(de_regions.begin() + r);
         }
+      else
+        de_regions_sampled = de_regions;
+
+//      std::ofstream de_out(string(outfile.substr(0,outfile.length()-4) + "_de.bed").c_str());
+//      copy(
+//          de_regions_sampled.begin(),
+//          de_regions_sampled.end(),
+//          std::ostream_iterator<GenomicRegion>(de_out, "\n"));
       load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
     }
 
