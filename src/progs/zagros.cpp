@@ -617,7 +617,7 @@ int main(int argc,
     string mapper;
     string experiment;
     size_t max_de = std::numeric_limits<size_t>::max();
-    size_t level = std::numeric_limits<size_t>::max();
+    double level = std::numeric_limits<double>::max();
 
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
@@ -716,7 +716,7 @@ int main(int argc,
           const size_t r = rng.runif((size_t)0, de_regions.size());
           de_regions_sampled.push_back(de_regions[r]);
           de_regions.erase(de_regions.begin() + r);
-        }
+        } 
       else
         de_regions_sampled = de_regions;
 
@@ -725,7 +725,8 @@ int main(int argc,
 //          de_regions_sampled.begin(),
 //          de_regions_sampled.end(),
 //          std::ostream_iterator<GenomicRegion>(de_out, "\n"));
-      load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
+      if (level > 0)
+        load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
     }
 
     if (VERBOSE)

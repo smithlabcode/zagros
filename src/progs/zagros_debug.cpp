@@ -378,7 +378,8 @@ int main(int argc,
 //          de_regions_sampled.begin(),
 //          de_regions_sampled.end(),
 //          std::ostream_iterator<GenomicRegion>(de_out, "\n"));
-    load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
+    if (level > 0)
+      load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
 
     if (VERBOSE)
       cerr << "IDENTIFYING STARTING POINTS" << endl;
