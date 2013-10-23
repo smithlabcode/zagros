@@ -21,6 +21,7 @@
 
 #include <string>
 #include <vector>
+#include <numeric>
 
 #include "OptionParser.hpp"
 #include "smithlab_utils.hpp"
@@ -70,7 +71,11 @@ static void replace_Ns(vector<string> &sequences) {
 
 int main(int argc, const char **argv) {
 
+  int random_number_seed = numeric_limits<int>::max();
+  const Runif rng(random_number_seed);
+
   try {
+    size_t str_level = std::numeric_limits<size_t>::max();
 
     bool VERBOSE = false;
     string outfile;
@@ -83,6 +88,8 @@ int main(int argc, const char **argv) {
         strip_path(argv[0]), "", "<sequences>");
     opt_parse.add_opt(
         "output", 'o', "output file name (default: stdout)", false, outfile);
+    opt_parse.add_opt("str_level", 'a', "level of structure information",
+          false, str_level);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -114,8 +121,28 @@ int main(int argc, const char **argv) {
 
     read_fasta_file(targets_file, names, seqs);
     replace_Ns(seqs);
-
     RNAUtils::get_base_pair_probability_vector(VERBOSE, seqs, secondary_structure);
+
+    double level = (100.0 - str_level)/100.0;
+    vector<size_t> indices;
+    for (size_t i = 0; i < std::floor(level*seqs.size()); ++i) {
+      size_t r;
+      bool exists = true;
+      while (exists) {
+        r = rng.runif((size_t)0, secondary_structure.size());
+        exists = false;
+        for (size_t indx = 0; indx < indices.size(); ++indx)
+          if (indices[indx] == r) {
+            exists = true;
+            break;
+          }
+        if (!exists)
+          indices.push_back(r);
+      }
+      for (size_t j = 0; j < secondary_structure[r].size(); ++j)
+        secondary_structure[r][j] = 0.5;
+    }
+
     save_structure_file(
         secondary_structure, outfile, structure_computation_window);
 

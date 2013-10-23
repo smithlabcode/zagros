@@ -291,6 +291,7 @@ int main(int argc,
     string structure_file;
     size_t max_de = std::numeric_limits<size_t>::max();
     size_t level = std::numeric_limits<size_t>::max();
+    size_t de_l = std::numeric_limits<size_t>::max();
 
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
@@ -302,6 +303,8 @@ int main(int argc,
           false, n_motifs);
     opt_parse.add_opt("structure", 't', "structure information file",
           false, structure_file);
+    opt_parse.add_opt("de_level", 'a', "level of diagnostic events",
+          false, de_l);
     opt_parse.add_opt("level", 'l', "level of influence by diagnostic events",
           false, level);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
@@ -380,6 +383,25 @@ int main(int argc,
 //          std::ostream_iterator<GenomicRegion>(de_out, "\n"));
     if (level > 0)
       load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
+
+    double de_level = (100.0 - de_l)/100.0;
+    vector<size_t> indices;
+    for (size_t i = 0; i < std::floor(de_level*seqs.size()); ++i) {
+      size_t r;
+      bool exists = true;
+      while (exists) {
+        r = rng.runif((size_t)0, diagnostic_events.size());
+        exists = false;
+        for (size_t indx = 0; indx < indices.size(); ++indx)
+          if (indices[indx] == r) {
+            exists = true;
+            break;
+          }
+        if (!exists)
+          indices.push_back(r);
+      }
+      diagnostic_events[r].clear();
+    }
 
     if (VERBOSE)
       cerr << "IDENTIFYING STARTING POINTS" << endl;
