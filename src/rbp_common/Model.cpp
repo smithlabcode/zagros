@@ -428,7 +428,7 @@ get_numerator_seq_str_for_site(const string &seq,
       num += ((1.0 - secondary_structure[i])
           * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
     } else {
-      f_powers_ss[base] += (1 - secondary_structure[i]);
+      f_powers_ss[base] += (1.0 - secondary_structure[i]);
       f_powers_ds[base] += (secondary_structure[i]);
     }
     assert(std::isfinite(f_powers_ss[base]) && std::isfinite(f_powers_ds[base])
@@ -466,8 +466,8 @@ expectation_seq_str_for_single_seq(const string &seq,
   for (size_t i = 0; i < seq.length(); i++) {
     no_motif += secondary_structure[i]
         * log(freqs[base2int(seq[i])] * f_sec_str);
-    no_motif += ((1 - secondary_structure[i])
-        * log(freqs[base2int(seq[i])] * (1 - f_sec_str)));
+    no_motif += ((1.0 - secondary_structure[i])
+        * log(freqs[base2int(seq[i])] * (1.0 - f_sec_str)));
   }
   numerator.push_back(no_motif + log(1.0 - gamma));
 
@@ -490,10 +490,20 @@ expectation_seq_str(const vector<string> &sequences,
                     vector<vector<double> > &site_indic,
                     vector<double> &seq_indic) {
 
-  for (size_t i = 0; i < sequences.size(); i++)
-    expectation_seq_str_for_single_seq(sequences[i], secondary_structure[i],
-                                       matrix, motif_sec_str, freqs, f_sec_str,
-                                       gamma, site_indic[i], seq_indic[i]);
+  for (size_t i = 0; i < sequences.size(); i++) {
+    //------------------------------
+    double k_indic = 0.0;
+    for (size_t k = 0; k < sequences[i].length(); ++k)
+      k_indic += (secondary_structure[i][k] - 0.5);
+    if (k_indic != 0.0)
+    //------------------------------
+      expectation_seq_str_for_single_seq(sequences[i], secondary_structure[i],
+                                         matrix, motif_sec_str, freqs, f_sec_str,
+                                         gamma, site_indic[i], seq_indic[i]);
+    else
+      expectation_for_single_seq(sequences[i], matrix, freqs, gamma,
+                                 site_indic[i], seq_indic[i]);
+  }
 }
 
 static void
@@ -509,9 +519,15 @@ maximization_str(const vector<string> &sequences,
   motif_sec_str.resize(matrix.size(), 0.0);
   for (size_t i = 0; i < matrix.size(); ++i) {
     for (size_t j = 0; j < site_indic.size(); ++j) {
-      for (size_t site = 0; site < site_indic[i].size(); ++site)
-        motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
-                            * secondary_structure[j][site + i];
+      //------------------------------
+      double k_indic = 0.0;
+      for (size_t k = 0; k < site_indic[j].size(); ++k)
+        k_indic += (secondary_structure[j][k] - 0.5);
+      if (k_indic != 0.0)
+      //------------------------------
+        for (size_t site = 0; site < site_indic[i].size(); ++site)
+          motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
+                              * secondary_structure[j][site + i];
     }
     motif_sec_str[i] = motif_sec_str[i]
         / accumulate(seq_indic.begin(), seq_indic.end(), 0.0);
