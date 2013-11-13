@@ -559,8 +559,9 @@ format_motif(const Model &model,
         max_i = i;
       }
     }
-    for (size_t j = 0; j < model.size(); ++j)
-      tmp_m[j][base2int(sequences[n][max_i + j])] += zoops_i[n];
+    if (max_i > 0 )
+      for (size_t j = 0; j < model.size(); ++j)
+        tmp_m[j][base2int(sequences[n][max_i + j])] += zoops_i[n];
   }
 
   for (size_t j = 0; j < tmp_m.size(); j++) {
@@ -591,7 +592,7 @@ format_motif(const Model &model,
       }
     }
     if (!targets.empty())
-      if (zoops_i[n] > model.zoops_threshold)
+      if (zoops_i[n] > model.zoops_threshold && site_pos > 0)
         ss << format_site(model, targets[n], sequences[n], site_pos) << "\t"
 	   << zoops_i[n] << endl;
   }
@@ -608,14 +609,14 @@ int main(int argc,
     static const double zoops_expansion_factor = 0.75;
 
     bool VERBOSE = false;
-    size_t motif_width = 8;
+    size_t motif_width = 6;
     size_t n_motifs = 1;
     string outfile;
-    string chrom_dir;
+    string chrom_dir = "";
     string structure_file;
     string reads_file;
-    string mapper;
-    string experiment;
+    string mapper = "rmap";
+    string experiment = "iCLIP";
     size_t max_de = std::numeric_limits<size_t>::max();
     double level = std::numeric_limits<double>::max();
 
@@ -623,9 +624,9 @@ int main(int argc,
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
     opt_parse.add_opt("output", 'o', "output file name (default: stdout)", 
 		      false, outfile);
-    opt_parse.add_opt("width", 'w', "width of motifs to find", 
+    opt_parse.add_opt("width", 'w', "width of motifs to find (4 <= w <= 12; default: 6)", 
 		      false, motif_width);
-    opt_parse.add_opt("number", 'n', "number of motifs to output", 
+    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 1)", 
 		      false, n_motifs);
     opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)", 
 		      false, chrom_dir);
@@ -633,12 +634,12 @@ int main(int argc,
 		      false, structure_file);
     opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
 		      false, reads_file);
-    opt_parse.add_opt("level", 'l', "level of influence by diagnostic events",
+    opt_parse.add_opt("level", 'l', "level of influence by diagnostic events (default: maximum)",
           false, level);
-    opt_parse.add_opt("mapper", 'm', "Mapper (novoaling, bowtie, rmap)", 
+    opt_parse.add_opt("mapper", 'm', "Mapper (novoaling, bowtie, rmap; default: rmap)", 
 		      false, mapper);
     opt_parse.add_opt("experiment", 'e', 
-		      "Type of experiment (hCLIP, pCLIP, iCLIP)", 
+		      "Type of experiment (hCLIP, pCLIP, iCLIP; default: iCLIP)", 
 		      false, experiment);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
     vector<string> leftover_args;
@@ -656,6 +657,14 @@ int main(int argc,
       cerr << opt_parse.option_missing_message() << endl;
       return EXIT_SUCCESS;
     }
+    if (motif_width < 4 || motif_width > 12) {
+      cerr << "motif width should be between 4 and 12" << endl;
+      return EXIT_SUCCESS;
+    }
+    if (chrom_dir == "") {
+      cerr << "Please specify the directory containing the chromosome files" << endl;
+      return EXIT_SUCCESS;
+    } 
     if (leftover_args.size() != 1) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
@@ -699,7 +708,8 @@ int main(int argc,
       load_mapped_reads(reads_file, mapper, mapped_reads);
       if (VERBOSE)
         cerr << "PROCESSING MAPPED READS" << endl;
-      make_inputs(mapped_reads, experiment, de_regions);
+      if (mapped_reads.size() > 0)
+        make_inputs(mapped_reads, experiment, de_regions);
       if (de_regions.size() > 0) {
         sort(de_regions.begin(), de_regions.end());
         if (check_overlapping(targets))

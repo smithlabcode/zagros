@@ -1,11 +1,11 @@
 *********************************
 Copyright and License Information
 *******************************************************************************
-Copyright (C) 2011
+Copyright (C) 2013
 University of Southern California,
-Emad Bahrami Samani, Philip J. Uren, Andrew D. Smith
+Emad Bahrami-Samani, Philip J. Uren, Andrew D. Smith
   
-Authors: Emad Bahrami Samani, Philip J. Uren, Andrew D. Smith
+Authors: Emad Bahrami-Samani, Philip J. Uren, Andrew D. Smith
   
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -77,7 +77,7 @@ TODO...
 ************************
 Contacts and bug reports
 *******************************************************************************
-Emad Bahrami Samani 
+Emad Bahrami-Samani 
 bahramis@usc.edu
 
 Philip J. Uren

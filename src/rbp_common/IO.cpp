@@ -167,6 +167,8 @@ read_rmap_output(const vector<string> &parts,
     MappedRead mr(read.c_str());
     regions.push_back(mr);
   }
+  else
+    throw SMITHLABException("The mapped reads file is not correctly formatted!");
 }
 
 static void
@@ -215,6 +217,7 @@ load_mapped_reads(const string &reads_file,
   in.seekg(0, std::ios::end);
   std::ifstream::pos_type end_of_data = in.tellg();
   in.seekg(start_of_data);
+  size_t current_done = 101;
 
   while (!in.eof()) {
     char buffer[buffer_size];
@@ -233,11 +236,14 @@ load_mapped_reads(const string &reads_file,
         throw SMITHLABException("The mapper was not recognized!");
     }
     size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
-    std::cerr << "\r" << percent_done << "% completed..." << std::flush;
+    if (percent_done != current_done) {
+      std::cerr << "\r" << percent_done << "% completed..." << std::flush;
+      current_done = percent_done;
+    }
     in.peek();
   }
   in.close();
-  std::cerr << std::endl;
+  std::cerr << std::endl << mapped_reads.size() << " uniquely mapped reads are loaded!" << std::endl;
 }
 
 ////////////////////////////////////////////////////////////////////////

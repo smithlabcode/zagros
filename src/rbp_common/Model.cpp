@@ -23,7 +23,6 @@
 #include <iterator>
 #include <numeric>
 #include <limits>
-#include <tr1/unordered_map>
 
 #include "smithlab_utils.hpp"
 #include "Model.hpp"
@@ -35,8 +34,6 @@ using std::endl;
 using std::max;
 using std::min;
 using std::accumulate;
-
-using std::tr1::unordered_map;
 
 using smithlab::alphabet_size;
 
@@ -491,18 +488,9 @@ expectation_seq_str(const vector<string> &sequences,
                     vector<double> &seq_indic) {
 
   for (size_t i = 0; i < sequences.size(); i++) {
-    //------------------------------
-    double k_indic = 0.0;
-    for (size_t k = 0; k < sequences[i].length(); ++k)
-      k_indic += (secondary_structure[i][k] - 0.5);
-    if (k_indic != 0.0)
-    //------------------------------
       expectation_seq_str_for_single_seq(sequences[i], secondary_structure[i],
                                          matrix, motif_sec_str, freqs, f_sec_str,
                                          gamma, site_indic[i], seq_indic[i]);
-    else
-      expectation_for_single_seq(sequences[i], matrix, freqs, gamma,
-                                 site_indic[i], seq_indic[i]);
   }
 }
 
@@ -519,15 +507,9 @@ maximization_str(const vector<string> &sequences,
   motif_sec_str.resize(matrix.size(), 0.0);
   for (size_t i = 0; i < matrix.size(); ++i) {
     for (size_t j = 0; j < site_indic.size(); ++j) {
-      //------------------------------
-      double k_indic = 0.0;
-      for (size_t k = 0; k < site_indic[j].size(); ++k)
-        k_indic += (secondary_structure[j][k] - 0.5);
-      if (k_indic != 0.0)
-      //------------------------------
-        for (size_t site = 0; site < site_indic[i].size(); ++site)
-          motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
-                              * secondary_structure[j][site + i];
+      for (size_t site = 0; site < site_indic[i].size(); ++site)
+        motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
+                            * secondary_structure[j][site + i];
     }
     motif_sec_str[i] = motif_sec_str[i]
         / accumulate(seq_indic.begin(), seq_indic.end(), 0.0);
