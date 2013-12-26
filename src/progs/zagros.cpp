@@ -466,8 +466,10 @@ check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
       --count;
     else {
       ++count;
-      if (count > 1)
+      if (count > 1) {
+        cerr << targets_chrom[i].tostring() << endl;
         return true;
+      }
     }
   return false;
 }
@@ -559,7 +561,7 @@ format_motif(const Model &model,
         max_i = i;
       }
     }
-    if (max_i > 0 )
+    if (zoops_i[n] >= 0.8 )
       for (size_t j = 0; j < model.size(); ++j)
         tmp_m[j][base2int(sequences[n][max_i + j])] += zoops_i[n];
   }
@@ -592,7 +594,7 @@ format_motif(const Model &model,
       }
     }
     if (!targets.empty())
-      if (zoops_i[n] > model.zoops_threshold && site_pos > 0)
+      if (zoops_i[n] >= 0.8)
         ss << format_site(model, targets[n], sequences[n], site_pos) << "\t"
 	   << zoops_i[n] << endl;
   }
@@ -737,6 +739,14 @@ int main(int argc,
 //          std::ostream_iterator<GenomicRegion>(de_out, "\n"));
       if (level > 0)
         load_diagnostic_events(targets, de_regions_sampled, max_de, diagnostic_events);
+
+//      string de_outfile = outfile.substr(0,outfile.length()-4) + "_de.bed";
+//      std::ostream* out3 =
+//         (!de_outfile.empty()) ? new std::ofstream(de_outfile.c_str()) : &std::cout;
+//      copy(de_regions_sampled.begin(), de_regions_sampled.end(),
+//           std::ostream_iterator<GenomicRegion>(*out3, "\n"));
+//      if (out3 != &std::cout)
+//        delete out3;
     }
 
     if (VERBOSE)

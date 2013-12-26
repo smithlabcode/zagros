@@ -160,7 +160,7 @@ read_piranha_output(const string filename,
 static void
 read_rmap_output(const vector<string> &parts,
                  vector<MappedRead> &regions) {
-  if (parts.size() == 7) {
+  if (parts.size() == 8) {
     string gr = parts[0] + "\t" + parts[1] + "\t" + parts[2] + "\t" + parts[3]
         + "\t" + parts[4] + "\t" + parts[5];
     string read = gr + "\t" + parts[6] + "\t2C>C";
