@@ -289,13 +289,48 @@ adjust_region_size(const size_t orig_start,
   return (orig_size + (preceding_newlines_end - preceding_newlines_start));
 }
 
+static bool
+test_chrom_file_format(const string filename) {
+  static const double LINE_WIDTH = 50.0;
+  static const double NEWLINES_TO_CHECK = 10.0;
+  const size_t expected_lines =
+  static_cast<size_t>(get_filesize(filename)/(LINE_WIDTH + 1.0)) + 1;
+  
+
+  std::ifstream in(filename.c_str());
+  if (!in)
+    throw SMITHLABException("could not open file: " + filename);
+
+  string name;
+  in >> name;
+  if (name[0] != '>')
+    throw SMITHLABException("bad format for chrom file: " + filename +\
+                            " -- (expected name line with leading '>', " +\
+                            "found " + name + " instead)");
+
+  const size_t increment = expected_lines/NEWLINES_TO_CHECK;
+
+  for (size_t i = 0; i < NEWLINES_TO_CHECK; ++i) {
+    // get a position that should be a newline
+    const size_t should_be_newline = 
+      name.length() + i*increment*(LINE_WIDTH + 1);
+    // go to that position
+    in.seekg(should_be_newline, std::ios::beg);
+    if (in.peek() != '\n' && in.peek() != '\r')
+      throw SMITHLABException("bad format for chrom file: " + filename +\
+                              " -- expected newline characters at 50nt " +\
+                              "offsets; didn't find them.");
+  }
+  return true;
+}
+
 static void
 extract_regions_chrom_fasta(const string &chrom_name,
                             const string &filename,
                             const vector<GenomicRegion> &regions,
                             vector<string> &sequences,
                             vector<string> &names) {
-
+  test_chrom_file_format(filename);
   std::ifstream in(filename.c_str());
   for (vector<GenomicRegion>::const_iterator i(regions.begin());
       i != regions.end(); ++i) {
