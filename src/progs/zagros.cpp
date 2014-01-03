@@ -664,9 +664,13 @@ int main(int argc,
       return EXIT_SUCCESS;
     }
     if (chrom_dir == "") {
-      cerr << "Please specify the directory containing the chromosome files" << endl;
+      cerr << "Please specify the directory containing the "
+           << "chromosome files" << endl;
       return EXIT_SUCCESS;
     } 
+    if (!isdir(chrom_dir.c_str())) {
+      throw SMITHLABException(chrom_dir + " is not a valid directory");
+    }
     if (leftover_args.size() != 1) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
