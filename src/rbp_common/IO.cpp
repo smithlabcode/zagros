@@ -418,14 +418,25 @@ load_sequences(const string &chrom_dir,
       throw SMITHLABException("Input the genomic regions, "
           "if you wish to use the "
           "secondary structure!");
+    if (!chrom_dir.empty()) {
+      throw SMITHLABException("Provided chromosomes directory, but loading "
+                              "sequences from fasta file; chromosomes "
+                              "directory cannot be used.");
+    }
     read_fasta_file(targets_file, names, sequences);
   } else {
     read_piranha_output(targets_file, targets);
     expand_regions(targets, padding);
     sort(targets.begin(), targets.end());
     if (chrom_dir.empty())
-      throw SMITHLABException("Input a valid directory containing "
-          "the chromosome files!");
+      throw SMITHLABException("Provided sequence genomic regions, but no "
+                              "chromosomes directory to load the sequence "
+                              "data from. Please specify a valid directory "
+                              "containing the chromosome files.");
+    else {
+      if (!isdir(chrom_dir.c_str()))
+        throw SMITHLABException(chrom_dir + " is not a valid directory");
+    }
     extract_regions_fasta(chrom_dir, targets, sequences, names);
     unexpand_regions(targets, padding);
   }

@@ -663,14 +663,6 @@ int main(int argc,
       cerr << "motif width should be between 4 and 12" << endl;
       return EXIT_SUCCESS;
     }
-    if (chrom_dir == "") {
-      cerr << "Please specify the directory containing the "
-           << "chromosome files" << endl;
-      return EXIT_SUCCESS;
-    } 
-    if (!isdir(chrom_dir.c_str())) {
-      throw SMITHLABException(chrom_dir + " is not a valid directory");
-    }
     if (leftover_args.size() != 1) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
@@ -789,7 +781,7 @@ int main(int argc,
     }
   } 
   catch (const SMITHLABException &e) {
-    cerr << e.what() << endl;
+    cerr << "ERROR: " << e.what() << endl;
     return EXIT_FAILURE;
   } 
   catch (std::bad_alloc &ba) {
