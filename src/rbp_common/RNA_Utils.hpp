@@ -48,7 +48,7 @@ public:
   /// number of bases in the RNA alphabet
   static const size_t nbases = 4;
 
-  static const double energy_pf = -1.0;
+  static const double energy_pf;
 
   /*** Static functions for counting structures ***/
   static double get_minimum_free_energy(const std::string seq,

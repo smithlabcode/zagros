@@ -37,6 +37,11 @@ using std::accumulate;
 
 using smithlab::alphabet_size;
 
+// initialization of non-integral constants
+const double Model::pseudocount = 0.1;
+const double Model::tolerance = 1e-10;
+const double Model::zoops_threshold = 0;
+
 // TO HELP WITH DEBUGGING:
 // static string
 // format_matrix(const vector<vector<double> > &matrix) {
@@ -732,7 +737,7 @@ find_delta(const vector<string> &sequences,
 
       score = m.calculate_zoops_log_l(sequences, diagnostic_events,
                                                    indicators, has_motif);
-      if (abs(prev_score - score) / prev_score < m.tolerance) {
+      if (abs(prev_score - score) / prev_score < Model::tolerance) {
         break;
       }
     }

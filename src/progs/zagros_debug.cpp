@@ -268,7 +268,7 @@ format_motif(const Model &model,
       }
     }
     if (!targets.empty())
-      if (zoops_i[n] > model.zoops_threshold)
+      if (zoops_i[n] > Model::zoops_threshold)
         ss << format_site(model, targets[n], sequences[n], site_pos) << "\t"
      << zoops_i[n] << endl;
   }

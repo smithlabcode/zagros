@@ -128,10 +128,10 @@ struct Model {
   int delta;
 
   // class constants (probably some should be adjustable)
-  static const double pseudocount = 0.1;
-  static const double zoops_threshold = 0;
   static const size_t max_iterations = 5;
-  static const double tolerance = 1e-10;
+  static const double pseudocount;
+  static const double zoops_threshold;
+  static const double tolerance;
 };
 
 #endif

@@ -47,9 +47,11 @@ using std::stringstream;
 using std::cerr;
 using std::endl;
 
+// initialization of non-integral constants
 /// A-U(T), C-G, G-C, G-U(T), U(T)-A, U(T)-G
 const int RNAUtils::RNAPair[4][4] = { { 0, 0, 0, 5 }, { 0, 0, 1, 0 }, { 0, 2, 0,
     3 }, { 6, 0, 4, 0 } };
+const double RNAUtils::energy_pf = -1.0;
 
 double RNAUtils::get_minimum_free_energy(const string seq, const string cnstrnt) {
 
