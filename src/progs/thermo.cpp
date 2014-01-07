@@ -75,7 +75,7 @@ int main(int argc, const char **argv) {
     string outfile;
     string chrom_dir;
 
-    const size_t structure_computation_window = 20;
+    const size_t sequencePadding = 20;
 
     /****************** COMMAND LINE OPTIONS ********************/
     OptionParser opt_parse(
@@ -105,25 +105,27 @@ int main(int argc, const char **argv) {
       cerr << opt_parse.help_message() << endl;
       return EXIT_SUCCESS;
     }
-    const string targets_file(leftover_args.back());
+    const string targFile(leftover_args.back());
     /****************** END COMMAND LINE OPTIONS *****************/
 
-    if (VERBOSE)
-      cerr << "LOADING SEQUENCES" << endl;
+    // where to write otuput
+    std::ofstream of;
+    if (!outfile.empty())
+      of.open(outfile.c_str());
+    std::ostream out(outfile.empty() ? cout.rdbuf() : of.rdbuf());
+
     //Vectors to store primary information from the data
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
-    vector<vector<double> > secondary_structure;
+    vector<vector<double> > secStructure;
 
-    load_sequences(
-        chrom_dir, structure_computation_window, targets_file, names, seqs,
-        targets);
-
+    if (VERBOSE) cerr << "LOADING SEQUENCES... ";
+    load_sequences(targFile, chrom_dir, seqs, names, targets, sequencePadding);
     replace_Ns(seqs);
+    if (VERBOSE) cerr << "DONE" << endl;
 
-    RNAUtils::get_base_pair_probability_vector(VERBOSE, seqs, secondary_structure);
-    save_structure_file(
-        secondary_structure, outfile, structure_computation_window);
+    RNAUtils::get_base_pair_probability_vector(VERBOSE, seqs, secStructure);
+    save_structure_file(secStructure, out, sequencePadding);
 
   } catch (const SMITHLABException &e) {
     cerr << e.what() << endl;

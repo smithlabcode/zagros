@@ -194,6 +194,7 @@ Model::expectation_maximization(const vector<string> &sequences,
                                         diagnostic_events, site_indic, seq_indic);
 }
 
+
 static void
 get_numerator_for_site(const string &seq,
                        const vector<vector<double> > &matrix,
@@ -202,12 +203,24 @@ get_numerator_for_site(const string &seq,
                        const size_t site,
                        double &num) {
   vector<double> f_powers(alphabet_size, 0.0);
+
   for (size_t i = 0; i < seq.length(); ++i) {
     const size_t base = base2int(seq[i]);
     if (i >= site && i < site + matrix.size())
       num += log(matrix[i - site][base]);
     else
       f_powers[base]++;
+
+    /*using std::cout;
+    using std::endl;
+    cout << "in get num" << endl;
+    for (size_t i = 0; i < matrix.size(); ++i) {
+      for (size_t j = 0; j < matrix[i].size(); ++j) {
+        cout << matrix[i][j] << ", ";
+      }
+      cout << endl;
+    }*/
+
     assert(std::isfinite(f_powers[base]) && std::isfinite(num));
   }
   for (size_t b = 0; b < alphabet_size; b++)
@@ -263,6 +276,7 @@ maximization_seq(const vector<string> &sequences,
                  double &gamma) {
 
   static const double pseudocount = 1e-6;
+  static const double TINY = 1e-100;
 
   vector<vector<double> > nb_fg(matrix.size(),
   // This value needs to be changed
@@ -275,6 +289,8 @@ maximization_seq(const vector<string> &sequences,
     const double total = accumulate(nb_fg[i].begin(), nb_fg[i].end(), 0.0);
     transform(nb_fg[i].begin(), nb_fg[i].end(), matrix[i].begin(),
               std::bind2nd(std::divides<double>(), total));
+    // don't let anything get to zero; that'll be bad for log later.
+    for (size_t j = 0; j < matrix[i].size(); ++j) if (matrix[i][j] < TINY) matrix[i][j] = TINY;
   }
 
   const double total = accumulate(nb_bg.begin(), nb_bg.end(), 0.0);
@@ -283,6 +299,15 @@ maximization_seq(const vector<string> &sequences,
 
   gamma = accumulate(seq_indic.begin(), seq_indic.end(), 0.0)
       / sequences.size();
+
+  using std::cout;
+  using std::endl;
+  for (size_t i = 0; i < matrix.size(); ++i) {
+    for (size_t j = 0; j < matrix[i].size(); ++j) {
+      cout << matrix[i][j] << ", ";
+    }
+    cout << endl;
+  }
 }
 
 void

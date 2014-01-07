@@ -397,13 +397,37 @@ extract_regions_fasta(const string &dirname,
   }
 }
 
+
+/***
+ * \summary load sequences from either a fasta file, or a set of genomic
+ *          regions and chromosome files.
+ * \param target_file should reference either a fasta file or a bed file
+ * \param chrom_dir   if <target_file> is a bed file, this must reference the
+ *                    directory from which to load the sequences.
+ * \param sequences   the sequences loaded (as strings) will be placed here
+ * \param names       will be filled with the names of the sequences; either
+ *                    the name as it appeared in the fasta file, or a name
+ *                    with the format chr:start-end if loaded from genomic
+ *                    regions and chrom. files
+ * \param targets     the genomic regions associated with the sequences will be
+ *                    placed here if a .bed file was provided, otherwise this
+ *                    is left unchanged.
+ * \param padding     pad the sequences by this much on each side. If they
+ *                    came from chromosome files, the padding will be real
+ *                    sequence data taken from the flanking regions; if they
+ *                    came from a fasta file, the padding will be N's.
+ *
+ * \throw SMITHLABException if: a .bed file is given, but no valid chrom. dir.
+ *                              a .fa file is given, and a chrom. dir.
+ *                              the targets_file is not readable.
+ */
 void
-load_sequences(const string &chrom_dir,
-               const size_t padding,
-               const string &targets_file,
-               vector<string> &names,
+load_sequences(const string &targets_file,
+               const string &chrom_dir,
                vector<string> &sequences,
-               vector<GenomicRegion> &targets) {
+               vector<string> &names,
+               vector<GenomicRegion> &targets,
+               const size_t padding) {
 
   std::ifstream in(targets_file.c_str(), std::ios::binary);
   if (!in)
@@ -414,16 +438,17 @@ load_sequences(const string &chrom_dir,
   in.close();
 
   if (buffer[0] == '>') {
-    if (padding != 0)
-      throw SMITHLABException("Input the genomic regions, "
-          "if you wish to use the "
-          "secondary structure!");
     if (!chrom_dir.empty()) {
       throw SMITHLABException("Provided chromosomes directory, but loading "
                               "sequences from fasta file; chromosomes "
                               "directory cannot be used.");
     }
     read_fasta_file(targets_file, names, sequences);
+    if (padding != 0) {
+      for (size_t i = 0; i < sequences.size(); ++i)
+        sequences[i] = string(padding, 'N') + sequences[i] +\
+                       string(padding, 'N');
+    }
   } else {
     read_piranha_output(targets_file, targets);
     expand_regions(targets, padding);
@@ -477,17 +502,58 @@ load_structures(const string structure_file,
   }
 }
 
+/**
+ * \brief write the provided secondary structures (base-pair probability
+ *        vectors) to the provided file.
+ * \param padding amount of padding that was added to the sequences before
+ *        these structures were calculated; the values corresponding to the
+ *        padding will be stripped before writing.
+ * \throw SMITHLABException if file cannot be opened.
+ */
 void
 save_structure_file(const vector<vector<double> > &sec_structure,
                     const string &outfile,
                     const size_t padding) {
-  assert(!outfile.empty());
+  if (outfile.empty())
+    throw SMITHLABException("Failed writing structure to file. Empty filename.");
   std::ofstream out(outfile.c_str());
+  if (!out.good())
+      throw SMITHLABException("Failed writing structure to " + outfile + "; " +\
+                              "File not writable");
+  save_structure_file(sec_structure, out, padding);
+}
+
+
+/**
+ * \brief write the provided secondary structures (base-pair probability
+ *        vectors) to the provided stream.
+ * \param padding amount of padding that was added to the sequences before
+ *        these structures were calculated; the values corresponding to the
+ *        padding will be stripped before writing.
+ * \throw SMITHLABException if stream is bad.
+ */
+void
+save_structure_file(const vector<vector<double> > &sec_structure,
+                    std::ostream &out,
+                    const size_t padding) {
+  if (!out.good())
+    throw SMITHLABException("Failed writing structure to stream. Bad stream.");
+
+  // check these before we write anything, to avoid writing a partial stream
+  // if something is screwed up.
   for (size_t i = 0; i < sec_structure.size(); ++i) {
-    assert(sec_structure.size() > 2 * padding);
-    copy(
-        sec_structure[i].begin() + padding, sec_structure[i].end() - padding,
-        std::ostream_iterator<double>(out, ","));
+    if (sec_structure[i].size() < 2 * padding) {
+      stringstream ss;
+      ss << "Failed writing structure to stream, structure vector number "
+         << i << " has size (" << sec_structure[i].size() << ") smaller than "
+         << "area to be removed as padding (2 x " << padding << ").";
+      throw SMITHLABException(ss.str());
+    }
+  }
+
+  for (size_t i = 0; i < sec_structure.size(); ++i) {
+    copy(sec_structure[i].begin() + padding, sec_structure[i].end() - padding,
+         std::ostream_iterator<double>(out, ","));
     out << endl;
   }
 }

@@ -848,6 +848,29 @@ void MC::get_arrays(unsigned int length) {
  * \brief TODO
  */
 void MC::init_pf_fold(int length, float energy) {
+  q = NULL;
+  qb = NULL;
+  qm = NULL;
+  ptype = NULL;
+  qtype = NULL;
+  mqtype = NULL;
+  qq = NULL;
+  qq1 = NULL;
+  qqm = NULL;
+  qqm1 = NULL;
+  q1k = NULL;
+  qln = NULL;
+  prm_l = NULL;
+  prm_l1 = NULL;
+  prml = NULL;
+  exphairpin = NULL;
+  expMLbase = NULL;
+  scale = NULL;
+  iindx = NULL;
+  jindx = NULL;
+  S = NULL;
+  S1 = NULL;
+
   if (length < 1)
     nrerror("init_pf_fold: length must be greater 0");
   make_pair_matrix();
@@ -859,31 +882,31 @@ void MC::init_pf_fold(int length, float energy) {
  * \brief TODO
  */
 void MC::free_pf_arrays(void) {
-  free(q);
+  if (q != NULL) free(q);
   q = pr = NULL;
-  free(qb);
+  if (qb != NULL) free(qb);
   qb = NULL;
-  free(qm);
-  free(ptype);
-  free(qtype);
-  free(mqtype);
-  free(qq);
-  free(qq1);
-  free(qqm);
-  free(qqm1);
-  free(q1k);
-  free(qln);
-  free(prm_l);
-  free(prm_l1);
-  free(prml);
-  free(exphairpin);
-  free(expMLbase);
-  free(scale);
-  free(iindx);
-  free(jindx);
-  free(S);
+  if (qm != NULL) free(qm);
+  if (ptype != NULL) free(ptype);
+  if (qtype != NULL) free(qtype);
+  if (mqtype != NULL) free(mqtype);
+  if (qq != NULL) free(qq);
+  if (qq1 != NULL) free(qq1);
+  if (qqm != NULL) free(qqm);
+  if (qqm1 != NULL) free(qqm1);
+  if (q1k != NULL) free(q1k);
+  if (qln != NULL) free(qln);
+  if (prm_l != NULL) free(prm_l);
+  if (prm_l1 != NULL) free(prm_l1);
+  if (prml != NULL) free(prml);
+  if (exphairpin != NULL) free(exphairpin);
+  if (expMLbase != NULL) free(expMLbase);
+  if (scale != NULL) free(scale);
+  if (iindx != NULL) free(iindx);
+  if (jindx != NULL) free(jindx);
+  if (S != NULL) free(S);
   S = NULL;
-  free(S1);
+  if (S1 != NULL) free(S1);
   S1 = NULL;
 }
 

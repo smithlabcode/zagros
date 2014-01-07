@@ -670,8 +670,6 @@ int main(int argc,
     const string targets_file(leftover_args.back());
     /****************** END COMMAND LINE OPTIONS *****************/
 
-    const size_t padding = 0;
-
     std::ofstream of;
     if (!outfile.empty())
       of.open(outfile.c_str());
@@ -682,7 +680,7 @@ int main(int argc,
       cerr << "LOADING SEQUENCES" << endl;
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
-    load_sequences(chrom_dir, padding, targets_file, names, seqs, targets);
+    load_sequences(targets_file, chrom_dir, seqs, names, targets);
     replace_Ns(seqs);
 
     // Data structures and input preparation for secondary structure

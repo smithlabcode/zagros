@@ -50,6 +50,14 @@ public:
 
   static const double energy_pf;
 
+  // sequences that are longer than this will be broken into overlapping
+  // tiles for processing.
+  static const size_t SEGMENT_LENGTH = 250;
+
+  // large sequences that are broken into tiles will have this much overlap
+  // between each tile.
+  static const size_t OVERLAP_LENGTH = 50;
+
   /*** Static functions for counting structures ***/
   static double get_minimum_free_energy(const std::string seq,
                                         const std::string cnstrnt);
@@ -68,9 +76,10 @@ public:
   get_base_pair_probability_matrix(const std::string seq,
                                    std::vector<std::vector<double> > &bppm);
 
-  static double get_base_pair_probability_vector(const std::string seq,
-                                                 const std::string cnstrnt,
-                                                 std::vector<double> &bppv);
+  static void
+  get_base_pair_probability_vector(const std::string seq,
+                                   const std::string cnstrnt,
+                                   std::vector<double> &bppv);
 
   static double
   get_base_pair_probability_matrix(const std::string seq,
