@@ -101,7 +101,7 @@ void RNAUtils::get_base_pair_probability_vector(bool VERBOSE,
   }
   if (VERBOSE)
     cerr << "\r" << "CALCULATING BASE PAIR PROBABILITIES ... DONE"
-         << endl;
+         << "              " << endl;
 }
 
 /**
@@ -157,10 +157,11 @@ RNAUtils::get_base_pair_probability_vector(const string seq,
     copy(seq.begin() + cpos, seq.begin() + cpos + sub_len, seqc.begin());
     vector<char> conc(sub_len + 1);
     copy(cnstrnt.begin() + cpos, cnstrnt.begin() + cpos + sub_len, conc.begin());
+    assert(seqc.size() == conc.size());
 
     vector<double> bppv_local;
     MC mc;
-    mc.init_pf_fold(seq.size(), energy_pf);
+    mc.init_pf_fold(seqc.size(), energy_pf);
     double q = mc.pf_fold(&*seqc.begin(), &*conc.begin());
     if (q > std::numeric_limits<double>::min())
       mc.getProbVector(bppv_local, sub_len);

@@ -61,9 +61,14 @@ static void replace_Ns(vector<string> &sequences) {
   const Runif rng(std::numeric_limits<int>::max());
   vector<double> probs(
       vector<double>(smithlab::alphabet_size, 1.0 / smithlab::alphabet_size));
-  for (size_t i = 0; i < sequences.size(); ++i)
-    std::replace(
-        sequences[i].begin(), sequences[i].end(), 'N', sample_nuc(rng, probs));
+  for (size_t i = 0; i < sequences.size(); ++i) {
+    for (size_t j = 0; j < sequences[i].size(); j++) {
+      if (sequences[i][j] == 'N') {
+        std::replace(sequences[i].begin() + j, sequences[i].begin() + j + 1,
+                     'N', sample_nuc(rng, probs));
+      }
+    }
+  }
 }
 
 
