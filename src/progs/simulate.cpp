@@ -337,16 +337,13 @@ generateSequenceFromPWM(const vector<vector<double> > pwm) {
  * \param seq: the sequence to embed the occurrence in
  * \param pwm: the PWM to generate the occurrence from; should be indexed by
  *             position first, so PWM[i].size() == alphabet size for all i
- * \param indicators    \todo
  * \param pos: location to place the motif occurrence; if equal to
  *             SIMRNA::RANDOM_POSITION, the location is chosen randomly.
  * \throw SMITHLABException if the position is invalid (less than 0, or
  *        greater than seq.size() - motifLength)
  */
 size_t
-placeUnstructuredMotifOccurrence(string &seq,
-                                 const vector<vector<double> > &pwm,
-                                 vector<size_t> &indicators,
+placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm,
                                  const size_t pos = SIMRNA::RANDOM_POSITION) {
   // decide where to put the motif
   size_t motifLocation = pos;
@@ -368,7 +365,6 @@ placeUnstructuredMotifOccurrence(string &seq,
   }
 
   // place it..
-  indicators.push_back(motifLocation);
   string occurrence = generateSequenceFromPWM(pwm);
   seq.replace(seq.begin() + motifLocation,
               seq.begin() + motifLocation + occurrence.size(),
@@ -409,7 +405,6 @@ placeUnstructuredMotifOccurrence(string &seq,
  * \param pwm:          the PWM to generate the occurrence from; should be
  *                      indexed by position first, so pwm[i].size() == alphabet
  *                      size for all i.
- * \param indicators    \todo
  * \param pos:          location to place the motif occurrence; if equal to
  *                      SIMRNA::RANDOM_POSITION, the location is chosen randomly.
  * \param offset        the distance from the start of the ssRNA loop to the
@@ -426,7 +421,6 @@ placeUnstructuredMotifOccurrence(string &seq,
 size_t
 placeStructuredMotifOccurrence(string &seq,
                  const vector<vector<double> > &pwm,
-                 vector<size_t> &indicators,
                  const size_t pos = SIMRNA::RANDOM_POSITION,
                  const int offset = SIMRNA::DEFAULT_OFFSET_FROM_LOOP_START,
                  const size_t stemLength = SIMRNA::DEFAULT_STEM_LENGTH,
@@ -464,7 +458,6 @@ placeStructuredMotifOccurrence(string &seq,
     // we already checked that the sequence was big enough, so this is safe...
     motifLocation = randomSize_t(stemLength + offset,
                             seq.size() - (stemLength + loopLength - offset));
-    indicators.push_back(motifLocation);
   }
   // .. but a user-defined position might not be
   if ((motifLocation < stemLength + offset) ||
@@ -523,13 +516,17 @@ placeStructuredMotifOccurrence(string &seq,
 size_t
 placeFullDSMotifOccurrence(string &seq,
                  const vector<vector<double> > &pwm,
-                 vector<size_t> &indicators,
                  const size_t pos = SIMRNA::RANDOM_POSITION,
                  const size_t stemLength = SIMRNA::DEFAULT_STEM_LENGTH,
                  const size_t loopLength = SIMRNA::DEFAULT_LOOP_LENGTH) {
-  // todo PJU: I don't think the below condition is checked anywhere else; the
-  // assert is kind of nasty; change this to throw an exception.
-  assert(stemLength > pwm.size());
+  // we put the motif occurrence into the stem, so it must be at least as
+  // long as the PWM
+  if (stemLength < pwm.size()) {
+    stringstream ss;
+    ss << "failed to place dsRNA motif -- stem length (" << stemLength
+       << ") is shorter than motif length (" << pwm.size() << ")";
+    throw SMITHLABException(ss.str());
+  }
 
   double coinFlip = (double) rand() / RAND_MAX;
   int oset;
@@ -542,13 +539,15 @@ placeFullDSMotifOccurrence(string &seq,
     // must be > loopLength, but < loopLength + stemLength - pwm.size()
     oset = randomInt(loopLength, loopLength + stemLength - pwm.size());
   }
-  return placeStructuredMotifOccurrence(seq, pwm, indicators, pos,
-                                        oset, stemLength, loopLength);
+  return placeStructuredMotifOccurrence(seq, pwm, pos, oset,
+                                        stemLength, loopLength);
 }
 
 /****
  * \summary given a PWM, place an occurrence within a sequence such that it
- *          falls fully within a region of single-stranded RNA
+ *          falls fully within a region of single-stranded RNA. The structure
+ *          is imposed by contriving a stem loop and placing the motif in the
+ *          ssRNA loop section.
  *
  * \param seq:          the sequence to embed the occurrence in
  * \param pwm:          the PWM to generate the occurrence from; should be
@@ -556,22 +555,20 @@ placeFullDSMotifOccurrence(string &seq,
  *                      size for all i.
  * \param pos:          location to place the motif occurrence; if equal to
  *                      SIMRNA::RANDOM_POSITION, the location is chosen randomly.
- * \param stemLength    TODO
- * \param loopLength    TODO
+ * \param stemLength    the length of the dsRNA section, the stem.
+ * \param loopLength    the length of the ssRNA section, the loop.
  * \return the (rel.) location within the sequence where the motif was placed.
- * \throw TODO
  */
 size_t
 placeFullSSMotifOccurrence(string &seq,
                  const vector<vector<double> > &pwm,
-                 vector<size_t> &indicators,
                  const size_t pos = SIMRNA::RANDOM_POSITION,
                  const size_t stemLength = SIMRNA::DEFAULT_STEM_LENGTH,
                  const size_t loopLength = SIMRNA::DEFAULT_LOOP_LENGTH) {
   // pick an offset that puts the motif in the loop. Must be >= 0,
   // but < loopLength - pwm.size()
   double oset = randomSize_t(0, loopLength - pwm.size());
-  return placeStructuredMotifOccurrence(seq, pwm, indicators, pos, oset,
+  return placeStructuredMotifOccurrence(seq, pwm, pos, oset,
                                         stemLength, loopLength);
 }
 
@@ -582,8 +579,6 @@ placeFullSSMotifOccurrence(string &seq,
  *          level
  * \param seq        the sequence to place the motif ocurrence into.
  * \param pwm        the pwm to generate the occurrence from.
- * \param indicators the (relative) motif location will be added to this vector;
- *                   any existing entries in this vector are left untouched.
  * \param strType    the structure type to impose on the sequence
  *                   (with prob. equal to strLevel).
  * \param strLevel   0 <= strLevel <= 1; the probability that the motif will
@@ -594,23 +589,22 @@ placeFullSSMotifOccurrence(string &seq,
  */
 size_t
 placeMotif(string &seq, const vector< vector<double> > &pwm,
-           vector<size_t> &indicators,
            const string &strType = SIMRNA::unstructured,
            const double &strLevel = 1) {
   size_t motifLocation;
   const bool obeyStr = ((randomDouble(0,1) < strLevel));
   if (isEqualIgnoreCase(strType, SIMRNA::unstructured))
-    motifLocation = placeUnstructuredMotifOccurrence(seq, pwm, indicators);
+    motifLocation = placeUnstructuredMotifOccurrence(seq, pwm);
   else if (isEqualIgnoreCase(strType, SIMRNA::dsRNA)) {
     if (obeyStr)
-      motifLocation = placeFullDSMotifOccurrence(seq, pwm, indicators);
+      motifLocation = placeFullDSMotifOccurrence(seq, pwm);
     else
-      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm, indicators);
+      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm);
   } else if (isEqualIgnoreCase(strType, SIMRNA::ssRNA)) {
     if (obeyStr)
-      motifLocation = placeFullSSMotifOccurrence(seq, pwm, indicators);
+      motifLocation = placeFullSSMotifOccurrence(seq, pwm);
     else
-      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm, indicators);
+      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm);
   } else {
     throw SMITHLABException(strType + " isn't a valid structure type");
   }
@@ -622,12 +616,67 @@ placeMotif(string &seq, const vector< vector<double> > &pwm,
  *****************************************************************************/
 
 /***
+ * \summary Count the number of DEs that fall into each of the provided
+ *          regions (bins).
+ * \param events    must be sorted
+ * \param bins      must be non-overlapping and sorted.
+ * \param binCounts \todo
+ * \throws SMITHLABException \todo
+ */
+void
+countDEsIntoBuckets(const vector<GenomicRegion> &events,
+                    const vector<GenomicRegion> &bins,
+                    vector<size_t> &binCounts) {
+  if (!check_sorted(events))
+    throw SMITHLABException("DE event locations must be in sorted order");
+  if (!check_sorted(bins))
+    throw SMITHLABException("Regions must be in sorted order");
+  if (!noOverlappingRegions(bins))
+    throw SMITHLABException("Regions must be non-overlapping");
+
+  if ((bins.size() == 0) || (events.size() == 0)) return;
+
+  binCounts.resize(bins.size(), 0);
+  size_t bin_idx = 0, de_idx = 0;
+  while (bin_idx < bins.size()) {
+    // while we haven't run out of des, and the de chrom is less than the bin,
+    // or it's the same but the end of the de is still less than the start of
+    // the bin...
+    while ((de_idx < events.size()) &&
+           ((events[de_idx].get_chrom() < bins[bin_idx].get_chrom()) ||
+            ((events[de_idx].get_chrom() == bins[bin_idx].get_chrom()) &&
+                (events[de_idx].get_end() < bins[bin_idx].get_start())))) {
+      de_idx += 1;
+    }
+    // if we ran out of des, or the de chrom is greater than the bin, or it's
+    // the same but the start of the de is greater than the end of the bin...
+    if ((de_idx == events.size()) ||
+        (events[de_idx].get_chrom() > bins[bin_idx].get_chrom()) ||
+        ((events[de_idx].get_chrom() == bins[bin_idx].get_chrom()) &&
+            (events[de_idx].get_start() > bins[bin_idx].get_end())))
+      binCounts[bin_idx] = 0;
+    else {
+      // the de falls inside the bin; count them up while they
+      // continue to do so
+      while ((de_idx < events.size()) &&
+             (bins[bin_idx].overlaps(events[de_idx]))) {
+        binCounts[bin_idx] += 1;
+        de_idx += 1;
+      }
+    }
+    bin_idx += 1;
+  }
+}
+
+/***
  * \summary           place a diagnostic event randomly into the specified
  *                    region such that its distance from a given position is
  *                    geometrically distributed.
  * \param region      the genomic region that the event should occur within.
- * \param diagEvents  the vector of DE locations to place the event into. Any
- *                    existing items in this vector will be left untouched.
+ * \param diagEvents  the vector of DE counts to place the event into.
+ *                    Must have the same size as the region; diagEvents[x] will
+ *                    be incremented by 1, where x is the chosen location; all
+ *                    other values will be left untouched.
  * \param geoP        the parameter P for the geometric distribution to
  *                    determine the distance from the target location;
  *                    0 <= p <= 1
@@ -637,9 +686,10 @@ placeMotif(string &seq, const vector< vector<double> > &pwm,
  * \param rng         random number generator to use.
  * \throw SMITHLABException if geoP > 1 or geoP < 0.
  * \throw SMITHLABException if targetLoc is outside of the specified region.
+ * \throw SMITHLABException if region.size() != diagEvents.size()
  */
 void
-placeDEGeom (const GenomicRegion &region, vector<GenomicRegion> &diagEvents,
+placeDEGeom (const GenomicRegion &region, vector<size_t> &diagEvents,
              const double geoP, const size_t targetLoc,
              const Runif &rng = Runif()) {
   if ((geoP < 0) || (geoP > 1)) {
@@ -654,15 +704,28 @@ placeDEGeom (const GenomicRegion &region, vector<GenomicRegion> &diagEvents,
        << "outside of the specified region " << region;
     throw SMITHLABException(ss.str());
   }
+  if (region.get_width() != diagEvents.size()) {
+    stringstream ss;
+    ss << "failed to place DE; target region has length " << region.get_width()
+       << " but vector of DE counts has length " << diagEvents.size();
+    throw SMITHLABException(ss.str());
+  }
 
-  size_t deLoc;
+  size_t deDistance;
+  int dePosRelToRegionStart;
   do {
-    deLoc = generate_geometric_random_variable(rng, geoP);
-    if (rng.runif(0, 1) > 0.5) deLoc = region.get_start() + targetLoc + deLoc;
-    else deLoc = region.get_start() + targetLoc - deLoc;
-  } while ((deLoc < region.get_start()) || (deLoc > region.get_end()));
-  diagEvents.push_back(GenomicRegion(region.get_chrom(), deLoc, deLoc + 1,
-                                     region.get_name(), 0, region.get_strand()));
+    deDistance = generate_geometric_random_variable(rng, geoP);
+    if (rng.runif(0.0, 1.0) > 0.5) {
+      dePosRelToRegionStart = static_cast<int>(targetLoc) +\
+                              static_cast<int>(deDistance);
+    }
+    else {
+      dePosRelToRegionStart = static_cast<int>(targetLoc) -\
+                              static_cast<int>(deDistance);
+    }
+  } while ((dePosRelToRegionStart < 0) ||
+           (dePosRelToRegionStart > region.get_width()));
+  diagEvents[dePosRelToRegionStart] += 1;
 }
 
 /***
@@ -670,18 +733,27 @@ placeDEGeom (const GenomicRegion &region, vector<GenomicRegion> &diagEvents,
  *                    region such that its location follows a random uniform
  *                    distribution.
  * \param region      the genomic region that the event should occur within.
- * \param diagEvents  the vector of DE locations to place the event into. Any
- *                    existing items in this vector will be left untouched.
+ * \param diagEvents  the vector of DE counts to place the event into.
+ *                    Must have the same size as the region; diagEvents[x] will
+ *                    be incremented by 1, where x is the chosen location; all
+ *                    other values will be left untouched.
  * \param rng         random number generator to use.
+ * \throw SMITHLABException if region.size() != diagEvents.size()
  */
 void
-placeDERunif (const GenomicRegion &region, vector<GenomicRegion> &diagEvents,
+placeDERunif (const GenomicRegion &region, vector<size_t> &diagEvents,
               const Runif &rng = Runif()) {
+  if (region.get_width() != diagEvents.size()) {
+    stringstream ss;
+    ss << "failed to place DE; target region has length " << region.get_width()
+       << " but vector of DE counts has length " << diagEvents.size();
+    throw SMITHLABException(ss.str());
+  }
+
   size_t deLoc;
   // need size_t(0) to disambiguate the call
   deLoc = rng.runif(size_t(0), region.get_width());
-  diagEvents.push_back(GenomicRegion(region.get_chrom(), deLoc, deLoc + 1,
-                                     region.get_name(), 0, region.get_strand()));
+  diagEvents[deLoc] += 1;
 }
 
 /***
@@ -690,8 +762,10 @@ placeDERunif (const GenomicRegion &region, vector<GenomicRegion> &diagEvents,
  *                    position follows a geometric distribution
  * \param numDEs      the number of diagnostic events to place
  * \param region      the genomic region that the event should occur within.
- * \param diagEvents  the vector of DE locations to place the event into. Any
- *                    existing items in this vector will be left untouched.
+ * \param diagEvents  the vector of counts of DEs in this sequence;
+ *                    Must have the same size as the region; each diagEvents[x]
+ *                    will be incremented by 1, where the x's are the chosen
+ *                    DE locations; all other values will be left untouched
  * \param geoP        the parameter P for the geometric distribution to
  *                    determine the distance from the target location;
  *                    0 <= p <= 1
@@ -702,7 +776,7 @@ placeDERunif (const GenomicRegion &region, vector<GenomicRegion> &diagEvents,
  */
 void
 placeDEsGeom (const size_t numDEs, const GenomicRegion &region,
-              vector<GenomicRegion> &diagEvents, const double geoP,
+              vector<size_t> &diagEvents, const double geoP,
               const size_t targetLoc, const Runif &rng = Runif()) {
   for (size_t i = 0; i < numDEs; ++i)
     placeDEGeom(region, diagEvents, geoP, targetLoc, rng);
@@ -714,13 +788,15 @@ placeDEsGeom (const size_t numDEs, const GenomicRegion &region,
  *                    random uniform distribution
  * \param numDEs      the number of diagnostic events to place
  * \param region      the genomic region that the event should occur within.
- * \param diagEvents  the vector of DE locations to place the event into. Any
- *                    existing items in this vector will be left untouched.
+ * \param diagEvents  the vector of counts of DEs in this sequence;
+ *                    Must have the same size as the region; each diagEvents[x]
+ *                    will be incremented by 1, where the x's are the chosen
+ *                    DE locations; all other values will be left untouched
  * \param rng         random number generator to use.
  */
 void
 placeDEsRunif (const size_t numDEs, const GenomicRegion &region,
-               vector<GenomicRegion> &diagEvents, const Runif &rng = Runif()) {
+               vector<size_t> &diagEvents, const Runif &rng = Runif()) {
   for (size_t i = 0; i < numDEs; ++i)
     placeDERunif(region, diagEvents, rng);
 }
@@ -770,125 +846,109 @@ writeSequencesFasta(const vector<string> &sequences,
   if (out != &std::cout) delete out;
 }
 
-static string print_model(const vector<vector<double> > &M, const double p,
-    const int delta, const vector<GenomicRegion> &regions,
-    const vector<string> &sequences, const vector<size_t> &indicators) {
+/***
+ * \summary write the diagnostic events to the provided file. Format is comma-
+ *          separated; one sequence per line
+ * \param events TODO
+ * \param fn
+ * \throws SMITHLABException if fn could not be opened for writing
+ */
+void
+writeDiagnosticEvents(const vector<vector<size_t> > &events, const string &fn) {
+  ofstream deOut(fn.c_str());
+  if (!deOut.good()) {
+    throw SMITHLABException("Writing diagnostic events failed -- "
+                            "could not open " + fn + " for writing");
+  }
+  for (size_t i = 0; i < events.size(); ++i) {
+    for (size_t j = 0; j < events[i].size(); ++j) {
+      deOut << events[i][j];
+      if (j != (events[i].size() - 1)) deOut << ", ";
+    }
+    deOut << endl;
+  }
+}
 
+/***
+ * \summary TODO
+ *
+ * \param M             TODO
+ * \param p             TODO
+ * \param delta         TODO
+ * \param regions       TODO
+ * \param sequences     TODO
+ * \param indicators    TODO
+ * \param filename      TODO
+ * \throw SMITHLABException if
+ * \throw SMITHLABException if
+ */
+void
+writeAugmentedPWM (const vector<vector<double> > &M, const double p,
+                   const int delta, const vector<GenomicRegion> &regions,
+                   const vector<string> &sequences,
+                   const vector<size_t> &indicators, const string &filename) {
   // Check that the parameters make sense
-  stringstream ss;
-
   const size_t N = sequences.size();
   if (N <= 0) {
     stringstream ss;
     ss << "Building motif alignment failed. Reason: sequences vector is empty";
     throw SMITHLABException(ss.str());
   }
-
   if (N != indicators.size()) {
     stringstream ss;
-    ss << "Building motif alignment failed. Reason: expected " << N
-        << "indicator vectors, got only " << indicators.size();
+    ss << "Building motif alignment failed. Reason: expected " << N << " "
+       << "indicator vectors, got " << indicators.size();
     throw SMITHLABException(ss.str());
   }
 
-  ss << "AC\tDE_MODEL" << endl;
-  ss << "XX" << endl;
-  ss << "TY\tMotif" << endl;
-  ss << "XX" << endl;
-  ss << "P0\tA\tC\tG\tT" << endl;
+  ofstream matrixOut(filename.c_str());
+  if (!matrixOut.good()) {
+    throw SMITHLABException("Writing augmented PWM failed -- "
+                            "could not open " + filename + " for writing");
+  }
+
+  matrixOut << "AC\tDE_MODEL" << endl;
+  matrixOut << "XX" << endl;
+  matrixOut << "TY\tMotif" << endl;
+  matrixOut << "XX" << endl;
+  matrixOut << "P0\tA\tC\tG\tT" << endl;
 
 
   for (size_t j = 0; j < M.size(); j++) {
-    ss << "0" << j + 1 << "\t";
+    matrixOut << "0" << j + 1 << "\t";
     for (size_t b = 0; b < SIMRNA::RNA_ALPHABET_SIZE - 1; b++)
-      ss << (int) (M[j][b] * N) << "\t";
-    ss << (int) (M[j][SIMRNA::RNA_ALPHABET_SIZE - 1] * N) << endl;
+      matrixOut << (int) (M[j][b] * N) << "\t";
+    matrixOut << (int) (M[j][SIMRNA::RNA_ALPHABET_SIZE - 1] * N) << endl;
   }
-  ss << "XX" << endl;
-  ss << "AT\tGEO_P=" << p << endl;
-  ss << "AT\tGEO_delta=" << delta << endl;
-  ss << "XX" << endl;
+  matrixOut << "XX" << endl;
+  matrixOut << "AT\tGEO_P=" << p << endl;
+  matrixOut << "AT\tGEO_delta=" << delta << endl;
+  matrixOut << "XX" << endl;
 
   for (size_t n = 0; n < N; n++) {
-    ss << "BS\t" << sequences[n].substr(indicators[n], M.size()) << "; "
+    matrixOut << "BS\t" << sequences[n].substr(indicators[n], M.size()) << "; "
         << regions[n].get_chrom() << ":" << regions[n].get_start() << "-"
         << regions[n].get_end() << "; " << indicators[n] << "; " << M.size()
         << ";  ;" << ((regions[n].get_strand() == '+') ? "p; " : "n;") << endl;
   }
-  ss << "XX" << endl;
-  ss << "//" << endl;
-
-  return ss.str();
+  matrixOut << "XX" << endl;
+  matrixOut << "//" << endl;
 }
 
 
-
-
-
-
-
-/***
- * \summary Count the number of DEs that fall into each of the provided
- *          regions (bins).
- * \param events    must be sorted
- * \param bins      must be non-overlapping and sorted.
- * \param binCounts \todo
- * \throws SMITHLABException \todo
- */
-void
-countDEsIntoBuckets(const vector<GenomicRegion> &events,
-               const vector<GenomicRegion> &bins, vector<size_t> &binCounts) {
-  if (!check_sorted(events))
-    throw SMITHLABException("DE event locations must be in sorted order");
-  if (!check_sorted(bins))
-    throw SMITHLABException("Regions must be in sorted order");
-  if (!noOverlappingRegions(bins))
-    throw SMITHLABException("Regions must be non-overlapping");
-
-  assert(events.size() >= 1);
-  assert(bins.size() >= 1);
-  binCounts.resize(bins.size(), 0);
-
-  size_t bin_idx = 0, de_idx = 0;
-  while (bin_idx < bins.size()) {
-    // while we haven't run out of des, and the de chrom is less than the bin,
-    // or it's the same but the end of the de is still less than the start of
-    // the bin...
-    while ((de_idx < events.size()) &&
-           ((events[de_idx].get_chrom() < bins[bin_idx].get_chrom()) ||
-            ((events[de_idx].get_chrom() == bins[bin_idx].get_chrom()) &&
-                (events[de_idx].get_end() < bins[bin_idx].get_start())))) {
-      de_idx += 1;
-    }
-    // if we ran out of des, or the de chrom is greater than the bin, or it's
-    // the same but the start of the de is greater than the end of the bin...
-    if ((de_idx == events.size()) ||
-        (events[de_idx].get_chrom() > bins[bin_idx].get_chrom()) ||
-        ((events[de_idx].get_chrom() == bins[bin_idx].get_chrom()) &&
-            (events[de_idx].get_start() > bins[bin_idx].get_end())))
-      binCounts[bin_idx] = 0;
-    else {
-      // the de falls inside the bin; count them up while they
-      // continue to do so
-      while ((de_idx < events.size()) &&
-             (bins[bin_idx].overlaps(events[de_idx]))) {
-        binCounts[bin_idx] += 1;
-        de_idx += 1;
-      }
-    }
-    bin_idx += 1;
-  }
-}
-
+/*****************************************************************************
+ * Main entry point
+ *****************************************************************************/
 
 /****
- * @summary: TODO
+ * \summary main entry point for the program; parses command line, loads data,
+ *          builds PWM, places motifs and diagnostic events, writes output.
  */
 int
 main(int argc, const char **argv) {
   try {
     string output_basefn;
-    size_t deNoiseLevel = 0;
+    double deNoiseLevel = 0;
     size_t strLevel = 1;
     string strType = SIMRNA::unstructured;
     double occLevel = 1;
@@ -898,6 +958,8 @@ main(int argc, const char **argv) {
     bool VERBOSE = false;
     double geoP = randomDouble(0, 1);
     int geoOffset = randomInt(SIMRNA::MIN_DE_OFFSET, SIMRNA::MAX_DE_OFFSET);
+
+    // TODO specify defaults below for length, ic, frac of de
 
     /****************** COMMAND LINE OPTIONS ********************/
     static OptionParser opt_parse(strip_path(argv[0]),
@@ -923,8 +985,8 @@ main(int argc, const char **argv) {
                       "from a real experiment; used to simulated number of "
                       "DEs in each sequence", OptionParser::OPTIONAL, deFile);
     opt_parse.add_opt("de_noise", 'n', "fraction of DEs that are noise (i.e. "
-                      "not associated with a motif occurrence)",
-                      OptionParser::OPTIONAL, deNoiseLevel);
+                      "not associated with a motif occurrence). 0 <= n <= 1;"
+                      "default: 1", OptionParser::OPTIONAL, deNoiseLevel);
     opt_parse.add_opt("de_p", 'p', "the parameter for the geometric "
                       "distribution governing distance from the motif placement "
                       "to DEs. Default: randomly selected between 0 and 1.",
@@ -935,6 +997,7 @@ main(int argc, const char **argv) {
                       " and " + intToString(SIMRNA::MAX_DE_OFFSET),
                       OptionParser::OPTIONAL, geoOffset);
     opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
+
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
     if (argc == 1 || opt_parse.help_requested()) {
@@ -950,9 +1013,13 @@ main(int argc, const char **argv) {
       return EXIT_SUCCESS;
     }
     if ((site_length < 4 || site_length > 10)) {
-      cerr << "target length should satisfy: (3 < target length <= 10)"
-           << endl;
-      return EXIT_SUCCESS;
+      throw SMITHLABException("target length should satisfy: "
+                              "(3 < target length <= 10)");
+    }
+    if (leftover_args.size() < 2) {
+      throw SMITHLABException("Must provide BED file and Fasta file of "
+                              "sequences to place simulated motif "
+                              "occurrences into.");
     }
     const string input_bed_file(leftover_args.front());
     const string input_fasta_file(leftover_args.back());
@@ -963,6 +1030,9 @@ main(int argc, const char **argv) {
       throw SMITHLABException("structure level parameter cannot be used when "
                               "simulating unstructured motifs");
     }
+
+    if ((deNoiseLevel < 0) || (deNoiseLevel > 1))
+      throw SMITHLABException("DE noise level must be between 0 and 1");
 
     // check up front that a valid structure was selected, so we don't waste
     // time if it's junk.
@@ -1027,50 +1097,45 @@ main(int argc, const char **argv) {
       }
     }
 
-    // figure out what the output filenames will be
-    string outfile_seq = output_basefn + ".fa";
-    string outfile_mat = output_basefn + ".mat";
-    string outfile_de = output_basefn + "_de.bed";
-
     // place the motif occurrences and diagnostic events into the sequences
-    vector<size_t> indicators;
-    vector<GenomicRegion> diagnosticEvents;
     if (VERBOSE) cerr << "SIMULATING MOTIF OCCURRENCES... ";
+    vector<size_t> indicators(seqs.size());
+    vector< vector<size_t> > diagnosticEvents (seqs.size());
+    for (size_t i = 0; i < diagnosticEvents.size(); ++i)
+      diagnosticEvents[i].resize(seqs[i].size());
     for (size_t i = 0; i < seqs.size(); ++i) {
       // first, decide whether we will even place a motif in this sequence
-      bool place = (randomDouble(0,1) > occLevel);
+      bool place = (randomDouble(0,1) < occLevel);
       size_t numDEsToPlace = numDEsPerSeq[i], numRealDEsPlaced = 0;
 
       if (place) {
         // place the motif with the desired structure
-        const size_t motifLoc = placeMotif(seqs[i], pwm, indicators,
-                                           strType, strLevel);
+        const size_t motifLoc = placeMotif(seqs[i], pwm, strType, strLevel);
+        indicators[i] = motifLoc;
 
         // place the real DEs
-        assert(numDEsToPlace >= 0);
-        // todo check that deNoiseLevel is >= 0 and <= 1
-        numRealDEsPlaced = ceil(numDEsToPlace * deNoiseLevel);
-        placeDEsGeom(numRealDEsPlaced, regions[i], diagnosticEvents, geoP,
+        numRealDEsPlaced = ceil(numDEsToPlace * (1-deNoiseLevel));
+        placeDEsGeom(numRealDEsPlaced, regions[i], diagnosticEvents[i], geoP,
                      motifLoc);
       }
 
       // places the noise DEs for this sequence
       placeDEsRunif(numDEsToPlace-numRealDEsPlaced,
-                    regions[i], diagnosticEvents);
+                    regions[i], diagnosticEvents[i]);
     }
     if (VERBOSE) cerr << "DONE." << endl;
 
+    // figure out what the output filenames will be
+    string outfile_seq = output_basefn + ".fa";
+    string outfile_mat = output_basefn + ".mat";
+    string outfile_de = output_basefn + "_de.dat";
+
     // time to write output...
     if (VERBOSE) cerr << "WRITING OUTPUT... ";
-    // sequences
     writeSequencesFasta(seqs, regions, outfile_seq);
-    // matrix
-    ofstream out_mat(outfile_mat.c_str());
-    out_mat << print_model(pwm, geoP, geoOffset, regions, seqs, indicators);
-    // diagnostic events
-    ofstream de_out(outfile_de.c_str());
-    copy(diagnosticEvents.begin(), diagnosticEvents.end(),
-         std::ostream_iterator<GenomicRegion>(de_out, "\n"));
+    writeAugmentedPWM(pwm, geoP, geoOffset, regions, seqs,
+                      indicators, outfile_mat);
+    if (!deFile.empty()) writeDiagnosticEvents(diagnosticEvents, outfile_de);
     if (VERBOSE) cerr << "DONE" << endl;;
 
   }      
