@@ -79,7 +79,7 @@ thermo_debug : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
 simulate : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o RNG.o)
-	
+
 extractDEs : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o MappedRead.o)
 
