@@ -865,6 +865,8 @@ writeDiagnosticEvents(const vector<vector<size_t> > &events, const string &fn) {
  * \param regions       TODO
  * \param sequences     TODO
  * \param indicators    TODO
+ * \param seqInd        seqInd[i] is true if the ith sequence has an occurrence
+ *                      of the motif, and false otherwise.
  * \param filename      TODO
  * \throw SMITHLABException if
  * \throw SMITHLABException if
@@ -873,7 +875,8 @@ void
 writeAugmentedPWM (const vector<vector<double> > &M, const double p,
                    const int delta, const vector<GenomicRegion> &regions,
                    const vector<string> &sequences,
-                   const vector<size_t> &indicators, const string &filename) {
+                   const vector<size_t> &indicators, const vector<bool> &seqInd,
+                   const string &filename) {
   // Check that the parameters make sense
   const size_t N = sequences.size();
   if (N <= 0) {
@@ -913,10 +916,13 @@ writeAugmentedPWM (const vector<vector<double> > &M, const double p,
   matrixOut << "XX" << endl;
 
   for (size_t n = 0; n < N; n++) {
-    matrixOut << "BS\t" << sequences[n].substr(indicators[n], M.size()) << "; "
-        << regions[n].get_chrom() << ":" << regions[n].get_start() << "-"
-        << regions[n].get_end() << "; " << indicators[n] << "; " << M.size()
-        << ";  ;" << ((regions[n].get_strand() == '+') ? "p; " : "n;") << endl;
+    if (seqInd[n]) {
+      matrixOut << "BS\t" << sequences[n].substr(indicators[n], M.size())
+                << "; " << regions[n].get_chrom() << ":"
+                << regions[n].get_start() << "-" << regions[n].get_end()
+                << "; " << indicators[n] << "; " << M.size() << ";  ;"
+                << ((regions[n].get_strand() == '+') ? "p; " : "n;") << endl;
+    }
   }
   matrixOut << "XX" << endl;
   matrixOut << "//" << endl;
@@ -973,8 +979,8 @@ generateAndPlace(const int siteLen, const double targetIC,
                  const double geoP, const int geoOffset,
                  const double deNoiseLevel, vector<vector<double> > &pwm,
                  vector< vector<size_t> > &diagEvents,
-                 vector<size_t> &indicators, const Runif &rng, gsl_rng *gr,
-                 const bool VERBOSE) {
+                 vector<size_t> &indicators, vector<bool> &seqInd,
+                 const Runif &rng, gsl_rng *gr, const bool VERBOSE) {
   // Check that dimensions match up
   if (numDEsPerSeq.size() != seqs.size()) {
     stringstream ss;
@@ -1033,6 +1039,9 @@ generateAndPlace(const int siteLen, const double targetIC,
       numRealDEsPlaced = ceil(numDEsToPlace * (1-deNoiseLevel));
       placeDEsGeom(numRealDEsPlaced, regions[i], diagEvents[i], geoP,
                    geoOffset, motifLoc, rng);
+      seqInd.push_back(true);
+    } else {
+      seqInd.push_back(false);
     }
 
     // places the noise DEs for this sequence
@@ -1188,10 +1197,12 @@ main(int argc, const char **argv) {
       // occurrences and diagnostic events into the sequences.
       vector<vector<double> > pwm;
       vector<size_t> indicators(seqs.size());
+      vector<bool> seqInd;
       vector< vector<size_t> > diagnosticEvents (seqs.size());
       generateAndPlace(site_length, target_ic, occLevel, strType, strLevel,
-                       numDEsPerSeq, seqs, regions, geoP, geoOffset, deNoiseLevel,
-                       pwm, diagnosticEvents, indicators, rng, gr, VERBOSE);
+                       numDEsPerSeq, seqs, regions, geoP, geoOffset,
+                       deNoiseLevel, pwm, diagnosticEvents, indicators,
+                       seqInd, rng, gr, VERBOSE);
 
       // figure out what the output filenames will be
       string outfile_mat, outfile_de;
@@ -1206,7 +1217,7 @@ main(int argc, const char **argv) {
       // write the PWM and DEs for this motif
       if (VERBOSE) cerr << "WRITING PWM... ";
       writeAugmentedPWM(pwm, geoP, geoOffset, regions, seqs,
-                        indicators, outfile_mat);
+                        indicators, seqInd, outfile_mat);
       if (VERBOSE) cerr << "DONE" << endl;
       if (!deFile.empty()) {
         if (VERBOSE) cerr << "WRITING DIAG. EVENTS... ";
