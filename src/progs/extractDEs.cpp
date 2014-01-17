@@ -35,7 +35,7 @@
 #include "IO.hpp"
 #include "GenomicRegion.hpp"
 #include "OptionParser.hpp"
-#include "Smithlab_os.hpp"
+#include "smithlab_os.hpp"
 
 using std::string;
 using std::vector;
