@@ -496,6 +496,13 @@ load_structures(const string structure_file,
       double d;
       stringstream s2d(s);
       s2d >> d;
+      if ((d < 0) || (d > 1)) {
+        stringstream ss;
+        ss << "Reading structure file failed. Could not parse '" << s << "'; "
+           << "resultant value was '" << d << "'. Expected floating point "
+           << "value between 0 and 1. Check file format";
+        throw SMITHLABException(ss.str());
+      }
       record.push_back(d);
     }
     structures.push_back(record);

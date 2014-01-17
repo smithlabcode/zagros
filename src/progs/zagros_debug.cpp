@@ -431,7 +431,7 @@ int main(int argc,
         indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
       }
 
-      model.expectation_maximization(seqs, diagnostic_events,
+      model.expectationMax(seqs, diagnostic_events,
              secondary_structure, indicators, has_motif);
 
       out << format_motif(model, "ZAGROS" + toa(i), targets, seqs,

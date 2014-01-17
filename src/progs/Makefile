@@ -21,7 +21,7 @@ ifndef SMITHLAB_CPP
 $(error Must define SMITHLAB_CPP variable)
 endif
 
-PROGS = zagros zagros_debug thermo thermo_debug simulate
+PROGS = zagros zagros_debug thermo thermo_debug simulate extractDEs
 
 CXX = g++
 CFLAGS = -g -Wall -fPIC -fmessage-length=50
@@ -79,6 +79,11 @@ thermo_debug : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
 simulate : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o RNG.o)
+	
+extractDEs : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
+	smithlab_utils.o OptionParser.o MappedRead.o)
+
+extractDEs : $(addprefix $(COMMON_DIR), IO.o)
 
 install: all
 	@mkdir -p ../../bin

@@ -73,6 +73,10 @@ namespace SIMRNA {
   const static double DEFAULT_BACKGROUND[RNA_ALPHABET_SIZE] = \
                                                       {0.3,  0.2,  0.2,  0.3};
 
+  // limits on site length
+  const static size_t MIN_SITE_LEN = 4;
+  const static size_t MAX_SITE_LEN = 10;
+
   // types of structure
   const static string ssRNA = "ssRNA";
   const static string dsRNA = "dsRNA";
@@ -125,7 +129,7 @@ isEqualIgnoreCase(string s, string t) {
  * \summary Convert a size_t to a string
  */
 string
-convertSizet(const size_t number) {
+sizetToString(const size_t number) {
   std::stringstream ss;
   ss << number;
   return ss.str();
@@ -680,6 +684,7 @@ countDEsIntoBuckets(const vector<GenomicRegion> &events,
  * \param geoP        the parameter P for the geometric distribution to
  *                    determine the distance from the target location;
  *                    0 <= p <= 1
+ * \param geoOffset   offset the mode of the distribution by this many bases
  * \param targetLoc   the (relative to region start) location within the region
  *                    around which DE occurrences will be geometrically
  *                    distributed.
@@ -690,8 +695,8 @@ countDEsIntoBuckets(const vector<GenomicRegion> &events,
  */
 void
 placeDEGeom (const GenomicRegion &region, vector<size_t> &diagEvents,
-             const double geoP, const size_t targetLoc,
-             const Runif &rng = Runif()) {
+             const double geoP, const int geoOffset, const size_t targetLoc,
+             const Runif &rng) {
   if ((geoP < 0) || (geoP > 1)) {
     stringstream ss;
     ss << "failed to place DE; geometric distribution parameter (" << geoP
@@ -711,16 +716,25 @@ placeDEGeom (const GenomicRegion &region, vector<size_t> &diagEvents,
     throw SMITHLABException(ss.str());
   }
 
+  // adjust target location for offset (delta)
+  size_t tLoc = targetLoc;
+  if (geoOffset + static_cast<int>(targetLoc) < 0)
+    tLoc = 0;
+  else if (geoOffset + static_cast<int>(targetLoc) >= region.get_width())
+    tLoc = region.get_width() - 1;
+  else
+    tLoc = geoOffset + targetLoc;
+
   size_t deDistance;
   int dePosRelToRegionStart;
   do {
     deDistance = generate_geometric_random_variable(rng, geoP);
     if (rng.runif(0.0, 1.0) > 0.5) {
-      dePosRelToRegionStart = static_cast<int>(targetLoc) +\
+      dePosRelToRegionStart = static_cast<int>(tLoc) +\
                               static_cast<int>(deDistance);
     }
     else {
-      dePosRelToRegionStart = static_cast<int>(targetLoc) -\
+      dePosRelToRegionStart = static_cast<int>(tLoc) -\
                               static_cast<int>(deDistance);
     }
   } while ((dePosRelToRegionStart < 0) ||
@@ -742,7 +756,7 @@ placeDEGeom (const GenomicRegion &region, vector<size_t> &diagEvents,
  */
 void
 placeDERunif (const GenomicRegion &region, vector<size_t> &diagEvents,
-              const Runif &rng = Runif()) {
+              const Runif &rng) {
   if (region.get_width() != diagEvents.size()) {
     stringstream ss;
     ss << "failed to place DE; target region has length " << region.get_width()
@@ -769,6 +783,7 @@ placeDERunif (const GenomicRegion &region, vector<size_t> &diagEvents,
  * \param geoP        the parameter P for the geometric distribution to
  *                    determine the distance from the target location;
  *                    0 <= p <= 1
+ * \param geoOffset   offset the mode of the distribution by this many bases
  * \param targetLoc   the (relative to region start) location within the region
  *                    around which DE occurrences will be geometrically
  *                    distributed.
@@ -777,9 +792,10 @@ placeDERunif (const GenomicRegion &region, vector<size_t> &diagEvents,
 void
 placeDEsGeom (const size_t numDEs, const GenomicRegion &region,
               vector<size_t> &diagEvents, const double geoP,
-              const size_t targetLoc, const Runif &rng = Runif()) {
+              const int geoOffset, const size_t targetLoc,
+              const Runif &rng) {
   for (size_t i = 0; i < numDEs; ++i)
-    placeDEGeom(region, diagEvents, geoP, targetLoc, rng);
+    placeDEGeom(region, diagEvents, geoP, geoOffset, targetLoc, rng);
 }
 
 /***
@@ -796,7 +812,7 @@ placeDEsGeom (const size_t numDEs, const GenomicRegion &region,
  */
 void
 placeDEsRunif (const size_t numDEs, const GenomicRegion &region,
-               vector<size_t> &diagEvents, const Runif &rng = Runif()) {
+               vector<size_t> &diagEvents, const Runif &rng) {
   for (size_t i = 0; i < numDEs; ++i)
     placeDERunif(region, diagEvents, rng);
 }
@@ -937,8 +953,132 @@ writeAugmentedPWM (const vector<vector<double> > &M, const double p,
 
 
 /*****************************************************************************
- * Main entry point
+ * Main simulation functions and entry point
  *****************************************************************************/
+
+/***
+ * \brief generate a PWM, place structured occurrences into a set of sequences,
+ *        and generate diagnostic events for the occurrences.
+ *
+ * \param siteLength   [in]         the length of the motif to generate
+ * \param targetIC     [in]         the target info. content of the seq. pwm.
+ * \param occLevel     [in]         the fraction of seqs to place an occ. into
+ * \param strType      [in]         structure type of the occurrences
+ * \param strLevel     [in]         the frac. of occs. that are given strType
+ * \param numDEsPerSeq [in]         numDEsPerSeq[i] gives the number of DEs to
+ *                                  simulate for the ith sequence
+ * \param seqs         [in/out]     occurrences will be placed into these seqs
+ * \param regions      [in]         genomic regions corresponding to seqs
+ * \param geoP         [in]         the rate parameter for the geometric
+ *                                  distribution governing DE distance from
+ *                                  motif location
+ * \param geoOffset    [in]         an offset to apply to the shift the mode of
+ *                                  the DE locations distribution from the motif
+ *                                  start position.
+ * \param deNoiseLevel [in]         the fraction of DEs that are noise (not
+ *                                  associated with a motif occ.)
+ * \param pwm          [out]        the resultant pwm will be placed into this;
+ *                                  any existing data will be cleared.
+ * \param diagEvents   [out]        counts of diagnostic events will be placed
+ *                                  in here such that diagEvents[i][j] is the
+ *                                  number of diagnostic events that occurred at
+ *                                  position j of sequence i; any existing
+ *                                  data will be cleared.
+ * \param indicators   [out]        the positions of the motif placements will
+ *                                  be added to this such that indicators[i]
+ *                                  gives the (relative) location of the motif
+ *                                  occurrence in the ith sequence; any existing
+ *                                  data will be cleared.
+ * \param VERBOSE      [in]         If true, extra status messages about
+ *                                  progress are printed to STDERR.
+ */
+void
+generateAndPlace(const int siteLen, const double targetIC,
+                 const double occLevel, const string &strType,
+                 const double strLevel, const vector<size_t> &numDEsPerSeq,
+                 vector<string> &seqs, const vector<GenomicRegion> &regions,
+                 const double geoP, const int geoOffset,
+                 const double deNoiseLevel, vector<vector<double> > &pwm,
+                 vector< vector<size_t> > &diagEvents,
+                 vector<size_t> &indicators, const bool VERBOSE) {
+  // Check that dimensions match up
+  if (numDEsPerSeq.size() != seqs.size()) {
+    stringstream ss;
+    ss << "failed generating diagnostic events; vector of diagnostic events "
+       << "per sequence has dimension (" << numDEsPerSeq.size() << ") not "
+       << "equal to the number of sequences (" << seqs.size() << ")";
+    throw SMITHLABException(ss.str());
+  }
+  if (seqs.size() != regions.size()) {
+    stringstream ss;
+    ss << "failed generating PWM; vector of regions has dimension ("
+       << regions.size() << ") not equal to the number of sequences ("
+       << seqs.size() << ")";
+    throw SMITHLABException(ss.str());
+  }
+  // check range of parameters
+  if ((geoP < 0) || (geoP > 1))
+    throw SMITHLABException("Geom. rate parameter must be between 0 and 1");
+  if ((deNoiseLevel < 0) || (deNoiseLevel > 1))
+    throw SMITHLABException("DE noise level must be between 0 and 1");
+  if ((siteLen < SIMRNA::MIN_SITE_LEN || siteLen > SIMRNA::MAX_SITE_LEN)) {
+    throw SMITHLABException("target length should satisfy: " +\
+       sizetToString(SIMRNA::MIN_SITE_LEN) + " <= target length <= " +\
+       sizetToString(SIMRNA::MAX_SITE_LEN));
+  }
+
+  // seed the random number generator using the time, and make a uniform
+  // random number generator object, and a gsl random number generator
+  if (VERBOSE) cerr << "MAKING RANDOM NUMBER GENERATOR... ";
+  struct timeval time;
+  gettimeofday(&time,NULL);
+  size_t seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
+  srand(seed);
+  const Runif rng(seed);
+  gsl_rng *gr = gsl_rng_alloc(gsl_rng_mt19937);
+  gsl_rng_set(gr, static_cast<unsigned long int >(seed));
+  if (VERBOSE) cerr << "DONE" << endl;
+
+  // generate the PWM for the motif we're going to place
+  if (VERBOSE) cerr << "GENERATING PWM... ";
+  generate_targeted_position_weight_matrix(gr, siteLen,
+                                           SIMRNA::RNA_ALPHABET_SIZE,
+                                           targetIC, pwm);
+  if (VERBOSE) {
+    cerr << "DONE. GENERATED MATRIX: " << endl;
+    for (size_t j = 0; j < pwm.size(); j++) {
+      for (size_t k = 0; k < pwm[j].size(); k++)
+        cerr << pwm[j][k] << ", ";
+      cerr << endl;
+    }
+  }
+
+  // place the motif occurrences and diagnostic events into the sequences
+  if (VERBOSE) cerr << "SIMULATING MOTIF OCCURRENCES... ";
+  for (size_t i = 0; i < diagEvents.size(); ++i)
+    diagEvents[i].resize(seqs[i].size());
+  for (size_t i = 0; i < seqs.size(); ++i) {
+    // first, decide whether we will even place a motif in this sequence
+    bool place = (randomDouble(0,1) < occLevel);
+    size_t numDEsToPlace = numDEsPerSeq[i], numRealDEsPlaced = 0;
+
+    if (place) {
+      // place the motif with the desired structure
+      const size_t motifLoc = placeMotif(seqs[i], pwm, strType, strLevel);
+      indicators[i] = motifLoc;
+
+      // place the real DEs
+      numRealDEsPlaced = ceil(numDEsToPlace * (1-deNoiseLevel));
+      placeDEsGeom(numRealDEsPlaced, regions[i], diagEvents[i], geoP,
+                   geoOffset, motifLoc, rng);
+    }
+
+    // places the noise DEs for this sequence
+    placeDEsRunif(numDEsToPlace-numRealDEsPlaced, regions[i],
+                  diagEvents[i], rng);
+  }
+  if (VERBOSE) cerr << "DONE." << endl;
+}
 
 /****
  * \summary main entry point for the program; parses command line, loads data,
@@ -958,8 +1098,10 @@ main(int argc, const char **argv) {
     bool VERBOSE = false;
     double geoP = randomDouble(0, 1);
     int geoOffset = randomInt(SIMRNA::MIN_DE_OFFSET, SIMRNA::MAX_DE_OFFSET);
+    size_t numMotifs = 1;
 
     // TODO specify defaults below for length, ic, frac of de
+    // TODO fix about message
 
     /****************** COMMAND LINE OPTIONS ********************/
     static OptionParser opt_parse(strip_path(argv[0]),
@@ -996,7 +1138,10 @@ main(int argc, const char **argv) {
                       "uniform between " + intToString(SIMRNA::MIN_DE_OFFSET) +\
                       " and " + intToString(SIMRNA::MAX_DE_OFFSET),
                       OptionParser::OPTIONAL, geoOffset);
-    opt_parse.add_opt("verbose", 'v', "print more run info", false, VERBOSE);
+    opt_parse.add_opt("num_motifs", 'm', "the number of motifs to simulate. "
+                      "Default: 1", OptionParser::OPTIONAL, numMotifs);
+    opt_parse.add_opt("verbose", 'v', "print more run info",
+                      OptionParser::OPTIONAL, VERBOSE);
 
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
@@ -1012,10 +1157,6 @@ main(int argc, const char **argv) {
       cerr << opt_parse.option_missing_message() << endl;
       return EXIT_SUCCESS;
     }
-    if ((site_length < 4 || site_length > 10)) {
-      throw SMITHLABException("target length should satisfy: "
-                              "(3 < target length <= 10)");
-    }
     if (leftover_args.size() < 2) {
       throw SMITHLABException("Must provide BED file and Fasta file of "
                               "sequences to place simulated motif "
@@ -1030,9 +1171,6 @@ main(int argc, const char **argv) {
       throw SMITHLABException("structure level parameter cannot be used when "
                               "simulating unstructured motifs");
     }
-
-    if ((deNoiseLevel < 0) || (deNoiseLevel > 1))
-      throw SMITHLABException("DE noise level must be between 0 and 1");
 
     // check up front that a valid structure was selected, so we don't waste
     // time if it's junk.
@@ -1057,18 +1195,6 @@ main(int argc, const char **argv) {
       throw SMITHLABException("inconsistent region names in FASTA/BED files");
     if (VERBOSE) cerr << "DONE (FILES MATCH)" << endl;
 
-    // seed the random number generator using the time, and make a uniform
-    // random number generator object, and a gsl random number generator
-    if (VERBOSE) cerr << "MAKING RANDOM NUMBER GENERATOR... ";
-    struct timeval time;
-    gettimeofday(&time,NULL);
-    size_t seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
-    srand(seed);
-    const Runif rng(seed);
-    gsl_rng *gr = gsl_rng_alloc(gsl_rng_mt19937);
-    gsl_rng_set(gr, static_cast<unsigned long int >(seed));
-    if (VERBOSE) cerr << "DONE" << endl;
-
     // read the distribution of the number of diagnostic events per sequence
     vector<size_t> numDEsPerSeq;
     if (!deFile.empty()) {
@@ -1082,62 +1208,46 @@ main(int argc, const char **argv) {
       numDEsPerSeq.resize(seqs.size(), 0);
     }
 
-    // generate the PWM for the motif we're going to place
-    if (VERBOSE) cerr << "GENERATING PWM... ";
-    vector<vector<double> > pwm;
-    generate_targeted_position_weight_matrix(gr, site_length,
-                                             SIMRNA::RNA_ALPHABET_SIZE,
-                                             target_ic, pwm);
-    if (VERBOSE) {
-      cerr << "DONE. GENERATED MATRIX: " << endl;
-      for (size_t j = 0; j < pwm.size(); j++) {
-        for (size_t k = 0; k < pwm[j].size(); k++)
-          cerr << pwm[j][k] << ", ";
-        cerr << endl;
+    for (size_t i = 0; i < numMotifs; ++i) {
+      if ((VERBOSE) && (numMotifs != 1))
+        cerr << "SIMULATING MOTIF " << (i+1) << endl;
+
+      // generate the PWM for the motif we're going to place, and place the motif
+      // occurrences and diagnostic events into the sequences.
+      vector<vector<double> > pwm;
+      vector<size_t> indicators(seqs.size());
+      vector< vector<size_t> > diagnosticEvents (seqs.size());
+      generateAndPlace(site_length, target_ic, occLevel, strType, strLevel,
+                       numDEsPerSeq, seqs, regions, geoP, geoOffset, deNoiseLevel,
+                       pwm, diagnosticEvents, indicators, VERBOSE);
+
+      // figure out what the output filenames will be
+      string outfile_mat, outfile_de;
+      if (numMotifs == 1) {
+        outfile_mat = output_basefn + ".mat";
+        outfile_de  = output_basefn + "_de.dat";
+      } else {
+        outfile_mat = output_basefn + "_" + sizetToString(i) + ".mat";
+        outfile_de  = output_basefn + "_" + sizetToString(i) + "_de.dat";
+      }
+
+      // write the PWM and DEs for this motif
+      if (VERBOSE) cerr << "WRITING PWM... ";
+      writeAugmentedPWM(pwm, geoP, geoOffset, regions, seqs,
+                        indicators, outfile_mat);
+      if (VERBOSE) cerr << "DONE" << endl;
+      if (!deFile.empty()) {
+        if (VERBOSE) cerr << "WRITING DIAG. EVENTS... ";
+        writeDiagnosticEvents(diagnosticEvents, outfile_de);
+        if (VERBOSE) cerr << endl;
       }
     }
 
-    // place the motif occurrences and diagnostic events into the sequences
-    if (VERBOSE) cerr << "SIMULATING MOTIF OCCURRENCES... ";
-    vector<size_t> indicators(seqs.size());
-    vector< vector<size_t> > diagnosticEvents (seqs.size());
-    for (size_t i = 0; i < diagnosticEvents.size(); ++i)
-      diagnosticEvents[i].resize(seqs[i].size());
-    for (size_t i = 0; i < seqs.size(); ++i) {
-      // first, decide whether we will even place a motif in this sequence
-      bool place = (randomDouble(0,1) < occLevel);
-      size_t numDEsToPlace = numDEsPerSeq[i], numRealDEsPlaced = 0;
-
-      if (place) {
-        // place the motif with the desired structure
-        const size_t motifLoc = placeMotif(seqs[i], pwm, strType, strLevel);
-        indicators[i] = motifLoc;
-
-        // place the real DEs
-        numRealDEsPlaced = ceil(numDEsToPlace * (1-deNoiseLevel));
-        placeDEsGeom(numRealDEsPlaced, regions[i], diagnosticEvents[i], geoP,
-                     motifLoc);
-      }
-
-      // places the noise DEs for this sequence
-      placeDEsRunif(numDEsToPlace-numRealDEsPlaced,
-                    regions[i], diagnosticEvents[i]);
-    }
-    if (VERBOSE) cerr << "DONE." << endl;
-
-    // figure out what the output filenames will be
+    // write the final sequences out
+    if (VERBOSE) cerr << "WRITING SEQUENCES... ";
     string outfile_seq = output_basefn + ".fa";
-    string outfile_mat = output_basefn + ".mat";
-    string outfile_de = output_basefn + "_de.dat";
-
-    // time to write output...
-    if (VERBOSE) cerr << "WRITING OUTPUT... ";
     writeSequencesFasta(seqs, regions, outfile_seq);
-    writeAugmentedPWM(pwm, geoP, geoOffset, regions, seqs,
-                      indicators, outfile_mat);
-    if (!deFile.empty()) writeDiagnosticEvents(diagnosticEvents, outfile_de);
-    if (VERBOSE) cerr << "DONE" << endl;;
-
+    if (VERBOSE) cerr << "DONE" << endl;
   }      
   catch (std::bad_alloc &ba) {
     cerr << "ERROR: could not allocate memory" << endl;
