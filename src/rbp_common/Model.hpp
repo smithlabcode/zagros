@@ -138,8 +138,8 @@ struct Model {
   static const double zoops_threshold;
   static const double tolerance;
 
-  static const int MIN_DELTA = -10;
-  static const int MAX_DELTA = 10;
+  static const int MIN_DELTA = -2;
+  static const int MAX_DELTA = 2;
   static const int DEFAULT_DELTA = 0;
   static const bool HOLD_DELTA_FIXED = true;
 };

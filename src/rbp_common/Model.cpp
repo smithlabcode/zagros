@@ -44,12 +44,6 @@ const double Model::tolerance = 1e-10;
 const double Model::zoops_threshold = 0;
 
 
-
-
-
-
-
-
 /******************************************************************************
  *                 STATIC HELPER FUNCTIONS FOR BASE COUNTING
  ******************************************************************************/
@@ -284,8 +278,12 @@ get_numerator_seq_de_for_site(const string &seq,
       f_powers[base]++;
     if (!std::isfinite(f_powers[base]))
       throw SMITHLABException("failed expectation calc; f_powers non-finite");
-    if (!std::isfinite(num))
-      throw SMITHLABException("failed expectation calc; numerator non-finite");
+    if (!std::isfinite(num)) {
+      stringstream ss;
+      ss << "failed expectation calculation; numerator non-finite. Matrix "
+         << "entry was: " << matrix[i - site][base];
+      throw SMITHLABException(ss.str());
+    }
   }
   for (size_t b = 0; b < alphabet_size; b++)
     num += f_powers[b] * log(freqs[b]);
@@ -349,6 +347,14 @@ get_numerator_seq_str_de_for_site(const string &seq,
           * log(matrix[i - site][base] * motif_sec_str[i - site]));
       num += ((1.0 - secondary_structure[i])
           * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
+      if (!std::isfinite(num)) {
+        stringstream ss;
+        ss << "failed expectation calculation; numerator non-finite. BPP was: "
+           << secondary_structure[i] << " matrix entry was: "
+           << matrix[i - site][base] << " motif secondary structure was: "
+           << motif_sec_str[i - site];
+        throw SMITHLABException(ss.str());
+      }
     } else {
       f_powers_ss[base] += (1.0 - secondary_structure[i]);
       f_powers_ds[base] += (secondary_structure[i]);
@@ -357,8 +363,6 @@ get_numerator_seq_str_de_for_site(const string &seq,
       throw SMITHLABException("failed expectation calc; f_powers_ss non-finite");
     if (!std::isfinite(f_powers_ds[base]))
       throw SMITHLABException("failed expectation calc; f_powers_ds non-finite");
-    if (!std::isfinite(num))
-      throw SMITHLABException("failed expectation calc; numerator non-finite");
   }
 
   // calculating the contribution of the background (outside the motif
@@ -697,11 +701,16 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
     if (diagnostic_events[i].size() > 0) {
       for (size_t k = 0; k < site_indic[i].size(); k++) {
         double power = 0.0;
-        for (size_t j = 0; j < diagnostic_events[i].size(); j++)
+        for (size_t j = 0; j < diagnostic_events[i].size(); j++) {
           power += abs(diagnostic_events[i][j] - (k + delta));
-        if (!std::isfinite(power))
-          throw SMITHLABException("failed likelihood calculation; "
-                                  "power is non-finite");
+          if (!std::isfinite(power)) {
+            stringstream ss;
+            ss << "failed likelihood calculation; power is non-finite. Diag. "
+               << "event is: " << diagnostic_events[i][j] << "; k+delta is: "
+               << (k+delta);
+            throw SMITHLABException(ss.str());
+          }
+        }
         ret += site_indic[i][k]
             * ((power * log(1 - p)) + (diagnostic_events[i].size() * log(p)));
       }
@@ -796,10 +805,16 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
     if (diagnostic_events[i].size() > 0) {
       for (size_t k = 0; k < site_indic[i].size(); k++) {
         double power = 0.0;
-        for (size_t j = 0; j < diagnostic_events[i].size(); j++)
+        for (size_t j = 0; j < diagnostic_events[i].size(); j++) {
           power += abs(diagnostic_events[i][j] - (k + delta));
-        throw SMITHLABException("failed likelihood calculation; "
-                                "power is non-finite");
+          if (!std::isfinite(power)) {
+            stringstream ss;
+            ss << "failed likelihood calculation; power is non-finite. Diag. "
+               << "event is: " << diagnostic_events[i][j] << "; k+delta is: "
+               << (k+delta);
+            throw SMITHLABException(ss.str());
+          }
+        }
         ret += site_indic[i][k]
             * ((power * log(1 - p)) + (diagnostic_events[i].size() * log(p)));
       }
@@ -941,7 +956,6 @@ Model::expectationMax_SeqStrDE(const vector<string> &sequences,
                      matrix, motif_sec_str, f_sec_str);
     maximization_de(sequences, diagnostic_events, site_indic, seq_indic, matrix,
                     p, delta);
-
     score = calculate_zoops_log_l(sequences, secStructure,
                                   diagnostic_events, site_indic, seq_indic);
     if (abs(prev_score - score) / prev_score < tolerance) {
@@ -1022,8 +1036,8 @@ Model::estimateDelta(const vector<string> &seqs,
       }
       // use EM to fit the sequence component and the geometric distribution,
       // but hold delta fixed (to avoid cyclic dependency)
-      expectation_maximization_seq_de(seqs, diagEvents, indicators, has_motif,
-                                      Model::HOLD_DELTA_FIXED);
+      dummy.expectation_maximization_seq_de(seqs, diagEvents, indicators,
+                                            has_motif, Model::HOLD_DELTA_FIXED);
       double score = calculate_zoops_log_l(seqs, diagEvents, indicators, has_motif);
       ll_delta.push_back(score);
     }
