@@ -176,54 +176,6 @@ check_consistent(const vector<GenomicRegion> &regions,
  * Functions for generating random numbers and variables
  *****************************************************************************/
 
-/****
- * @summary: generate a random size_t in a given range (inclusive)
- * @throw:   SMITHLABException if lower is greater than or equal to upper
- */
-size_t
-randomSize_t(const size_t lower, const size_t upper) {
-  if (lower >= upper) {
-    stringstream ss;
-    ss << "Failed to generate random size_t: "
-       << "lower boundary (" << lower << ") was greater than upper ("
-       << upper << ").";
-      throw SMITHLABException(ss.str());
-  }
-  return lower + (rand() % (upper - lower + 1));
-}
-
-
-/****
- * @summary: generate a random double in a given range (inclusive)
- * @throw:   SMITHLABException if lower is greater than or equal to upper
- */
-double
-randomDouble(const double lower, const double upper) {
-  if (lower >= upper) {
-    stringstream ss;
-    ss << "Failed to generate random double: "
-       << "lower boundary was greater than upper.";
-    throw SMITHLABException(ss.str());
-  }
-  double frac = (double) rand() / RAND_MAX;
-  return lower + (frac * (upper - lower));
-}
-
-/***
- * \brief   generate a random int in a given range (inclusive)
- * \throw   SMITHLABException if lower is greater than or equal to upper
- */
-int
-randomInt(const int lower, const int upper) {
-  if (lower >= upper) {
-    stringstream ss;
-    ss << "Failed to generate random double: "
-       << "lower boundary was greater than upper.";
-    throw SMITHLABException(ss.str());
-  }
-  return lower + (rand() % (upper - lower + 1));
-}
-
 static size_t
 generate_geometric_random_variable(const Runif &rng,
     const double p) {
@@ -278,14 +230,16 @@ generate_targeted_position_weight_matrix(gsl_rng *gr, size_t n,
  *****************************************************************************/
 
 /****
- * @summary: generate a sequence from a nucleotide distribution.
- * @param dist: the distribution to use.
- * @param length: the length of the sequence to build
- * @throw SMITHLABException: if the dist. vector has the wrong dimensions
+ * \summary generate a sequence from a nucleotide distribution.
+ * \param dist      the distribution to use.
+ * \param length    the length of the sequence to build.
+ * \param rng       TODO
+ * \throw SMITHLABException: if the dist. vector has the wrong dimensions.
  */
 string
 generateSequenceFromNucleotideDistribution(const vector<double> &dist,
-                                           const size_t length) {
+                                           const size_t length,
+                                           const Runif &rng) {
   if (dist.size() != SIMRNA::RNA_ALPHABET_SIZE) {
     stringstream ss;
     ss << "Failed to generate sequence from nucleotide distribution, "
@@ -296,7 +250,7 @@ generateSequenceFromNucleotideDistribution(const vector<double> &dist,
 
   string res = "";
   for (size_t i = 0; i < length; ++i) {
-    double r = randomDouble(0, 1);
+    double r = rng.runif(0.0, 1.0);
     if (r < dist[SIMRNA::base2int('A')]) res += 'A';
     else if (r < dist[SIMRNA::base2int('A')] +\
                  dist[SIMRNA::base2int('C')]) res += 'C';
@@ -310,12 +264,13 @@ generateSequenceFromNucleotideDistribution(const vector<double> &dist,
 }
 
 /****
- * \summary   generate a sequence from a position weight matrix
- * \param pwm the PWM to make the sequence from
+ * \summary     generate a sequence from a position weight matrix
+ * \param pwm   the PWM to make the sequence from
+ * \param rng   TODO
  * \throw SMITHLABException if the PWM is malformed.
  */
 string
-generateSequenceFromPWM(const vector<vector<double> > pwm) {
+generateSequenceFromPWM(const vector<vector<double> > pwm, const Runif &rng) {
   string res = "";
   for (size_t j = 0; j < pwm.size(); ++j) {
     if (pwm[j].size() != SIMRNA::RNA_ALPHABET_SIZE) {
@@ -325,7 +280,7 @@ generateSequenceFromPWM(const vector<vector<double> > pwm) {
          << "; expected " << SIMRNA::RNA_ALPHABET_SIZE;
       throw SMITHLABException(ss.str());
     }
-    res += generateSequenceFromNucleotideDistribution(pwm[j], 1);
+    res += generateSequenceFromNucleotideDistribution(pwm[j], 1, rng);
   }
   return res;
 }
@@ -338,16 +293,18 @@ generateSequenceFromPWM(const vector<vector<double> > pwm) {
  * \brief:     given a PWM, place an occurrence within a sequence with no
  *             particular structure. Note that the motif occurrence will
  *             replace whatever sequence was previously at that place
- * \param seq: the sequence to embed the occurrence in
- * \param pwm: the PWM to generate the occurrence from; should be indexed by
+ * \param seq  the sequence to embed the occurrence in
+ * \param pwm  the PWM to generate the occurrence from; should be indexed by
  *             position first, so PWM[i].size() == alphabet size for all i
- * \param pos: location to place the motif occurrence; if equal to
+ * \param rng  TODO
+ * \param pos  location to place the motif occurrence; if equal to
  *             SIMRNA::RANDOM_POSITION, the location is chosen randomly.
  * \throw SMITHLABException if the position is invalid (less than 0, or
  *        greater than seq.size() - motifLength)
  */
 size_t
 placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm,
+                                 const Runif &rng,
                                  const size_t pos = SIMRNA::RANDOM_POSITION) {
   // decide where to put the motif
   size_t motifLocation = pos;
@@ -358,7 +315,7 @@ placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm
          << seq.size() << "bp long, but motif is " << pwm.size() << "bp long.";
       throw SMITHLABException(ss.str());
     }
-    motifLocation = randomSize_t(0, seq.size() - pwm.size());
+    motifLocation = rng.runif(static_cast<size_t>(0), seq.size() - pwm.size());
   }
   if (motifLocation > seq.size() - pwm.size()) {
     stringstream ss;
@@ -369,7 +326,7 @@ placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm
   }
 
   // place it..
-  string occurrence = generateSequenceFromPWM(pwm);
+  string occurrence = generateSequenceFromPWM(pwm, rng);
   seq.replace(seq.begin() + motifLocation,
               seq.begin() + motifLocation + occurrence.size(),
               occurrence);
@@ -409,6 +366,7 @@ placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm
  * \param pwm:          the PWM to generate the occurrence from; should be
  *                      indexed by position first, so pwm[i].size() == alphabet
  *                      size for all i.
+ * \param rng           TODO
  * \param pos:          location to place the motif occurrence; if equal to
  *                      SIMRNA::RANDOM_POSITION, the location is chosen randomly.
  * \param offset        the distance from the start of the ssRNA loop to the
@@ -425,6 +383,7 @@ placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm
 size_t
 placeStructuredMotifOccurrence(string &seq,
                  const vector<vector<double> > &pwm,
+                 const Runif &rng,
                  const size_t pos = SIMRNA::RANDOM_POSITION,
                  const int offset = SIMRNA::DEFAULT_OFFSET_FROM_LOOP_START,
                  const size_t stemLength = SIMRNA::DEFAULT_STEM_LENGTH,
@@ -460,8 +419,8 @@ placeStructuredMotifOccurrence(string &seq,
   size_t motifLocation = pos;
   if (motifLocation == SIMRNA::RANDOM_POSITION) {
     // we already checked that the sequence was big enough, so this is safe...
-    motifLocation = randomSize_t(stemLength + offset,
-                            seq.size() - (stemLength + loopLength - offset));
+    motifLocation = rng.runif(stemLength + offset,
+                              seq.size() - (stemLength + loopLength - offset));
   }
   // .. but a user-defined position might not be
   if ((motifLocation < stemLength + offset) ||
@@ -477,7 +436,7 @@ placeStructuredMotifOccurrence(string &seq,
   }
 
   // finally, we can place everything ...
-  string occurrence = generateSequenceFromPWM(pwm);
+  string occurrence = generateSequenceFromPWM(pwm, rng);
   seq.replace(seq.begin() + motifLocation,
               seq.begin() + motifLocation + occurrence.size(),
               occurrence);
@@ -510,6 +469,7 @@ placeStructuredMotifOccurrence(string &seq,
  * \param pwm:          the PWM to generate the occurrence from; should be
  *                      indexed by position first, so pwm[i].size() == alphabet
  *                      size for all i.
+ * \param rng           TODO
  * \param pos:          location to place the motif occurrence; if equal to
  *                      SIMRNA::RANDOM_POSITION, the location is chosen randomly.
  * \param stemLength    TODO
@@ -520,6 +480,7 @@ placeStructuredMotifOccurrence(string &seq,
 size_t
 placeFullDSMotifOccurrence(string &seq,
                  const vector<vector<double> > &pwm,
+                 const Runif &rng,
                  const size_t pos = SIMRNA::RANDOM_POSITION,
                  const size_t stemLength = SIMRNA::DEFAULT_STEM_LENGTH,
                  const size_t loopLength = SIMRNA::DEFAULT_LOOP_LENGTH) {
@@ -537,13 +498,14 @@ placeFullDSMotifOccurrence(string &seq,
   if (coinFlip > 0.5) {
     // pick an offset that puts the motif in the first dsRNA region
     // must be <= -pwm.size(), but > -stemLength
-    oset = randomInt(-stemLength + 1, -pwm.size());
+    oset = rng.runif(1 - static_cast<int>(stemLength),
+                     0 - static_cast<int>(pwm.size()));
   } else {
     // pick an offset that puts the motif in the second dsRNA region
     // must be > loopLength, but < loopLength + stemLength - pwm.size()
-    oset = randomInt(loopLength, loopLength + stemLength - pwm.size());
+    oset = rng.runif(loopLength, loopLength + stemLength - pwm.size());
   }
-  return placeStructuredMotifOccurrence(seq, pwm, pos, oset,
+  return placeStructuredMotifOccurrence(seq, pwm, rng, pos, oset,
                                         stemLength, loopLength);
 }
 
@@ -557,6 +519,7 @@ placeFullDSMotifOccurrence(string &seq,
  * \param pwm:          the PWM to generate the occurrence from; should be
  *                      indexed by position first, so pwm[i].size() == alphabet
  *                      size for all i.
+ * \param rng           TODO
  * \param pos:          location to place the motif occurrence; if equal to
  *                      SIMRNA::RANDOM_POSITION, the location is chosen randomly.
  * \param stemLength    the length of the dsRNA section, the stem.
@@ -566,13 +529,14 @@ placeFullDSMotifOccurrence(string &seq,
 size_t
 placeFullSSMotifOccurrence(string &seq,
                  const vector<vector<double> > &pwm,
+                 const Runif &rng,
                  const size_t pos = SIMRNA::RANDOM_POSITION,
                  const size_t stemLength = SIMRNA::DEFAULT_STEM_LENGTH,
                  const size_t loopLength = SIMRNA::DEFAULT_LOOP_LENGTH) {
   // pick an offset that puts the motif in the loop. Must be >= 0,
   // but < loopLength - pwm.size()
-  double oset = randomSize_t(0, loopLength - pwm.size());
-  return placeStructuredMotifOccurrence(seq, pwm, pos, oset,
+  size_t oset = rng.runif(static_cast<size_t>(0), loopLength - pwm.size());
+  return placeStructuredMotifOccurrence(seq, pwm, rng, pos, oset,
                                         stemLength, loopLength);
 }
 
@@ -581,34 +545,41 @@ placeFullSSMotifOccurrence(string &seq,
  *          provided pwm to generate the occurrence, having the specified
  *          structure type with probability equal to the specified structure
  *          level
- * \param seq        the sequence to place the motif ocurrence into.
+ * \param seq        the sequence to place the motif occurrence into.
  * \param pwm        the pwm to generate the occurrence from.
  * \param strType    the structure type to impose on the sequence
  *                   (with prob. equal to strLevel).
  * \param strLevel   0 <= strLevel <= 1; the probability that the motif will
  *                   have the requested structure, instead of being unstructured.
+ * \param rng        TODO
  * \return the (rel.) location within the sequence where the motif was placed.
  * \throw SMITHLABException if <strLevel> isn't between 0 and 1 (inclusive).
  * \throw SMITHLABException if strType does not specify a valid structure type.
  */
 size_t
 placeMotif(string &seq, const vector< vector<double> > &pwm,
-           const string &strType = SIMRNA::unstructured,
-           const double &strLevel = 1) {
+           const string &strType, const double &strLevel, const Runif &rng) {
+  // figure out whether to obey the structure or not.
+  if ((strLevel < 0) || (strLevel > 1)) {
+    stringstream ss;
+    ss << "invalid struct. level: " << strLevel << "; must be between 0 and 1";
+    throw SMITHLABException(ss.str());
+  }
+  const bool obeyStr = (rng.runif(0.0, 1.0) < strLevel);
+
   size_t motifLocation;
-  const bool obeyStr = ((randomDouble(0,1) < strLevel));
   if (isEqualIgnoreCase(strType, SIMRNA::unstructured))
-    motifLocation = placeUnstructuredMotifOccurrence(seq, pwm);
+    motifLocation = placeUnstructuredMotifOccurrence(seq, pwm, rng);
   else if (isEqualIgnoreCase(strType, SIMRNA::dsRNA)) {
     if (obeyStr)
-      motifLocation = placeFullDSMotifOccurrence(seq, pwm);
+      motifLocation = placeFullDSMotifOccurrence(seq, pwm, rng);
     else
-      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm);
+      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm, rng);
   } else if (isEqualIgnoreCase(strType, SIMRNA::ssRNA)) {
     if (obeyStr)
-      motifLocation = placeFullSSMotifOccurrence(seq, pwm);
+      motifLocation = placeFullSSMotifOccurrence(seq, pwm, rng);
     else
-      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm);
+      motifLocation = placeUnstructuredMotifOccurrence(seq, pwm, rng);
   } else {
     throw SMITHLABException(strType + " isn't a valid structure type");
   }
@@ -989,6 +960,8 @@ writeAugmentedPWM (const vector<vector<double> > &M, const double p,
  *                                  gives the (relative) location of the motif
  *                                  occurrence in the ith sequence; any existing
  *                                  data will be cleared.
+ * \param rng                       TODO
+ * \param gr                        TODO
  * \param VERBOSE      [in]         If true, extra status messages about
  *                                  progress are printed to STDERR.
  */
@@ -1000,7 +973,8 @@ generateAndPlace(const int siteLen, const double targetIC,
                  const double geoP, const int geoOffset,
                  const double deNoiseLevel, vector<vector<double> > &pwm,
                  vector< vector<size_t> > &diagEvents,
-                 vector<size_t> &indicators, const bool VERBOSE) {
+                 vector<size_t> &indicators, const Runif &rng, gsl_rng *gr,
+                 const bool VERBOSE) {
   // Check that dimensions match up
   if (numDEsPerSeq.size() != seqs.size()) {
     stringstream ss;
@@ -1027,18 +1001,6 @@ generateAndPlace(const int siteLen, const double targetIC,
        sizetToString(SIMRNA::MAX_SITE_LEN));
   }
 
-  // seed the random number generator using the time, and make a uniform
-  // random number generator object, and a gsl random number generator
-  if (VERBOSE) cerr << "MAKING RANDOM NUMBER GENERATOR... ";
-  struct timeval time;
-  gettimeofday(&time,NULL);
-  size_t seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
-  srand(seed);
-  const Runif rng(seed);
-  gsl_rng *gr = gsl_rng_alloc(gsl_rng_mt19937);
-  gsl_rng_set(gr, static_cast<unsigned long int >(seed));
-  if (VERBOSE) cerr << "DONE" << endl;
-
   // generate the PWM for the motif we're going to place
   if (VERBOSE) cerr << "GENERATING PWM... ";
   generate_targeted_position_weight_matrix(gr, siteLen,
@@ -1059,12 +1021,12 @@ generateAndPlace(const int siteLen, const double targetIC,
     diagEvents[i].resize(seqs[i].size());
   for (size_t i = 0; i < seqs.size(); ++i) {
     // first, decide whether we will even place a motif in this sequence
-    bool place = (randomDouble(0,1) < occLevel);
+    bool place = (rng.runif(0.0,1.0) < occLevel);
     size_t numDEsToPlace = numDEsPerSeq[i], numRealDEsPlaced = 0;
 
     if (place) {
       // place the motif with the desired structure
-      const size_t motifLoc = placeMotif(seqs[i], pwm, strType, strLevel);
+      const size_t motifLoc = placeMotif(seqs[i], pwm, strType, strLevel, rng);
       indicators[i] = motifLoc;
 
       // place the real DEs
@@ -1087,17 +1049,27 @@ generateAndPlace(const int siteLen, const double targetIC,
 int
 main(int argc, const char **argv) {
   try {
+    // seed the random number generator using the time, and make a uniform
+    // random number generator object, and a gsl random number generator
+    struct timeval time;
+    gettimeofday(&time,NULL);
+    size_t seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
+    srand(seed);
+    const Runif rng(seed);
+    gsl_rng *gr = gsl_rng_alloc(gsl_rng_mt19937);
+    gsl_rng_set(gr, static_cast<unsigned long int >(seed));
+
     string output_basefn;
     double deNoiseLevel = 0;
-    size_t strLevel = 1;
+    double strLevel = 1;
     string strType = SIMRNA::unstructured;
     double occLevel = 1;
     int site_length = 6;
     double target_ic = 1.7;
     string deFile = "";
     bool VERBOSE = false;
-    double geoP = randomDouble(0, 1);
-    int geoOffset = randomInt(SIMRNA::MIN_DE_OFFSET, SIMRNA::MAX_DE_OFFSET);
+    double geoP = rng.runif(0.0, 1.0);
+    int geoOffset = rng.runif(SIMRNA::MIN_DE_OFFSET, SIMRNA::MAX_DE_OFFSET);
     size_t numMotifs = 1;
 
     // TODO specify defaults below for length, ic, frac of de
@@ -1219,7 +1191,7 @@ main(int argc, const char **argv) {
       vector< vector<size_t> > diagnosticEvents (seqs.size());
       generateAndPlace(site_length, target_ic, occLevel, strType, strLevel,
                        numDEsPerSeq, seqs, regions, geoP, geoOffset, deNoiseLevel,
-                       pwm, diagnosticEvents, indicators, VERBOSE);
+                       pwm, diagnosticEvents, indicators, rng, gr, VERBOSE);
 
       // figure out what the output filenames will be
       string outfile_mat, outfile_de;
