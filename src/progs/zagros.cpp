@@ -635,8 +635,15 @@ int main(int argc,
           << numStartingPoints << " (" << top_kmers[j].kmer << ") ... ";
         model_l.expectationMax(seqs, diagEvents, secondary_structure,
             indicators_l, has_motif_l);
-        double logLike = model_l.calculate_zoops_log_l(seqs, secondary_structure,
-                                            diagEvents, indicators_l, has_motif_l);
+        double logLike;
+        if (secondary_structure.size() == 0) {
+          logLike = model_l.calculate_zoops_log_l(seqs, diagEvents,
+                                                  indicators_l, has_motif_l);
+        } else {
+          logLike = model_l.calculate_zoops_log_l(seqs, secondary_structure,
+                                                  diagEvents, indicators_l,
+                                                  has_motif_l);
+        }
         if (VERBOSE)
           cerr << "LOG-LIKELIHOOD: " << logLike << endl;
 

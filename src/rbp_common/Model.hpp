@@ -109,6 +109,9 @@ struct Model {
   estimateDelta (const std::vector<std::string> &seqs,
                  const std::vector<std::vector<size_t> > &diagEvents);
 
+  std::string
+  toString_pwm() const;
+
   size_t size() const {
     return matrix.size();
   }
@@ -133,15 +136,19 @@ struct Model {
   int delta;
 
   // class constants (probably some should be adjustable)
-  static const size_t max_iterations = 5;
+  static const size_t max_iterations = 10;
   static const double pseudocount;
   static const double zoops_threshold;
   static const double tolerance;
+
+  static const double DEFAULT_GEO_P;
 
   static const int MIN_DELTA = -2;
   static const int MAX_DELTA = 2;
   static const int DEFAULT_DELTA = 0;
   static const bool HOLD_DELTA_FIXED = true;
+
+  static const bool DEBUG_MESSAGES = false;
 };
 
 #endif
