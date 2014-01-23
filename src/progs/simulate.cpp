@@ -687,14 +687,19 @@ placeDEGeom (const GenomicRegion &region, vector<size_t> &diagEvents,
     throw SMITHLABException(ss.str());
   }
 
-  // adjust target location for offset (delta)
+  // adjust DE target location for offset (delta), but don't let it become
+  // negative, or greater than the seq length; the DE target location must
+  // be somewhere in the seq.
   size_t tLoc = targetLoc;
   if (geoOffset + static_cast<int>(targetLoc) < 0)
     tLoc = 0;
-  else if (geoOffset + static_cast<int>(targetLoc) >= region.get_width())
-    tLoc = region.get_width() - 1;
-  else
-    tLoc = geoOffset + targetLoc;
+  else {
+    // we know geoOffset + targetLoc >= 0, so it's okay to cast it to a size_t,
+    // to avoid warnings when comparing to region width below.
+    size_t deL = static_cast<size_t> (geoOffset + static_cast<int>(targetLoc));
+    if (deL >= region.get_width()) tLoc = region.get_width() - 1;
+    else tLoc = deL;
+  }
 
   size_t deDistance;
   int dePosRelToRegionStart;

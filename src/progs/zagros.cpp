@@ -2,7 +2,7 @@
  *    Copyright (C) 2013 University of Southern California and
  *                       Andrew D. Smith
  *
- *    Authors: Emad Bahrami-Samani and Andrew D. Smith
+ *    Authors: Emad Bahrami-Samani, Philip J. Uren and Andrew D. Smith
  *
  *    This program is free software: you can redistribute it and/or modify
  *    it under the terms of the GNU General Public License as published by
@@ -48,9 +48,9 @@ using std::pair;
 using std::numeric_limits;
 
 /***
- * \summary load the diagnostic events from the given filename. The format of
+ * \brief load the diagnostic events from the given filename. The format of
  *          the file should be one sequence per line, each line is a comma
- *          seperated list, where each element is the number of diagnostic
+ *          separated list, where each element is the number of diagnostic
  *          events observed at that location in the given sequence.
  * \param fn            the filename to read the events from
  * \param diagEvents    the events are added to this vector. Any existing data
@@ -108,13 +108,24 @@ struct kmer_info {
   }
 };
 
-// this is just Poisson probability for 0 observations
+/**
+ * \brief TODO
+ * \param prob      TODO
+ * \param seq_len   TODO
+ * \return TODO
+ * this is just Poisson probability for 0 observations
+ */
 static double
 prob_no_occurrence(const double prob,
                    const size_t seq_len) {
   return std::exp(-static_cast<int>(seq_len) * prob);
 }
 
+/**
+ * \brief TODO
+ * \param sequences TODO
+ * \param base_comp TODO
+ */
 static void
 compute_base_comp(const vector<string> &sequences,
                   vector<double> &base_comp) {
@@ -130,6 +141,12 @@ compute_base_comp(const vector<string> &sequences,
 		 std::bind2nd(std::divides<double>(), total));
 }
 
+/**
+ * \brief TODO
+ * \param kmer          TODO
+ * \param base_comp     TODO
+ * \return TODO
+ */
 static double
 compute_kmer_prob(const string &kmer,
                   const vector<double> &base_comp) {
@@ -139,6 +156,13 @@ compute_kmer_prob(const string &kmer,
   return prob;
 }
 
+/**
+ * \brief TODO
+ * \param kmer         TODO
+ * \param base_comp    TODO
+ * \param lengths      TODO
+ * \return TODO
+ */
 static double
 expected_seqs_with_kmer(const string &kmer,
                         const vector<double> &base_comp,
@@ -203,6 +227,8 @@ find_best_kmers(const size_t k_value,
 /////////////  INPUT DATA TEST AND REFINEMENT
 /////////////
 
+// PJU: following aren't used currently; should they be removed?
+/*
 static bool
 check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
 
@@ -227,6 +253,7 @@ check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
   return false;
 }
 
+
 static bool
 check_overlapping(const vector<GenomicRegion> &targets) {
 
@@ -236,8 +263,9 @@ check_overlapping(const vector<GenomicRegion> &targets) {
   for (size_t i = 0; i < targets_chroms.size() && !ret_val; ++i)
     ret_val |= check_overlapping_chrom(targets_chroms[i]);
   return ret_val;
-}
+}*/
 
+// TODO should be in RNA utils
 static char
 sample_nuc(const Runif &rng,
            vector<double> &probs) {
@@ -412,6 +440,17 @@ format_motif_header(const string &name) {
   return oss.str();
 }
 
+/***
+ * \brief TODO
+ * \param model         TODO
+ * \param motif_name    TODO
+ * \param targets       TODO
+ * \param sequences     TODO
+ * \param indicators    TODO
+ * \param zoops_i       TODO
+ * \return  TODO
+ * \throw   TODO
+ */
 static string
 format_motif(const Model &model,
              const string &motif_name,
@@ -419,10 +458,20 @@ format_motif(const Model &model,
              const vector<string> &sequences,
              const vector<vector<double> > &indicators,
              const vector<double> &zoops_i) {
-
-  assert(
-	 sequences.size() == indicators.size()
-	 && zoops_i.size() == sequences.size());
+  if (sequences.size() != indicators.size()) {
+    stringstream ss;
+    ss << "failed to format motif for output. Number of site indicator vectors "
+       << "(" << indicators.size() << ") does not equal number of sequences ("
+       << sequences.size() << ")";
+    throw SMITHLABException(ss.str());
+  }
+  if (zoops_i.size() != sequences.size()) {
+    stringstream ss;
+    ss << "failed to format motif for output. Number of sequence indicators "
+       << "(" << zoops_i.size() << ") " << "does not match number of sequences "
+       << sequences.size();
+    throw SMITHLABException(ss.str());
+  }
 
   std::ostringstream ss;
   ss << format_motif_header(motif_name) << endl;
@@ -443,6 +492,7 @@ format_motif(const Model &model,
   }
 
   for (size_t j = 0; j < tmp_m.size(); j++) {
+    // TODO fix below
     // AS: this is crazy below and will not work for motifs of width 11
     ss << "0" << j + 1;
     for (size_t b = 0; b < smithlab::alphabet_size; ++b)
@@ -479,12 +529,12 @@ format_motif(const Model &model,
   return ss.str();
 }
 
-int main(int argc,
-         const char **argv) {
-
+int main(int argc, const char **argv) {
   try {
     static const double zoops_expansion_factor = 0.75;
 
+    // TODO: the level parameter, specifying how much influence the DEs have,
+    // is currently not used
     bool VERBOSE = false;
     size_t motif_width = 6;
     size_t n_motifs = 1;
@@ -492,8 +542,8 @@ int main(int argc,
     string chrom_dir = "";
     string structure_file;
     string reads_file;
-    size_t max_de = std::numeric_limits<size_t>::max();
-    double level = std::numeric_limits<double>::max();
+    // not implemented
+    //double level = std::numeric_limits<double>::max();
     size_t numStartingPoints = 3;
 
     /****************** COMMAND LINE OPTIONS ********************/
@@ -512,8 +562,9 @@ int main(int argc,
                       OptionParser::OPTIONAL, structure_file);
     opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
                       OptionParser::OPTIONAL, reads_file);
-    opt_parse.add_opt("level", 'l', "level of influence by diagnostic events "
-                      "(default: maximum)", OptionParser::OPTIONAL, level);
+    // not currently implemented
+    /*opt_parse.add_opt("level", 'l', "level of influence by diagnostic events "
+                      "(default: maximum)", OptionParser::OPTIONAL, level);*/
     opt_parse.add_opt("starting-points", 's', "number of starting points to try "
                       "for EM search. Higher values will be slower, but more "
                       "likely to find the global maximum.",
@@ -582,7 +633,6 @@ int main(int argc,
       if (VERBOSE)
         cerr << "LOADING DIAGNOSTIC EVENTS... ";
       size_t deCount = loadDiagnosticEvents(reads_file, diagEvents);
-      bool okay = (diagEvents.size() == seqs.size());
       if (diagEvents.size() != seqs.size()) {
         stringstream ss;
         ss << "inconsistent dimensions of sequence and diagnostic events data. "
