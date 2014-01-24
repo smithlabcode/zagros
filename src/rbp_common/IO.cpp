@@ -47,16 +47,51 @@ using std::ostream;
 using std::sort;
 
 using smithlab::alphabet_size;
-
 using std::tr1::unordered_map;
 
-////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////
-/////////////
-/////////////  A SET OF FUNCTIONS FOR READING THE MAPPING INFORMATION
-/////////////                FOR DIAGNOSTIC EVENTS
-/////////////
+bool
+seq_and_structure_are_consistent(const vector<string> &seqs,
+                                 const vector<vector<double> > &sec_structure) {
+  if (seqs.size() != sec_structure.size())
+    return false;
+  for (size_t i = 0; i < seqs.size(); ++i)
+    if (seqs[i].length() != sec_structure[i].size())
+      return false;
+  return true;
+}
 
+/******************************************************************************
+ *                STATIC HELPER FUNCTIONS FOR IO OPERATIONS
+ ******************************************************************************/
+
+/**
+ * \brief convert a string to a size_t
+ * \param s the string to convert
+ */
+static size_t
+convertString(const string& s) {
+  istringstream buffer(s);
+  size_t value;
+  buffer >> value;
+  return value;
+}
+
+/**
+ * \brief convert a size_t to a string
+ * \param number the size_t to convert
+ */
+static string
+convertSizet(const size_t number) {
+  stringstream ss;
+  ss << number;
+  return ss.str();
+}
+
+/**
+ * \brief TODO
+ * \param line  TODO
+ * \return TODO
+ */
 static bool
 is_header_line(const string& line) {
   if (line.substr(0, 1) == "#")
@@ -69,6 +104,11 @@ is_header_line(const string& line) {
   return true;
 }
 
+/**
+ * \brief TODO
+ * \param line  TODO
+ * \return TODO
+ */
 static bool
 is_track_line(const char *line) {
   static const char *track_label = "track";
@@ -79,6 +119,13 @@ is_track_line(const char *line) {
   return true;
 }
 
+/**
+ * \brief TODO
+ * \param to_split TODO
+ * \return TODO
+ * TODO -- PJU: This looks identical to the function in smithlab_utils.
+ *              Why is it duplicated here?
+ */
 static vector<string>
 split_extended_whitespace_quoted(string to_split) {
 
@@ -127,20 +174,7 @@ split_extended_whitespace_quoted(string to_split) {
   return words;
 }
 
-static size_t
-convertString(const string& s) {
-  istringstream buffer(s);
-  size_t value;
-  buffer >> value;
-  return value;
-}
 
-static string
-convertSizet(const size_t number) {
-  stringstream ss;
-  ss << number;
-  return ss.str();
-}
 
 static void
 convert_bowtie_extra(string &extra) {
@@ -201,52 +235,6 @@ read_novoalign_output(const vector<string> &parts,
     regions.push_back(mr);
   }
 }
-
-void
-load_mapped_reads(const string &reads_file,
-                  const string &mapper,
-                  vector<MappedRead> &mapped_reads) {
-
-  static const size_t buffer_size = 10000;
-
-  std::ifstream in(reads_file.c_str());
-  if (!in)
-    throw SMITHLABException("cannot open input file " + reads_file);
-
-  std::ifstream::pos_type start_of_data = in.tellg();
-  in.seekg(0, std::ios::end);
-  std::ifstream::pos_type end_of_data = in.tellg();
-  in.seekg(start_of_data);
-  size_t current_done = 101;
-
-  while (!in.eof()) {
-    char buffer[buffer_size];
-    in.getline(buffer, buffer_size);
-    if (in.gcount() == buffer_size - 1)
-      throw SMITHLABException("Line too long in file: " + reads_file);
-    if (!is_header_line(buffer) && !is_track_line(buffer)) {
-      vector<string> parts(split_extended_whitespace_quoted(buffer));
-      if (mapper == "novoalign")
-        read_novoalign_output(parts, mapped_reads);
-      else if (mapper == "bowtie")
-        read_bowtie_output(parts, mapped_reads);
-      else if (mapper == "rmap")
-        read_rmap_output(parts, mapped_reads);
-      else
-        throw SMITHLABException("The mapper was not recognized!");
-    }
-    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
-    if (percent_done != current_done) {
-      std::cerr << "\r" << percent_done << "% completed..." << std::flush;
-      current_done = percent_done;
-    }
-    in.peek();
-  }
-  in.close();
-  std::cerr << std::endl << mapped_reads.size() << " uniquely mapped reads are loaded!" << std::endl;
-}
-
-////////////////////////////////////////////////////////////////////////
 
 static void
 expand_regions(vector<GenomicRegion> &regions,
@@ -397,6 +385,9 @@ extract_regions_fasta(const string &dirname,
   }
 }
 
+/******************************************************************************
+ *                        FUNCTIONS FOR SEQUENCE I/O
+ ******************************************************************************/
 
 /***
  * \summary load sequences from either a fasta file, or a set of genomic
@@ -420,6 +411,7 @@ extract_regions_fasta(const string &dirname,
  * \throw SMITHLABException if: a .bed file is given, but no valid chrom. dir.
  *                              a .fa file is given, and a chrom. dir.
  *                              the targets_file is not readable.
+ * TODO this function has poor cohesion, way too specific for a library func.
  */
 void
 load_sequences(const string &targets_file,
@@ -467,17 +459,127 @@ load_sequences(const string &targets_file,
   }
 }
 
-bool
-seq_and_structure_are_consistent(const vector<string> &seqs,
-                                 const vector<vector<double> > &sec_structure) {
-  if (seqs.size() != sec_structure.size())
-    return false;
-  for (size_t i = 0; i < seqs.size(); ++i)
-    if (seqs[i].length() != sec_structure[i].size())
-      return false;
-  return true;
+
+/******************************************************************************
+ *                      FUNCTIONS FOR MAPPED-READS I/O
+ ******************************************************************************/
+
+/**
+ * \brief load a set of mapped reads from a given file; accepted formats are
+ *        those output by novoalign, bowtie and rmap (mapped-read format).
+ * \param reads_file
+ * \param mapper        the mapper used to produce the file (i.e. the format)
+ * \param mapped_reads  TODO
+ * \throw SMITHLABException if the specified mapper type is not known.
+ */
+void
+load_mapped_reads(const string &reads_file,
+                  const string &mapper,
+                  vector<MappedRead> &mapped_reads) {
+  static const size_t buffer_size = 10000;
+
+  std::ifstream in(reads_file.c_str());
+  if (!in)
+    throw SMITHLABException("cannot open input file " + reads_file);
+
+  std::ifstream::pos_type start_of_data = in.tellg();
+  in.seekg(0, std::ios::end);
+  std::ifstream::pos_type end_of_data = in.tellg();
+  in.seekg(start_of_data);
+  size_t current_done = 101;
+
+  while (!in.eof()) {
+    char buffer[buffer_size];
+    in.getline(buffer, buffer_size);
+    if (in.gcount() == buffer_size - 1)
+      throw SMITHLABException("Line too long in file: " + reads_file);
+    if (!is_header_line(buffer) && !is_track_line(buffer)) {
+      vector<string> parts(split_extended_whitespace_quoted(buffer));
+      if (mapper == "novoalign")
+        read_novoalign_output(parts, mapped_reads);
+      else if (mapper == "bowtie")
+        read_bowtie_output(parts, mapped_reads);
+      else if (mapper == "rmap")
+        read_rmap_output(parts, mapped_reads);
+      else
+        throw SMITHLABException("The mapper was not recognized!");
+    }
+    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
+    if (percent_done != current_done) {
+      std::cerr << "\r" << percent_done << "% completed..." << std::flush;
+      current_done = percent_done;
+    }
+    in.peek();
+  }
+  in.close();
+  std::cerr << std::endl << mapped_reads.size()
+            << " uniquely mapped reads are loaded!" << std::endl;
 }
 
+/******************************************************************************
+ *                    FUNCTIONS FOR DIAGNOSTIC EVENT I/O
+ ******************************************************************************/
+
+/**
+ * \brief load the diagnostic events from the given filename. The format of
+ *        the file should be one sequence per line, each line is a comma
+ *        separated list, where each element is the number of diagnostic
+ *        events observed at that location in the given sequence.
+ * \param fn            the filename to read the events from
+ * \param diagEvents    the events are added to this vector. Any existing data
+ *                      is cleared from the vector. diagEvents[i][j] is the
+ *                      location of the jth diagnostic event in sequence i.
+ *                      locations are relative to the start of the sequence.
+ * \return the count of diagnostic events that were found
+ */
+size_t
+loadDiagnosticEvents(const string &fn, vector<vector<size_t> > &diagEvents) {
+  size_t total = 0;
+  static const size_t buffer_size = 100000; // TODO magic number
+  ifstream in(fn.c_str());
+  if (!in) throw SMITHLABException("failed to open input file " + fn);
+
+  diagEvents.clear();
+  while (!in.eof()) {
+    char buffer[buffer_size];
+    in.getline(buffer, buffer_size);
+    if (in.gcount() == buffer_size - 1)
+      throw SMITHLABException("Line too long in file: " + fn);
+    vector<string> parts(smithlab::split(string(buffer), ",", false));
+    if (parts.size() == 0) continue;
+    diagEvents.push_back(vector<size_t>());
+    for (size_t j = 0; j < parts.size(); ++j) {
+      size_t countAtJ = static_cast<size_t>(atoi(parts[j].c_str()));
+      for (size_t a = 0; a < countAtJ; ++a) {
+        diagEvents.back().push_back(j);
+        total += 1;
+      }
+    }
+  }
+  return total;
+}
+
+
+/******************************************************************************
+ *                   FUNCTIONS FOR SECONDARY STRUCTURE I/O
+ ******************************************************************************/
+
+/**
+ * \brief load a set of RNA secondary structures from a file. The format of the
+ *        file should be one structure per line, each line/structure is a
+ *        comma separated set of base-pair probabilities (floating point
+ *        numbers between 0 and 1, inclusive), each one representing the
+ *        probability that the base at the corresponding position within its
+ *        matching sequence is paired (double stranded). The sequences
+ *        themselves are not stored/represented in the file.
+ * \param structure_file    filename to load from.
+ * \param structures        the resultant base-pair probabilities will be
+ *                          placed into this vector. Existing entries are NOT
+ *                          cleared. structures[i][j] will be the base-pair
+ *                          probability for the jth base in the ith sequence.
+ * \throw SMITHLABException if the file cannot be read from.
+ * \throw SMITHLABException if any entry v is outside of the range 0 <= v <= 1.
+ */
 void
 load_structures(const string structure_file,
                 vector<vector<double> > &structures) {
@@ -525,8 +627,8 @@ save_structure_file(const vector<vector<double> > &sec_structure,
     throw SMITHLABException("Failed writing structure to file. Empty filename.");
   std::ofstream out(outfile.c_str());
   if (!out.good())
-      throw SMITHLABException("Failed writing structure to " + outfile + "; " +\
-                              "File not writable");
+    throw SMITHLABException("Failed writing structure to " + outfile + "; " +\
+                            "File not writable");
   save_structure_file(sec_structure, out, padding);
 }
 
@@ -564,7 +666,4 @@ save_structure_file(const vector<vector<double> > &sec_structure,
     out << endl;
   }
 }
-
-
-
 

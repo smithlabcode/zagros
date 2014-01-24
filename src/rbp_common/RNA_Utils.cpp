@@ -58,14 +58,114 @@ const size_t RNAUtils::OVERLAP_LENGTH;
 /// A-U(T), C-G, G-C, G-U(T), U(T)-A, U(T)-G
 const int RNAUtils::RNAPair[4][4] = { { 0, 0, 0, 5 }, { 0, 0, 1, 0 }, { 0, 2, 0,
     3 }, { 6, 0, 4, 0 } };
+const double RNAUtils::DEFAULT_BACKGROUND[RNAUtils::RNA_ALPHABET_SIZE] =\
+    {0.3,  0.2, 0.2,  0.3};
 const double RNAUtils::energy_pf = -1.0;
+
+/**
+ * \brief sample a single nucleotide from a distribution
+ * \param dist  the distribution to use; dist[base2int('A')] gives the
+ *              probability that an 'A' will be sampled, and so on.
+ * \param rng   sample random numbers from this random number generator
+ */
+char
+RNAUtils::sampleNucFromNucDist(const vector<double> &dist, const Runif &rng) {
+  double r = rng.runif(0.0, 1.0);
+  if (r < dist[RNAUtils::base2int('A')]) return 'A';
+  else if (r < dist[RNAUtils::base2int('A')] +\
+               dist[RNAUtils::base2int('C')]) return 'C';
+  else if (r < dist[RNAUtils::base2int('A')] +\
+               dist[RNAUtils::base2int('C')] +\
+               dist[RNAUtils::base2int('G')]) return 'G';
+  else return 'T';
+}
+
+/**
+ * \brief sample a single nucleotide from the default background distribution
+ * \param rng   sample random numbers from this random number generator
+ */
+char
+RNAUtils::sampleNuc(const Runif &rng) {
+  double r = rng.runif(0.0, 1.0);
+  if (r < RNAUtils::DEFAULT_BACKGROUND[RNAUtils::base2int('A')])
+    return 'A';
+  else if (r < RNAUtils::DEFAULT_BACKGROUND[RNAUtils::base2int('A')] +\
+               RNAUtils::DEFAULT_BACKGROUND[RNAUtils::base2int('C')])
+    return 'C';
+  else if (r < RNAUtils::DEFAULT_BACKGROUND[RNAUtils::base2int('A')] +\
+               RNAUtils::DEFAULT_BACKGROUND[RNAUtils::base2int('C')] +\
+               RNAUtils::DEFAULT_BACKGROUND[RNAUtils::base2int('G')])
+    return 'G';
+  else return 'T';
+}
+
+/**
+ * \summary generate a sequence from a nucleotide distribution.
+ * \param dist      the distribution to use; dist[base2int('A')] gives the
+ *                  probability that an 'A' will be sampled, and so on.
+ * \param length    the length of the sequence to build.
+ * \param rng       sample random numbers from this random number generator
+ * \throw SMITHLABException: if the dist. vector has the wrong dimensions.
+ */
+string
+RNAUtils::sampleSeqFromNucDist(const vector<double> &dist, const size_t length,
+                               const Runif &rng) {
+  if (dist.size() != RNAUtils::RNA_ALPHABET_SIZE) {
+    stringstream ss;
+    ss << "Failed to generate sequence from nucleotide distribution, "
+       << "distribution vector was malformed: found "
+       << dist.size() << " entries; expected " << RNAUtils::RNA_ALPHABET_SIZE;
+    throw SMITHLABException(ss.str());
+  }
+
+  string res = "";
+  for (size_t i = 0; i < length; ++i) res += sampleNucFromNucDist(dist, rng);
+  return res;
+}
+
+/**
+ * \brief           sample a sequence from the default background nucleotide
+ *                  distribution.
+ * \param length    the length of the sequence to build.
+ * \param rng       random number generator to use
+ */
+string
+RNAUtils::sampleSeq(const size_t length, const Runif &rng) {
+  string res = "";
+  for (size_t i = 0; i < length; ++i) res += RNAUtils::sampleNuc(rng);
+  return res;
+}
+
+/****
+ * \summary     generate a sequence from a position weight matrix
+ * \param pwm   the PWM to make the sequence from
+ * \param rng   TODO
+ * \throw SMITHLABException if the PWM is malformed.
+ */
+string
+RNAUtils::sampleSequenceFromPWM(const vector<vector<double> > pwm,
+                                const Runif &rng) {
+  string res = "";
+  for (size_t j = 0; j < pwm.size(); ++j) {
+    if (pwm[j].size() != RNAUtils::RNA_ALPHABET_SIZE) {
+      stringstream ss;
+      ss << "Failed to generate sequence from PWM, PWM was malformed: found "
+         << pwm[j].size() << " entries for position " << j
+         << "; expected " << RNAUtils::RNA_ALPHABET_SIZE;
+      throw SMITHLABException(ss.str());
+    }
+    res += sampleNucFromNucDist(pwm[j], rng);
+  }
+  return res;
+}
 
 /**
  * \brief \todo
  * \param seq       \todo
  * \param cnstrnt   \todo
  */
-double RNAUtils::get_minimum_free_energy(const string seq, const string cnstrnt) {
+double
+RNAUtils::get_minimum_free_energy(const string seq, const string cnstrnt) {
 
   vector<char> seqc(seq.size() + 1);
   copy(seq.begin(), seq.end(), seqc.begin());
@@ -87,7 +187,8 @@ double RNAUtils::get_minimum_free_energy(const string seq, const string cnstrnt)
  *                 be double-stranded (paired). Any existing values in these
  *                 vectors will be cleared.
  */
-void RNAUtils::get_base_pair_probability_vector(bool VERBOSE,
+void
+RNAUtils::get_base_pair_probability_vector(bool VERBOSE,
     const vector<string> &seqs, vector<vector<double> > &bppvs) {
   bppvs.clear();
   bppvs.resize(seqs.size());

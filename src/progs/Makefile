@@ -68,7 +68,9 @@ thermo : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 thermo : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
 simulate : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
-	smithlab_utils.o OptionParser.o RNG.o)
+	smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
+
+simulate : $(addprefix $(COMMON_DIR), RNA_Utils.o Part_Func.o IO.o)
 
 extractDEs : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o MappedRead.o)

@@ -30,6 +30,7 @@
 
 
 // TODO clean up includes
+// STL includes
 #include <cstdio>
 #include <cstdlib>
 #include <sys/time.h>
@@ -45,6 +46,10 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 
+// Zagros common includes
+#include "RNA_Utils.hpp"
+
+// Smithlab common includes
 #include "smithlab_utils.hpp"
 #include "smithlab_os.hpp"
 #include "RNG.hpp"
@@ -69,9 +74,6 @@ using std::min;
  *****************************************************************************/
 namespace SIMRNA {
   const static size_t RANDOM_POSITION = -1;
-  const static size_t RNA_ALPHABET_SIZE = 4;
-  const static double DEFAULT_BACKGROUND[RNA_ALPHABET_SIZE] = \
-                                                      {0.3,  0.2,  0.2,  0.3};
 
   // limits on site length
   const static size_t MIN_SITE_LEN = 4;
@@ -91,23 +93,6 @@ namespace SIMRNA {
   // DE constants
   const static int MIN_DE_OFFSET = -5;
   const static int MAX_DE_OFFSET = 5;
-
-  inline size_t
-  base2int(char c) {
-    switch(c) {
-    case 'A' : return 0;
-    case 'C' : return 1;
-    case 'G' : return 2;
-    case 'T' : return 3;
-    case 'U' : return 3;
-    case 'a' : return 0;
-    case 'c' : return 1;
-    case 'g' : return 2;
-    case 't' : return 3;
-    case 'u' : return 3;
-    default  : return 4;
-    }
-  }
 }
 
 /*****************************************************************************
@@ -176,12 +161,22 @@ check_consistent(const vector<GenomicRegion> &regions,
  * Functions for generating random numbers and variables
  *****************************************************************************/
 
+/**
+ * \brief TODO
+ * \param rng   TODO
+ * \param p     TODO
+ */
 static size_t
 generate_geometric_random_variable(const Runif &rng,
     const double p) {
   return std::floor(std::log(rng.runif(0.0, 1.0)) / std::log(1.0 - p));
 }
 
+/**
+ * \brief TODO
+ * \param gr    TODO
+ * \param n     TODO
+ */
 static vector<double>
 generate_dirichlet_random_variables(gsl_rng *gr,
     size_t n) {
@@ -200,24 +195,31 @@ generate_dirichlet_random_variables(gsl_rng *gr,
   return ret_val;
 }
 
+/**
+ * \brief TODO
+ * \param gr    TODO
+ * \param n     TODO
+ * \param m     TODO
+ * \param pwm   TODO
+ */
 static void
 generate_targeted_position_weight_matrix(gsl_rng *gr, size_t n,
     size_t m, double target_ic, vector<vector<double> > &pwm) {
-
-  const double pwm_0[SIMRNA::RNA_ALPHABET_SIZE] = { 0.3,  0.2,  0.2,  0.3};
   double ic = 0;
   double sum = 0;
   vector<double> new_col(m, 0.0);
   double ave = 0;
-  while (fabs(ave - target_ic) > 0.005) {
+  while (fabs(ave - target_ic) > 0.005) {   // TODO -- PJU: MAGIC!!
     sum = 0;
     pwm.clear();
     while (pwm.size() < n) {
       ic = 0;
       new_col = generate_dirichlet_random_variables(gr, m);
       for (size_t j = 0; j < new_col.size(); ++j)
-        if (new_col[j] > 0)
-          ic += new_col[j] * fabs(log(new_col[j]/pwm_0[j])/log(2.0));
+        if (new_col[j] > 0) {
+          const double bgd = new_col[j]/RNAUtils::DEFAULT_BACKGROUND[j];
+          ic += new_col[j] * fabs(log(bgd)/log(2.0));
+        }
       sum += ic;
       pwm.push_back(new_col);
     }
@@ -225,65 +227,6 @@ generate_targeted_position_weight_matrix(gsl_rng *gr, size_t n,
   }
 }
 
-/*****************************************************************************
- * Functions for generating various types of RNA sequences
- *****************************************************************************/
-
-/****
- * \summary generate a sequence from a nucleotide distribution.
- * \param dist      the distribution to use.
- * \param length    the length of the sequence to build.
- * \param rng       TODO
- * \throw SMITHLABException: if the dist. vector has the wrong dimensions.
- */
-string
-generateSequenceFromNucleotideDistribution(const vector<double> &dist,
-                                           const size_t length,
-                                           const Runif &rng) {
-  if (dist.size() != SIMRNA::RNA_ALPHABET_SIZE) {
-    stringstream ss;
-    ss << "Failed to generate sequence from nucleotide distribution, "
-       << "distribution vector was malformed: found "
-       << dist.size() << " entries; expected " << SIMRNA::RNA_ALPHABET_SIZE;
-    throw SMITHLABException(ss.str());
-  }
-
-  string res = "";
-  for (size_t i = 0; i < length; ++i) {
-    double r = rng.runif(0.0, 1.0);
-    if (r < dist[SIMRNA::base2int('A')]) res += 'A';
-    else if (r < dist[SIMRNA::base2int('A')] +\
-                 dist[SIMRNA::base2int('C')]) res += 'C';
-    else if (r < dist[SIMRNA::base2int('A')] +\
-                 dist[SIMRNA::base2int('C')] +\
-                 dist[SIMRNA::base2int('G')]) res += 'G';
-    else res += 'T';
-  }
-
-  return res;
-}
-
-/****
- * \summary     generate a sequence from a position weight matrix
- * \param pwm   the PWM to make the sequence from
- * \param rng   TODO
- * \throw SMITHLABException if the PWM is malformed.
- */
-string
-generateSequenceFromPWM(const vector<vector<double> > pwm, const Runif &rng) {
-  string res = "";
-  for (size_t j = 0; j < pwm.size(); ++j) {
-    if (pwm[j].size() != SIMRNA::RNA_ALPHABET_SIZE) {
-      stringstream ss;
-      ss << "Failed to generate sequence from PWM, PWM was malformed: found "
-         << pwm[j].size() << " entries for position " << j
-         << "; expected " << SIMRNA::RNA_ALPHABET_SIZE;
-      throw SMITHLABException(ss.str());
-    }
-    res += generateSequenceFromNucleotideDistribution(pwm[j], 1, rng);
-  }
-  return res;
-}
 
 /*****************************************************************************
  * Functions for placing different types of motif occurrences into sequences
@@ -326,7 +269,7 @@ placeUnstructuredMotifOccurrence(string &seq, const vector<vector<double> > &pwm
   }
 
   // place it..
-  string occurrence = generateSequenceFromPWM(pwm, rng);
+  string occurrence = RNAUtils::sampleSequenceFromPWM(pwm, rng);
   seq.replace(seq.begin() + motifLocation,
               seq.begin() + motifLocation + occurrence.size(),
               occurrence);
@@ -436,7 +379,7 @@ placeStructuredMotifOccurrence(string &seq,
   }
 
   // finally, we can place everything ...
-  string occurrence = generateSequenceFromPWM(pwm, rng);
+  string occurrence = RNAUtils::sampleSequenceFromPWM(pwm, rng);
   seq.replace(seq.begin() + motifLocation,
               seq.begin() + motifLocation + occurrence.size(),
               occurrence);
@@ -911,9 +854,9 @@ writeAugmentedPWM (const vector<vector<double> > &M, const double p,
 
   for (size_t j = 0; j < M.size(); j++) {
     matrixOut << "0" << j + 1 << "\t";
-    for (size_t b = 0; b < SIMRNA::RNA_ALPHABET_SIZE - 1; b++)
+    for (size_t b = 0; b < RNAUtils::RNA_ALPHABET_SIZE - 1; b++)
       matrixOut << (int) (M[j][b] * N) << "\t";
-    matrixOut << (int) (M[j][SIMRNA::RNA_ALPHABET_SIZE - 1] * N) << endl;
+    matrixOut << (int) (M[j][RNAUtils::RNA_ALPHABET_SIZE - 1] * N) << endl;
   }
   matrixOut << "XX" << endl;
   matrixOut << "AT\tGEO_P=" << p << endl;
@@ -1015,7 +958,7 @@ generateAndPlace(const int siteLen, const double targetIC,
   // generate the PWM for the motif we're going to place
   if (VERBOSE) cerr << "GENERATING PWM... ";
   generate_targeted_position_weight_matrix(gr, siteLen,
-                                           SIMRNA::RNA_ALPHABET_SIZE,
+                                           RNAUtils::RNA_ALPHABET_SIZE,
                                            targetIC, pwm);
   if (VERBOSE) {
     cerr << "DONE. GENERATED MATRIX: " << endl;

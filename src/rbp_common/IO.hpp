@@ -40,6 +40,9 @@
 #include "GenomicRegion.hpp"
 #include "MappedRead.hpp"
 
+size_t
+loadDiagnosticEvents(const std::string &fn,
+                     std::vector<std::vector<size_t> > &diagEvents);
 
 void
 load_sequences(const std::string &targets_file,

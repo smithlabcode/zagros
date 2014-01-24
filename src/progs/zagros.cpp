@@ -18,7 +18,10 @@
  *    along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// STL includes
 #include <cassert>
+#include <ctime>
+#include <sys/time.h>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -27,15 +30,18 @@
 #include <queue>
 #include <tr1/unordered_map>
 
+// smithlab common code includes
 #include "OptionParser.hpp"
 #include "smithlab_utils.hpp"
 #include "smithlab_os.hpp"
 #include "RNG.hpp"
 
+// Zagros package common code includes
+#include "RNA_Utils.hpp"
 #include "Model.hpp"
 #include "IO.hpp"
-using std::tr1::unordered_map;
 
+using std::tr1::unordered_map;
 using std::stringstream;
 using std::ifstream;
 using std::string;
@@ -46,47 +52,6 @@ using std::endl;
 using std::max;
 using std::pair;
 using std::numeric_limits;
-
-/***
- * \brief load the diagnostic events from the given filename. The format of
- *          the file should be one sequence per line, each line is a comma
- *          separated list, where each element is the number of diagnostic
- *          events observed at that location in the given sequence.
- * \param fn            the filename to read the events from
- * \param diagEvents    the events are added to this vector. Any existing data
- *                      is cleared from the vector. diagEvents[i][j] is the
- *                      location of the jth diagnostic event in sequence i.
- *                      locations are relative to the start of the sequence.
- * \return the count of diagnostic events that were found
- * \todo this should be moved into IO.cpp
- */
-size_t
-loadDiagnosticEvents(const string &fn, vector<vector<size_t> > &diagEvents) {
-  size_t total = 0;
-  static const size_t buffer_size = 100000; // TODO magic number
-  ifstream in(fn.c_str());
-  if (!in) throw SMITHLABException("failed to open input file " + fn);
-
-  diagEvents.clear();
-  while (!in.eof()) {
-    char buffer[buffer_size];
-    in.getline(buffer, buffer_size);
-    if (in.gcount() == buffer_size - 1)
-      throw SMITHLABException("Line too long in file: " + fn);
-    vector<string> parts(smithlab::split(string(buffer), ",", false));
-    if (parts.size() == 0) continue;
-    diagEvents.push_back(vector<size_t>());
-    for (size_t j = 0; j < parts.size(); ++j) {
-      size_t countAtJ = static_cast<size_t>(atoi(parts[j].c_str()));
-      for (size_t a = 0; a < countAtJ; ++a) {
-        diagEvents.back().push_back(j);
-        total += 1;
-      }
-    }
-  }
-  return total;
-}
-
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -174,8 +139,14 @@ expected_seqs_with_kmer(const string &kmer,
   return expected;
 }
 
-static size_t count_seqs_with_kmer(const string &kmer,
-                                   const vector<string> &sequences) {
+/**
+ * \brief TODO
+ * \param kmer          TODO
+ * \param sequences     TODO
+ */
+static size_t
+count_seqs_with_kmer(const string &kmer,
+                     const vector<string> &sequences) {
   size_t count = 0;
   for (size_t i = 0; i < sequences.size(); ++i) {
     bool has_kmer = false;
@@ -187,6 +158,13 @@ static size_t count_seqs_with_kmer(const string &kmer,
   return count;
 }
 
+/**
+ * \brief TODO
+ * \param k_value       TODO
+ * \param n_top_kmers   TODO
+ * \param sequences     TODO
+ * \param top_kmers     TODO
+ */
 static void
 find_best_kmers(const size_t k_value,
                 const size_t n_top_kmers,
@@ -265,28 +243,21 @@ check_overlapping(const vector<GenomicRegion> &targets) {
   return ret_val;
 }*/
 
-// TODO should be in RNA utils
-static char
-sample_nuc(const Runif &rng,
-           vector<double> &probs) {
-  const double d = rng.runif(0.0, 1.0);
-  if (d < probs[0])
-    return 'A';
-  if (d < probs[1])
-    return 'C';
-  if (d < probs[2])
-    return 'G';
-  return 'T';
-}
 
+/***
+ * \brief           TODO
+ * \param sequences TODO
+ * \param rng       TODO
+ * \TODO -- PJU This probably belongs in RNA_Utils, rather than here.
+ */
 static void
-replace_Ns(vector<string> &sequences) {
-  const Runif rng(std::numeric_limits<int>::max());
+replace_Ns(vector<string> &sequences, const Runif &rng) {
   vector<double> probs(vector<double>(smithlab::alphabet_size, 
 				      1.0/smithlab::alphabet_size));
-  for (size_t i = 0; i < sequences.size(); ++i)
-    std::replace(sequences[i].begin(), sequences[i].end(), 'N', 
-		 sample_nuc(rng, probs));
+  for (size_t i = 0; i < sequences.size(); ++i) {
+    char n = RNAUtils::sampleNuc(rng);
+    std::replace(sequences[i].begin(), sequences[i].end(), 'N', n);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -296,6 +267,13 @@ replace_Ns(vector<string> &sequences) {
 ///////////  CODE FOR FORMATTING MOTIF / MODEL OUTPUT BELOW HERE
 ///////////
 
+/**
+ * \brief TODO
+ * \param model     TODO
+ * \param region    TODO
+ * \param seq       TODO
+ * \param site_pow  TODO
+ */
 static string
 format_site(const Model &model,
             const GenomicRegion &region,
@@ -309,97 +287,22 @@ format_site(const Model &model,
   return ss.str();
 }
 
-
-/****
- * \TODO this needs to be replaced by use of RNG from smithlab
- */
-double
-randomDouble(const double lower, const double upper) {
-  if (lower >= upper) {
-    stringstream ss;
-    ss << "Failed to generate random double: "
-       << "lower boundary was greater than upper.";
-    throw SMITHLABException(ss.str());
-  }
-  double frac = (double) rand() / RAND_MAX;
-  return lower + (frac * (upper - lower));
-}
-
-
-/***
- * \TODO more stuff copied from simulate that needs to go into some library
- */
-namespace RNAUT {
-  inline size_t
-  base2int(char c) {
-    switch(c) {
-    case 'A' : return 0;
-    case 'C' : return 1;
-    case 'G' : return 2;
-    case 'T' : return 3;
-    case 'U' : return 3;
-    case 'a' : return 0;
-    case 'c' : return 1;
-    case 'g' : return 2;
-    case 't' : return 3;
-    case 'u' : return 3;
-    default  : return 4;
-    }
-  }
-}
-
-/****
- * \summary: generate a sequence from a nucleotide distribution.
- * \param dist: the distribution to use.
- * \param length: the length of the sequence to build
- * \throw SMITHLABException: if the dist. vector has the wrong dimensions
- * \TODO this is duplicated in simulate program; it should be pushed into some
- *       common file somewhere. RNA_UTILS probably.
- */
-string
-genSeqFromNucDist(const vector<double> &dist, const size_t length) {
-  if (dist.size() != 4) {   // Todo fix this magic.
-    stringstream ss;
-    ss << "Failed to generate sequence from nucleotide distribution, "
-       << "distribution vector was malformed: found "
-       << dist.size() << " entries; expected " << 4; // Todo fix this magic.
-    throw SMITHLABException(ss.str());
-  }
-
-  string res = "";
-  for (size_t i = 0; i < length; ++i) {
-    double r = randomDouble(0, 1);
-    if (r < dist[RNAUT::base2int('A')]) res += 'A';
-    else if (r < dist[RNAUT::base2int('A')] +\
-                 dist[RNAUT::base2int('C')]) res += 'C';
-    else if (r < dist[RNAUT::base2int('A')] +\
-                 dist[RNAUT::base2int('C')] +\
-                 dist[RNAUT::base2int('G')]) res += 'G';
-    else res += 'T';
-  }
-
-  return res;
-}
-
-
 /***
  * \summary given a set of sequences and indicators for motif occurrences,
  *          mask out the most likely occurrences of the motif in the sequences
  * \param seqs          TODO
  * \param indicators    TODO
  * \param zoops         TODO
+ * \param motifLen      TODO
+ * \param rng           Random number generator used for generating the
+ *                      masking sequences.
  * \throw SMITHLABException if the dimensions of seqs doesn't match indicators
  *        or zoops_i
  */
 static void
 maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
-                const vector<double> &zoops, const size_t motifLen) {
-  // todo too much magic here, also this is duplicating stuff in simulate..
-  const static double DEFAULT_BACKGROUND[4] = {0.3,  0.2,  0.2,  0.3};
-  const static vector<double> DEFAULT_BACKGROUND_VEC
-    (DEFAULT_BACKGROUND,
-     DEFAULT_BACKGROUND + sizeof(DEFAULT_BACKGROUND) / sizeof(DEFAULT_BACKGROUND[0]));
-
+                const vector<double> &zoops, const size_t motifLen,
+                const Runif &rng) {
   if (seqs.size() != indicators.size()) {
     stringstream ss;
     ss << "failed to mask motif occurrences, number of indicator vectors ("
@@ -417,7 +320,7 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
 
 
   for (size_t i = 0; i < seqs.size(); ++i) {
-    if (zoops[i] >= 0.8) {      // TODO Abracadabra!
+    if (zoops[i] >= 0.8) {      // TODO -- PJU: Abracadabra!
       double max_X = -1;
       int max_indx = -1;
       for (size_t j = 0; j < indicators[i].size(); j++) {
@@ -426,12 +329,16 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
           max_indx = j;
         }
       }
-      string junk = genSeqFromNucDist(DEFAULT_BACKGROUND_VEC, motifLen);
+      string junk = RNAUtils::sampleSeq(motifLen, rng);
       seqs[i].replace(max_indx, motifLen, junk);
     }
   }
 }
 
+/**
+ * \brief TODO
+ * \param name  TODO
+ */
 static string
 format_motif_header(const string &name) {
   static const string the_rest("XX\nTY\tMotif\nXX\nP0\tA\tC\tG\tT");
@@ -531,10 +438,14 @@ format_motif(const Model &model,
 
 int main(int argc, const char **argv) {
   try {
+    // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
 
-    // TODO: the level parameter, specifying how much influence the DEs have,
-    // is currently not used
+    // TODO -- PJU: the level parameter, specifying how much influence the DEs
+    //              have, is currently not used, so I commented it out; it
+    //              needs to be (sensibly) implemented.
+
+    // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
     size_t n_motifs = 1;
@@ -542,13 +453,14 @@ int main(int argc, const char **argv) {
     string chrom_dir = "";
     string structure_file;
     string reads_file;
-    // not implemented
+    // TODO -- PJU: not currently implemented.
     //double level = std::numeric_limits<double>::max();
     size_t numStartingPoints = 3;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    // TODO -- specify any missing default values below using constants and
-    // fix the ones that are hard-coded in.
+    // TODO -- PJU: some options below don't have their defaults specified,
+    //              they need to be fixed so defaults are shown, but not
+    //              hard-coded into the strings. Ditto acceptable ranges.
     OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
     opt_parse.add_opt("output", 'o', "output file name (default: stdout)", 
                       OptionParser::OPTIONAL, outfile);
@@ -562,7 +474,7 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, structure_file);
     opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
                       OptionParser::OPTIONAL, reads_file);
-    // not currently implemented
+    // TODO -- PJU: not currently implemented.
     /*opt_parse.add_opt("level", 'l', "level of influence by diagnostic events "
                       "(default: maximum)", OptionParser::OPTIONAL, level);*/
     opt_parse.add_opt("starting-points", 's', "number of starting points to try "
@@ -603,6 +515,14 @@ int main(int argc, const char **argv) {
     const string targets_file(leftover_args.back());
     /****************** END COMMAND LINE OPTIONS *****************/
 
+    // seed the random number generator using the time, and make a uniform
+    // random number generator object
+    struct timeval time;
+    gettimeofday(&time,NULL);
+    size_t seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
+    srand(seed);
+    const Runif rng(seed);
+
     std::ofstream of;
     if (!outfile.empty())
       of.open(outfile.c_str());
@@ -614,7 +534,7 @@ int main(int argc, const char **argv) {
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
     load_sequences(targets_file, chrom_dir, seqs, names, targets);
-    replace_Ns(seqs);
+    replace_Ns(seqs, rng);
 
     // Data structures and input preparation for secondary structure
     vector<vector<double> > secondary_structure;
@@ -656,6 +576,8 @@ int main(int argc, const char **argv) {
       double bestLogLike = 0;
       bool firstKmer = true;
 
+      // these will hold the best results after trying all of our
+      // starting point kmers
       vector<vector<double> > indicators;
       vector<double> has_motif;
       Model model;
@@ -713,7 +635,7 @@ int main(int argc, const char **argv) {
 
       if (VERBOSE)
               cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
-      maskOccurrences(seqs, indicators, has_motif, motif_width);
+      maskOccurrences(seqs, indicators, has_motif, motif_width, rng);
     }
   } 
   catch (const SMITHLABException &e) {
