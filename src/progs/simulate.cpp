@@ -657,7 +657,7 @@ placeDEGeom (const GenomicRegion &region, vector<size_t> &diagEvents,
                               static_cast<int>(deDistance);
     }
   } while ((dePosRelToRegionStart < 0) ||
-           (dePosRelToRegionStart > region.get_width()));
+           (dePosRelToRegionStart > static_cast<int> (region.get_width())));
   diagEvents[dePosRelToRegionStart] += 1;
 }
 
@@ -920,7 +920,7 @@ writeAugmentedPWM (const vector<vector<double> > &M, const double p,
  *                                  progress are printed to STDERR.
  */
 void
-generateAndPlace(const int siteLen, const double targetIC,
+generateAndPlace(const size_t siteLen, const double targetIC,
                  const double occLevel, const string &strType,
                  const double strLevel, const vector<size_t> &numDEsPerSeq,
                  vector<string> &seqs, const vector<GenomicRegion> &regions,
@@ -1021,7 +1021,7 @@ main(int argc, const char **argv) {
     double strLevel = 1;
     string strType = SIMRNA::unstructured;
     double occLevel = 1;
-    int site_length = 6;
+    size_t site_length = 6;
     double target_ic = 1.7;
     string deFile = "";
     bool VERBOSE = false;
@@ -1030,6 +1030,7 @@ main(int argc, const char **argv) {
     size_t numMotifs = 1;
 
     // TODO specify defaults below for length, ic, frac of de
+    // TODO check range on all parameters
     // TODO fix about message
 
     /****************** COMMAND LINE OPTIONS ********************/
