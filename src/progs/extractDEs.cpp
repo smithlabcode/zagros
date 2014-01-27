@@ -45,6 +45,7 @@ using std::ostream;
 using std::endl;
 using std::pair;
 using std::tr1::unordered_map;
+using std::stringstream;
 
 // TODO there are now several copies of slightly different code for checking
 //      whether a set of genomic regions has any overlapping elements; they need
@@ -442,6 +443,8 @@ main(int argc, const char **argv) {
                        OptionParser::OPTIONAL, mapper);
     opt_parse.add_opt("tech", 't', "the technology type used in the experiment",
                       OptionParser::OPTIONAL, tech);
+    opt_parse.add_opt("verbose", 'v', "print more run info",
+                      OptionParser::OPTIONAL, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
     if (argc == 1 || opt_parse.help_requested()) {
@@ -460,8 +463,15 @@ main(int argc, const char **argv) {
       throw SMITHLABException("Must provide mapped reads file");
     }
     if (leftover_args.size() > 1) {
-      throw SMITHLABException("Multiple mapped reads files detected; "
-                              "can only handle one at a time");
+      stringstream ss;
+      ss << "Multiple mapped reads files detected: ";
+      for (size_t i = 0; i < leftover_args.size(); i++) {
+        ss << leftover_args[i];
+        if (i != leftover_args.size() - 1) ss << ", ";
+        else ss << "; can only handle one at a time";
+      }
+
+      throw SMITHLABException(ss.str());
     }
     const string mappedReadFn(leftover_args.front());
     /****************** END COMMAND LINE OPTIONS *****************/
