@@ -501,8 +501,10 @@ load_mapped_reads(const string &reads_file,
         read_bowtie_output(parts, mapped_reads);
       else if (mapper == "rmap")
         read_rmap_output(parts, mapped_reads);
-      else
-        throw SMITHLABException("The mapper was not recognized!");
+      else {
+        throw SMITHLABException("The mapper '" + mapper +\
+                                "' was not recognized!");
+      }
     }
     size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
     if (percent_done != current_done) {

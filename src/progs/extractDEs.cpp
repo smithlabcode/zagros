@@ -47,18 +47,44 @@ using std::pair;
 using std::tr1::unordered_map;
 using std::stringstream;
 
-// TODO there are now several copies of slightly different code for checking
-//      whether a set of genomic regions has any overlapping elements; they need
-//      to be consolidated.
+//
 
 
+/**
+ * \brief check whether a set of genomic intervals is free of overlaps. The
+ *        intervals need not be sorted, but they must all be from the same
+ *        chromosome (an exception is thrown if they aren't). Since genomic
+ *        regions don't include their end coordinate, we don't consider two
+ *        genomic intervals to overlap if one of them has a start coordinate
+ *        equal to the end coordinate of the other.
+ * \param   target_chrom  the set of genomic regions to test
+ * \return  true if the set is free of overlaps, false otherwise
+ * \throw   SMITHLABException if the regions don't all come from the
+ *          same chromosome
+ * \todo    there are now several copies of slightly different code in zagros
+ *          for checking whether a set of genomic regions has any overlapping
+ *          elements; they need to be consolidated.
+ */
 static bool
 check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
-
+  bool first = true;
+  string chrom = "";
   vector<pair<size_t, bool> > boundaries;
   for (size_t i = 0; i < targets_chrom.size(); ++i) {
+    if (first) {
+      first = false;
+      chrom = targets_chrom[i].get_chrom();
+    } else {
+      if (chrom != targets_chrom[i].get_chrom()) {
+        stringstream ss;
+        ss << "failed checking overlap of chromosomes. Supplied regions are "
+           << "on multiple chromosomes: " << chrom << " and "
+           << targets_chrom[i].get_chrom();
+        throw SMITHLABException(ss.str());
+      }
+    }
     boundaries.push_back(std::make_pair(targets_chrom[i].get_start(), false));
-    boundaries.push_back(std::make_pair(targets_chrom[i].get_end(), true));
+    boundaries.push_back(std::make_pair(targets_chrom[i].get_end()-1, true));
   }
   sort(boundaries.begin(), boundaries.end());
 
