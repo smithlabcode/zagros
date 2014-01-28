@@ -519,6 +519,7 @@ main(int argc, const char **argv) {
     make_inputs(mapped_reads, tech, de_regions);
     sort(de_regions.begin(), de_regions.end());
     sift(targets, de_regions);
+    sort(de_regions.begin(), de_regions.end());
     vector<vector<size_t> > counts;
     countDEs(de_regions, targets, counts);
     if (VERBOSE) cerr << "DONE" << endl;
