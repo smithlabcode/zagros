@@ -1,4 +1,5 @@
-/*    sortbed: a program for sorting BED format files
+/*    Functions for Zagros I/O
+ *
  *    Copyright (C) 2008 University of Southern California and
  *                       Andrew D. Smith
  *
@@ -221,20 +222,108 @@ read_bowtie_output(const vector<string> &parts,
   }
 }
 
+/******************************************************************************
+ *             STATIC HELPER FUNCTIONS FOR PARSING MAPPED READS
+ ******************************************************************************/
+/**
+ * \brief determine whether a tokenized novoalign read is uniquely mapping
+ */
+static bool
+isUniqueMapper_novoAlign(const vector<string> &parts) {
+  return (parts.size() == 14 && parts[4] == "U");
+}
+
+/**
+ * \brief determine whether a tokenized read from a given short read mapper is
+ *        uniquely mapping.
+ */
+static bool
+isUniqueMapper(const vector<string> &tokens, const string &mapper) {
+  if (mapper == "novoalign") return isUniqueMapper_novoAlign(tokens);
+  else throw SMITHLABException("The mapper '" + mapper +\
+                               "' was not recognized!");
+}
+
+/**
+ * \brief parse a novoalign read string that has already been tokenized and
+ *        populate a MappedRead object. The read string must represent a
+ *        uniquely mapping read. Note that, rather than putting the quality
+ *        scores into the mr.scr field, we are putting the novoalign mismatch
+ *        string into this field.
+ * \param read TODO
+ * \param mr   TODO
+ * \throw SMITHLABException if the read string is not in the expected format.
+ */
 static void
-read_novoalign_output(const vector<string> &parts,
-                      vector<MappedRead> &regions) {
+parseMappedRead_novoAlign(const vector<string> &parts, MappedRead &mr) {
   if (parts.size() == 14 && parts[4] == "U") {
     vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
-    string strand = ((parts[9] == "F") ? "+" : "-");
-    string gr = parts[7].substr(1) + "\t" + parts[8] + "\t"
-        + convertSizet(convertString(parts[8]) + parts[2].length()) + "\t"
-        + name[0] + "\t" + parts[5] + "\t" + strand;
-    string read = gr + "\t" + parts[2] + "\t" + parts[13];
-    MappedRead mr(read.c_str());
-    regions.push_back(mr);
+    char strand = ((parts[9] == "F") ? '+' : '-');
+    mr.r.set_chrom(parts[7].substr(1));
+    mr.r.set_start(convertString(parts[8]));
+    mr.r.set_end(convertString(parts[8]) + parts[2].length());
+    mr.r.set_name(name[0]);
+    mr.r.set_score(convertString(parts[5]));
+    mr.r.set_strand(strand);
+    mr.seq = parts[2];
+    mr.scr = parts[13];
+  } else {
+    throw SMITHLABException("failed to parse novoalign read. Unexpected "
+                            "format. Can only parse uniquely mapping reads");
   }
 }
+
+/**
+ * \brief parse a tokenized novoalign read-string, create a mapped read from
+ *        it and add the new MR to the provided vector. The tokenized read must
+ *        be uniquely mapping.
+ * \param ps the tokenized read ps[i] is the ith token from the (tab delimited)
+ *           string representation.
+ * \param rs the vector of mapped reads to add the resultant MappedRead to.
+ */
+static void
+parseMappedRead_novoAlign(const vector<string> &ps, vector<MappedRead> &rs) {
+  MappedRead mr;
+  parseMappedRead_novoAlign(ps, mr);
+  rs.push_back(mr);
+}
+
+/**
+ * \brief parse a tokenized mapped read and populate the provide MappedRead
+ *        object.
+ * \param parts         TODO
+ * \param mapper        TODO
+ * \param mr            TODO
+ */
+static void
+parseMappedRead(const vector<string> &parts, const string &mapper,
+                MappedRead &mr) {
+  if (mapper == "novoalign") parseMappedRead_novoAlign(parts, mr);
+  else throw SMITHLABException("The mapper '" + mapper +\
+                               "' was not recognized!");
+}
+
+/**
+ * \brief parse a tokenized mapped read and add the resulting MappedRead object
+ *        to a vector of mapped reads.
+ * \param parts          TODO
+ * \param mapper        TODO
+ * \param mapped_reads  TODO
+ */
+static void
+parseMappedRead(const vector<string> &parts, const string &mapper,
+                vector<MappedRead> &mapped_reads) {
+  if (mapper == "novoalign") parseMappedRead_novoAlign(parts, mapped_reads);
+  else if (mapper == "bowtie") read_bowtie_output(parts, mapped_reads);
+  else if (mapper == "rmap") read_rmap_output(parts, mapped_reads);
+  else throw SMITHLABException("The mapper '" + mapper +\
+                               "' was not recognized!");
+}
+
+
+/******************************************************************************
+ *
+ ******************************************************************************/
 
 static void
 expand_regions(vector<GenomicRegion> &regions,
@@ -466,7 +555,8 @@ load_sequences(const string &targets_file,
 
 /**
  * \brief load a set of mapped reads from a given file; accepted formats are
- *        those output by novoalign, bowtie and rmap (mapped-read format).
+ *        those output by novoalign, bowtie and rmap (mapped-read format). If
+ *        the format is novo-align, only uniquely-mapped reads are loaded.
  * \param reads_file
  * \param mapper        the mapper used to produce the file (i.e. the format)
  * \param mapped_reads  TODO
@@ -494,16 +584,10 @@ load_mapped_reads(const string &reads_file,
     if (in.gcount() == buffer_size - 1)
       throw SMITHLABException("Line too long in file: " + reads_file);
     if (!is_header_line(buffer) && !is_track_line(buffer)) {
-      vector<string> parts(split_extended_whitespace_quoted(buffer));
-      if (mapper == "novoalign")
-        read_novoalign_output(parts, mapped_reads);
-      else if (mapper == "bowtie")
-        read_bowtie_output(parts, mapped_reads);
-      else if (mapper == "rmap")
-        read_rmap_output(parts, mapped_reads);
-      else {
-        throw SMITHLABException("The mapper '" + mapper +\
-                                "' was not recognized!");
+      vector<string> tokens(split_extended_whitespace_quoted(buffer));
+      if ((mapper != "novoalign") ||
+          ((mapper == "novoalign") && (isUniqueMapper(tokens, mapper)))) {
+        parseMappedRead(tokens, mapper, mapped_reads);
       }
     }
     size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
@@ -516,6 +600,40 @@ load_mapped_reads(const string &reads_file,
   in.close();
   std::cerr << std::endl << mapped_reads.size()
             << " uniquely mapped reads are loaded!" << std::endl;
+}
+
+/**
+ * \brief fill a buffer with mapped reads from an input stream; accepted
+ *        formats are those output by novoalign, bowtie and rmap (mapped-read
+ *        format). If the format is novo-align, only uniquely-mapped reads
+ *        are loaded.
+ * \param in        TODO
+ * \param mapper    TODO
+ * \param buffer    TODO
+ */
+void
+fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
+                         vector<MappedRead> &buffer) {
+  static const size_t line_buffer_size = 10000;
+  size_t i = 0;
+  while (i < buffer.size() && !in.eof()) {
+
+    char line_buffer[line_buffer_size];
+    in.getline(line_buffer, line_buffer_size);
+    if (in.gcount() == line_buffer_size - 1)
+      throw SMITHLABException("Line too long");
+    if (!is_header_line(line_buffer) && !is_track_line(line_buffer)) {
+      vector<string> tokens(split_extended_whitespace_quoted(line_buffer));
+      if ((mapper != "novoalign") ||
+          ((mapper == "novoalign") && (isUniqueMapper(tokens, mapper)))) {
+        MappedRead mr;
+        parseMappedRead(tokens, mapper, mr);
+        buffer[i] = mr;
+        ++i;
+      }
+    }
+  }
+  if (i < buffer.size()) buffer.erase(buffer.begin() + i, buffer.end());
 }
 
 /******************************************************************************

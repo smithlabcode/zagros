@@ -1,6 +1,9 @@
 /**
   \file extractDEs.cpp
-  \brief TODO
+  \brief This is a program that is part of the Zagros package. It's function
+         is to compute the counts of diagnostic events within a set of target
+         regions (that the user specifies) by extracting them from mapping
+         results.
 
   \authors Emad Bahrami Samani, Philip J. Uren, Andrew D. Smith
 
@@ -28,449 +31,580 @@
   \section history Revision History
 **/
 
+// STL includes
 #include <string>
 #include <vector>
 #include <tr1/unordered_map>
 
+// Zagros common includes
 #include "IO.hpp"
+#include "IntervalTree.hpp"
+
+// Smithlab common icnludes
 #include "GenomicRegion.hpp"
 #include "OptionParser.hpp"
 #include "smithlab_os.hpp"
 
-using std::string;
-using std::vector;
 using std::cerr;
 using std::cout;
-using std::ostream;
 using std::endl;
 using std::pair;
-using std::tr1::unordered_map;
+using std::string;
+using std::vector;
+using std::ostream;
 using std::stringstream;
+using std::tr1::unordered_map;
 
-//
 
+/******************************************************************************
+ *      structures, and functions for manipulating diagnostic events
+ *****************************************************************************/
 
 /**
- * \brief check whether a set of genomic intervals is free of overlaps. The
- *        intervals need not be sorted, but they must all be from the same
- *        chromosome (an exception is thrown if they aren't). Since genomic
- *        regions don't include their end coordinate, we don't consider two
- *        genomic intervals to overlap if one of them has a start coordinate
- *        equal to the end coordinate of the other.
- * \param   target_chrom  the set of genomic regions to test
- * \return  true if the set is free of overlaps, false otherwise
- * \throw   SMITHLABException if the regions don't all come from the
- *          same chromosome
- * \todo    there are now several copies of slightly different code in zagros
- *          for checking whether a set of genomic regions has any overlapping
- *          elements; they need to be consolidated.
+ * \brief The DERoi structure defines a 'region of interest' to extract counts
+ *        of diagnostic events in.
  */
-static bool
-check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
-  bool first = true;
-  string chrom = "";
-  vector<pair<size_t, bool> > boundaries;
-  for (size_t i = 0; i < targets_chrom.size(); ++i) {
-    if (first) {
-      first = false;
-      chrom = targets_chrom[i].get_chrom();
-    } else {
-      if (chrom != targets_chrom[i].get_chrom()) {
-        stringstream ss;
-        ss << "failed checking overlap of chromosomes. Supplied regions are "
-           << "on multiple chromosomes: " << chrom << " and "
-           << targets_chrom[i].get_chrom();
-        throw SMITHLABException(ss.str());
-      }
-    }
-    boundaries.push_back(std::make_pair(targets_chrom[i].get_start(), false));
-    boundaries.push_back(std::make_pair(targets_chrom[i].get_end()-1, true));
+struct DERoi {
+public:
+  DERoi(GenomicRegion &r_p, size_t rank_p) : r(r_p), rank(rank_p) {
+    this->counts.resize(r.get_width());
   }
-  sort(boundaries.begin(), boundaries.end());
-
-  size_t count = 0;
-  for (size_t i = 0; i < boundaries.size(); ++i)
-    if (boundaries[i].second)
-      --count;
-    else {
-      ++count;
-      if (count > 1) {
-        cerr << targets_chrom[i].tostring() << endl;
-        return true;
-      }
-    }
-  return false;
-}
-
-static bool
-check_overlapping(const vector<GenomicRegion> &targets) {
-
-  vector<vector<GenomicRegion> > targets_chroms;
-  separate_chromosomes(targets, targets_chroms);
-  bool ret_val = false;
-  for (size_t i = 0; i < targets_chroms.size() && !ret_val; ++i)
-    ret_val |= check_overlapping_chrom(targets_chroms[i]);
-  return ret_val;
-}
-
-
-////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////
-/////////////
-/////////////  STUFF FOR DIAGNOSTIC EVENTS
-/////////////
-
-struct DE {
-  std::string type;
-  size_t position;
-  std::string base;
-  std::string read;
+  GenomicRegion r;          /** the region covered **/
+  vector<size_t> counts;    /** counts[i] is the num. of DEs at rel. pos i **/
+  size_t rank;              /** position in input; used for sorting **/
 };
 
+/**
+ * \brief function for getting the start coordinate of a DERoi from a pointer;
+ *        this is just used for the IntervalTree, which takes a function
+ *        pointer for how to extract a start coordinate from an object of
+ *        type T (here pointer to DERoi)
+ */
+size_t getDERoiStart(DERoi *a) {return a->r.get_start();}
+
+/**
+ * \brief function for getting the end coordinate of a DERoi from a pointer;
+ *        this is just used for the IntervalTree, which takes a function
+ *        pointer for how to extract an end coordinate from an object of
+ *        type T (here pointer to DERoi)
+ */
+size_t getDERoiEnd(DERoi *a) {return a->r.get_end();}
+
+/**
+ * \brief a functor used for sorting DERoi objects; just imposes an ordering
+ *        base on the rank (position within input file) or the ROI.
+ */
+struct DERoiRankComparator {
+  inline bool operator()(const DERoi *a, const DERoi *b) {
+    return a->rank < b->rank;
+  }
+};
+
+/**
+ * \brief This structure wraps up information about a single diagnostic event.
+ */
+struct DE {
+  std::string type;         /** type of DE. insertion/deletion/mutation   **/
+  size_t position;          /** location of DE relative to read start pos **/
+  std::string refBase;      /** the base in the reference (genome)        **/
+  std::string readBase;     /** the base in the read                      **/
+};
+
+/******************************************************************************
+ *            simple helper functions for manipulating types
+ *****************************************************************************/
+
+/**
+ * \brief convert a string to a size_t
+ * \param   s   the string to convert
+ * \return      the size_t corresponding to s
+ */
 static size_t
-convertString(const string& s) {
+stringToSize_t(const string& s) {
   std::istringstream buffer(s);
   size_t value;
   buffer >> value;
   return value;
 }
 
-
-static void
-sift_single_chrom(vector<GenomicRegion> &other_regions,
-                  vector<GenomicRegion> &regions,
-                  vector<GenomicRegion> &good_regions) {
-
-  typedef vector<GenomicRegion>::iterator region_itr;
-
-  for (size_t i = 0; i < regions.size(); ++i) {
-    region_itr closest(find_closest(other_regions, regions[i]));
-    if (closest->overlaps(regions[i])) {
-      good_regions.push_back(regions[i]);
-      good_regions.back().set_name(closest->get_name());
-    }
-  }
+/**
+ * \brief convert a bool to a string representation
+ * \param b the bool to convert
+ * \return the string "true" if b is true, otherwise the string "false"
+ */
+static string
+toString(const bool b) {
+  if (b) return "true";
+  return "false";
 }
 
+/******************************************************************************
+ *   functions for doing the actual extraction of DEs from mapping results
+ *****************************************************************************/
+
+/**
+ * \brief parse a Novoalign mismatch string to extract any diagnostic events
+ *
+ *        Novoalign (native format) mapped reads have a tab-delimited
+ *        format; there are a lot of possible fields, and they vary depending
+ *        on the exact input provided, but the final one is what I call here
+ *        the "mismatch string". Note that only this field should be provided
+ *        to this function, not the full read string. The mismatch string is
+ *        space delimited; we're interested in entries that specify insertions,
+ *        deletions or mismatches between the read and the reference (there may
+ *        be other entries, but we don't care about them).
+ *        Mismatch:  Format is 'offset''refbase'>'readbase'
+ *        Insertion: Format is 'offset'+'insertedbases'
+ *        Deletion:  Format is 'offset'-'refbase'
+ *        --
+ *        deletion means the base(s) is (are) in the ref., not in the read
+ *        insertion means the base(s) is (are) in the read, not the ref.
+ *        offset is the mm/indel offset from the mapping location (not the
+ *        position within the read).
+ *
+ * \param novo_mmString     the mismatch string from a Novoalign read
+ *                          (can be the empty string, or all whitespace)
+ * \param des               any extracted DEs will be added to the back of this
+ *                          vector. No existing entries in the vector will be
+ *                          modified.
+ */
 static void
-sift(vector<GenomicRegion> &other_regions,
-     vector<GenomicRegion> &regions) {
-
-  vector<vector<GenomicRegion> > other_regions_by_chrom;
-  separate_chromosomes(other_regions, other_regions_by_chrom);
-
-  unordered_map<string, size_t> chrom_lookup;
-  for (size_t i = 0; i < other_regions_by_chrom.size(); ++i)
-    chrom_lookup[other_regions_by_chrom[i].front().get_chrom()] = i;
-  const vector<GenomicRegion> dummy;
-
-  vector<vector<GenomicRegion> > regions_by_chrom;
-  separate_chromosomes(regions, regions_by_chrom);
-  regions.clear();
-
-  vector<GenomicRegion> good_regions;
-  for (size_t i = 0; i < regions_by_chrom.size(); ++i) {
-    const unordered_map<string, size_t>::const_iterator j =
-      chrom_lookup.find(regions_by_chrom[i].front().get_chrom());
-    if (j != chrom_lookup.end()) {
-      sift_single_chrom(other_regions_by_chrom[j->second],
-            regions_by_chrom[i], good_regions);
-    }
-
-  }
-  regions.swap(good_regions);
-
-  unordered_map<string, size_t> name_lookup;
-  for (size_t i = 0; i < other_regions.size(); ++i)
-    name_lookup[other_regions[i].get_name()] = i;
-
-  string prev_name = "";
-  for (size_t i = 0; i < regions.size(); ++i)
-    if (regions[i].get_name() != prev_name) {
-      const size_t idx(name_lookup[regions[i].get_name()]);
-      other_regions[idx].set_strand(regions[i].get_strand());
-      prev_name = regions[i].get_name();
-    }
-}
-
-static void
-parse_diagnostic_events(const string &de_string,
-                        vector<DE> &des) {
-  vector<string> parts(smithlab::split_whitespace_quoted(de_string));
-  if (parts.size() > 0)
-    for (size_t i = 0; i < parts.size(); ++i) {
-      DE de;
-      size_t index = parts[i].find(">");
-      if (index != string::npos) {
-        de.type = "mutation";
-        de.position = convertString(parts[i].substr(0, index - 1));
-        de.base = parts[i].substr(index - 1, 1);
-        de.read = parts[i].substr(index + 1, 1);
-      }
-      else {
-        index = parts[i].find("+");
-        if (index != string::npos) {
-          de.type = "deletion";
-          de.position = convertString(parts[i].substr(0, index));
-          de.base = parts[i].substr(index + 1, parts[i].length() - index - 1);
-        }
-    else {
-          index = parts[i].find("-");
-          if (index != string::npos) {
-            de.type = "insertion";
-            de.position = convertString(parts[i].substr(0, index));
-            de.base = parts[i].substr(index + 1, parts[i].length() - index - 1);
-          }
-        }
-      }
+extractDEs_novo(const string &novo_mmString, vector<DE> &des) {
+  vector<string> parts(smithlab::split_whitespace_quoted(novo_mmString));
+  for (size_t i = 0; i < parts.size(); ++i) {
+    DE de;
+    size_t idx = parts[i].find(">");
+    if (idx != string::npos) {
+      de.type = "mutation";
+      de.position = stringToSize_t(parts[i].substr(0, idx - 1));
+      de.refBase = parts[i].substr(idx - 1, 1);
+      de.readBase = parts[i].substr(idx + 1, 1);
       des.push_back(de);
     }
+    else {
+      idx = parts[i].find("+");
+      if (idx != string::npos) {
+        de.type = "insertion";
+        de.position = stringToSize_t(parts[i].substr(0, idx));
+        de.readBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+        de.refBase = "-";
+        des.push_back(de);
+      } else {
+        idx = parts[i].find("-");
+        if (idx != string::npos) {
+          de.type = "deletion";
+          de.position = stringToSize_t(parts[i].substr(0, idx));
+          de.refBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+          de.readBase = "-";
+          des.push_back(de);
+        }
+      }
+    }
+  }
 }
 
+/**
+ * \brief given a mapped read from an iCLIP experiment, produced by a
+ *        particular type of short read mapper, extract the diagnostic events
+ *        and add their genomic loci to the provided vector. An iCLIP read is
+ *        considered to have a diagnostic event as long as there are no 'T'
+ *        deletions in the read. A 'T' deletion would imply that the reverse
+ *        transcriptase read through the cross-link location, producing the 'T'
+ *        deletion, and failed to terminate at it. Any iCLIP read satisfying
+ *        that requirement is considered to have a DE at its 5' end.
+ * \param read the mapped read
+ * \param mapper        The name of the short read mapper used
+ * \param diagEventLocs the genomic loci of the extracted diagnostic events
+ *                      will be added to the end of this vector. Existing
+ *                      elements in the vector are left unchanged.
+ */
 static void
-add_diagnostic_events_iCLIP(const MappedRead &region,
-                            vector<GenomicRegion> &diagnostic_events) {
-
+addDiagEvents_iCLIP(const MappedRead &read, const string &mapper,
+                    vector<GenomicRegion> &diagEventLocs) {
   vector<DE> des;
-  const string name("X");
-  parse_diagnostic_events(region.scr, des);
+  if (mapper == "novoalign") extractDEs_novo(read.scr, des);
+  else throw SMITHLABException("unsupported short-read mapper for iCLIP "
+                               "data: " + mapper);
+
+  // check for 'T' deletion in the read that signifies an RT read-through of
+  // the cross-link location; we consider such reads to not contain DEs.
   bool contains_de = true;
-  if (des.size() > 0)
-    for (size_t i = 0; i < des.size(); ++i)
-      if ((region.r.pos_strand() && des[i].type == "insertion"
-       && des[i].base == "T")
-          || (!region.r.pos_strand() && des[i].type == "insertion"
-              && des[i].base == "A"))
-        contains_de = false;
+  for (size_t i = 0; i < des.size(); ++i) {
+    const bool posStrnd = read.r.pos_strand();
+    if ((posStrnd && des[i].type == "deletion" && des[i].refBase == "T") ||
+        (!posStrnd && des[i].type == "deletion" && des[i].refBase == "A")) {
+      contains_de = false;
+    }
+  }
+
   if (contains_de) {
-    size_t score = 1;
-    if (diagnostic_events.size() != 0)
-      if (diagnostic_events.back().get_name() == name)
-        score = diagnostic_events.back().get_score() + 1;
-    if (region.r.pos_strand()) {
-      GenomicRegion gr(region.r.get_chrom(),
-               region.r.get_start(),
-               region.r.get_start() + 1,
-               name, score, region.r.get_strand());
-      diagnostic_events.push_back(gr);
+    const string name("X");
+    const size_t score = 0;
+    if (read.r.pos_strand()) {
+      GenomicRegion g(read.r.get_chrom(), read.r.get_start(),
+                      read.r.get_start() + 1, name, score, read.r.get_strand());
+      diagEventLocs.push_back(g);
     }
     else {
-      GenomicRegion gr(region.r.get_chrom(), region.r.get_end(),
-               region.r.get_end() + 1,
-               name, score, region.r.get_strand());
-      diagnostic_events.push_back(gr);
+      GenomicRegion g(read.r.get_chrom(), read.r.get_end(),
+                       read.r.get_end() + 1, name, score, read.r.get_strand());
+      diagEventLocs.push_back(g);
     }
   }
 }
 
-static void
-add_diagnostic_events_hCLIP(const MappedRead &region,
-                            vector<GenomicRegion> &diagnostic_events) {
 
+/**
+ * \brief given a mapped read from a HITS-CLIP experiment, produced by a
+ *        particular type of short read mapper, extract any diagnostic events
+ *        from it and add their genomic loci to the  provided vector.
+ *        A diagnostic event in a HITS-CLIP read is the deletion of a T. We
+ *        only consider reads with one DE; x DEs implies x-1 are spurious, and
+ *        we wouldn't know which was the correct one, so we discard such cases.
+ * \param read          The mapped read
+ * \param mapper        The name of the short read mapper used
+ * \param diagEventLocs the genomic loci of the extracted diagnostic events
+ *                      will be added to the end of this vector. Existing
+ *                      elements in the vector are left unchanged.
+ */
+static void
+addDiagEvents_hCLIP(const MappedRead &read, const string &mapper,
+                    vector<GenomicRegion> &diagEventLocs) {
   vector<DE> des;
-  const string name("X");
-  parse_diagnostic_events(region.scr, des);
+  if (mapper == "novoalign") extractDEs_novo(read.scr, des);
+  else throw SMITHLABException("unsupported short-read mapper for HITS-CLIP "
+                               "data: " + mapper);
+
+  extractDEs_novo(read.scr, des);
   if (des.size() == 1) {
-    size_t score = 1;
-    if (diagnostic_events.size() != 0)
-      if (diagnostic_events.back().get_name() == name)
-        score = diagnostic_events.back().get_score() + 1;
-    for (size_t j = 0; j < des.size(); ++j) {
-      if (region.r.pos_strand() &&
-      des[j].type == "insertion" && des[j].base == "T") {
-        GenomicRegion gr(region.r.get_chrom(),
-             region.r.get_start() + des[j].position - 1,
-             region.r.get_start() + des[j].position, name, score,
-             region.r.get_strand());
-        diagnostic_events.push_back(gr);
-      }
-      else if (!region.r.pos_strand() &&
-           des[j].type == "insertion" && des[j].base == "A") {
-        GenomicRegion gr(region.r.get_chrom(),
-             region.r.get_start() + des[j].position - 2,
-             region.r.get_start() + des[j].position - 1, name, score,
-             region.r.get_strand());
-        diagnostic_events.push_back(gr);
-      }
+    const string name("X");
+    const size_t score = 0;
+    if (read.r.pos_strand() &&
+    des[0].type == "deletion" && des[0].refBase == "T") {
+      GenomicRegion gr(read.r.get_chrom(),
+           read.r.get_start() + des[0].position - 1,
+           read.r.get_start() + des[0].position, name, score,
+           read.r.get_strand());
+      diagEventLocs.push_back(gr);
+    }
+    else if (!read.r.pos_strand() &&
+         des[0].type == "deletion" && des[0].refBase == "A") {
+      GenomicRegion gr(read.r.get_chrom(),
+           read.r.get_start() + des[0].position - 2,
+           read.r.get_start() + des[0].position - 1, name, score,
+           read.r.get_strand());
+      diagEventLocs.push_back(gr);
     }
   }
 }
 
+/**
+ * \brief given a read from a PAR-CLIP experiment, produced by a particular
+ *        type of short-read mapper, extract any diagnostic events from it
+ *        and add their genomic loci to the provided vector. A DE for PAR-CLIP
+ *        is a T->C mutation in the read (i.e. read has 'C', ref. genome has
+ *        'T'). We only consider reads with one DE; x DEs implies x-1 are
+ *        spurious, and we wouldn't know which was the correct one, so we
+ *        discard such cases.
+ * \param read          The mapped read
+ * \param mapper        The name of the short read mapper used
+ * \param diagEventLocs the genomic loci of the extracted diagnostic events
+ *                      will be added to the end of this vector. Existing
+ *                      elements in the vector are left unchanged.
+ */
 static void
-add_diagnostic_events_pCLIP(const MappedRead &region,
-                            vector<GenomicRegion> &diagnostic_events) {
+addDiagEvents_pCLIP(const MappedRead &read, const string &mapper,
+                    vector<GenomicRegion> &diagEventLocs) {
   vector<DE> des;
-  parse_diagnostic_events(region.scr, des);
-  const string name("X");
+  if (mapper == "novoalign") extractDEs_novo(read.scr, des);
+  else throw SMITHLABException("unsupported short-read mapper for PAR-CLIP "
+                               "data: " + mapper);
+
   if (des.size() == 1) {
-    size_t score = 1;
-    if (diagnostic_events.size() != 0)
-      if (diagnostic_events.back().get_name() == name)
-        score = diagnostic_events.back().get_score() + 1;
-    for (size_t j = 0; j < des.size(); ++j) {
-      if (region.r.pos_strand() && des[j].type == "mutation"
-          && des[j].base == "T" && des[j].read == "C") {
-        GenomicRegion gr(region.r.get_chrom(),
-             region.r.get_start() + des[j].position - 1,
-             region.r.get_start() + des[j].position, name, score,
-             region.r.get_strand());
-        diagnostic_events.push_back(gr);
-      } else if (!region.r.pos_strand() && des[j].type == "mutation"
-         && des[j].base == "A" && des[j].read == "G") {
-        GenomicRegion gr(region.r.get_chrom(),
-             region.r.get_start() + des[j].position - 2,
-             region.r.get_start() + des[j].position - 1, name, score,
-             region.r.get_strand());
-        diagnostic_events.push_back(gr);
-      }
+    const string name("X");
+    const size_t score = 1;
+    if (read.r.pos_strand() && des[0].type == "mutation"
+        && des[0].refBase == "T" && des[0].readBase == "C") {
+      GenomicRegion gr(read.r.get_chrom(),
+          read.r.get_start() + des[0].position - 1,
+          read.r.get_start() + des[0].position, name, score,
+          read.r.get_strand());
+      diagEventLocs.push_back(gr);
+    } else if (!read.r.pos_strand() && des[0].type == "mutation"
+       && des[0].refBase == "A" && des[0].readBase == "G") {
+      GenomicRegion gr(read.r.get_chrom(),
+          read.r.get_start() + des[0].position - 2,
+          read.r.get_start() + des[0].position - 1, name, score,
+          read.r.get_strand());
+      diagEventLocs.push_back(gr);
     }
   }
 }
 
+/**
+ * \brief for a given mapped read, for a given experiment type (iCLIP,
+ *        PAR-CLIP, HITS-CLIP), from a given short read mapper, extract the
+ *        diagnostic events from the read and add their genomic loci to the
+ *        provided vector.
+ * \param read          extract DEs from these mapped reads
+ * \param experiment    Which type of experiment (iCLIP, PAR-CLIP,
+ *                      HITS-CLIP)
+ * \param mapper        Which short read mapper was used
+ * \param diagEvents    the genomic loci of diagnostic events extracted from
+ *                      the reads are added to this vector. Any existing
+ *                      entries are NOT modified.
+ */
 static void
-add_diagnostic_events(const MappedRead &region,
-                      const string experiment,
-                      vector<GenomicRegion> &diagnostic_events) {
-  if (experiment == "iCLIP")
-    add_diagnostic_events_iCLIP(region, diagnostic_events);
-  else if (experiment == "hCLIP")
-    add_diagnostic_events_hCLIP(region, diagnostic_events);
-  else if (experiment == "pCLIP")
-    add_diagnostic_events_pCLIP(region, diagnostic_events);
-  else
-    throw SMITHLABException("The technology was not recognized!");
+addDiagEvents(const MappedRead &read, const string &experiment,
+              const string &mapper, vector<GenomicRegion> &diagEvents) {
+  if (experiment == "iCLIP") addDiagEvents_iCLIP(read, mapper, diagEvents);
+  else if (experiment == "hCLIP") addDiagEvents_hCLIP(read, mapper, diagEvents);
+  else if (experiment == "pCLIP") addDiagEvents_pCLIP(read, mapper, diagEvents);
+  else throw SMITHLABException("The technology '" + experiment +\
+                               "' was not recognized!");
 }
 
+/**
+ * \brief for a set of mapped reads from a given experiment type (iCLIP,
+ *        PAR-CLIP, HITS-CLIP), mapped with a given short read mapper, extract
+ *        the diagnostic events from the reads and add their genomic loci to
+ *        the provided vector.
+ * \param reads          extract DEs from these mapped reads
+ * \param experiment     Which type of experiment (iCLIP, PAR-CLIP,
+ *                       HITS-CLIP)
+ * \param mapper         Which short read mapper was used
+ * \param diagEvents     the genomic loci of diagnostic events extracted from
+ *                       the reads are added to this vector. Any existing
+ *                       entries are NOT modified.
+ */
 static void
-add_diagnostic_events(const vector<MappedRead> &regions,
-                      const string experiment,
-                      vector<GenomicRegion> &diagnostic_events) {
+addDiagEvents(const vector<MappedRead> &reads, const string &experiment,
+              const string &mapper, vector<GenomicRegion> &diagEvents) {
+  for (size_t i = 0; i < reads.size(); ++i)
+    addDiagEvents(reads[i], experiment, mapper, diagEvents);
+}
 
-  for (size_t i = 0; i < regions.size(); ++i) {
-    add_diagnostic_events(regions[i], experiment, diagnostic_events);
+
+/******************************************************************************
+ * functions for loading and manipulating interval trees of the target regions
+ *****************************************************************************/
+typedef unordered_map<string, IntervalTree<DERoi*, size_t> > TreeMap;
+
+/**
+ * \summary load a map of interval trees for diag. event regions of interest.
+ *          Note that this function allocates its memory on the heap, and the
+ *          caller is responsible for deallocating this memory via a
+ *          corresponding call to deleteIntervalTrees_DERoi
+ * \param regions_fn load regions from this file
+ * \param trees      after the call, trees[chr] will contain the interval tree
+ *                   for the chromosome chr. All existing entries are cleared.
+ */
+static void
+loadIntervalTrees_DERoi(const string &regions_fn, TreeMap &trees) {
+  typedef unordered_map<string, vector<DERoi*> > regionMap;
+  trees.clear();
+  vector<GenomicRegion> targets;
+  ReadBEDFile(regions_fn, targets);
+  regionMap byChrom;
+  for (size_t i = 0; i < targets.size(); ++i) {
+    if (byChrom.count(targets[i].get_chrom()) == 0)
+      byChrom[targets[i].get_chrom()] = vector<DERoi*>();
+    byChrom[targets[i].get_chrom()].push_back(new DERoi(targets[i],i));
+  }
+  for (regionMap::iterator it = byChrom.begin(); it != byChrom.end(); ++it) {
+    trees.insert(std::make_pair<std::string, IntervalTree<DERoi*, size_t> >
+                (it->first, IntervalTree<DERoi*, size_t> (it->second,
+                                                 getDERoiStart, getDERoiEnd)));
   }
 }
 
-
+/**
+ * \brief clean up a TreeMap by deallocating the memory it reserved on the heap
+ *        and removing all of the keys from the map.
+ * \param t the TreeMap to delete.
+ */
 static void
-separate_mapped_reads_chromosomes(const vector<MappedRead> &regions,
-                                  vector<vector<MappedRead> > &separated_by_chrom) {
-  typedef unordered_map<string, vector<MappedRead> > Separator;
-  Separator separator;
-  for (vector<MappedRead>::const_iterator i = regions.begin();
-       i != regions.end(); ++i) {
-    const string the_chrom(i->r.get_chrom());
-    if (separator.find(the_chrom) == separator.end())
-      separator[the_chrom] = vector<MappedRead>();
-    separator[the_chrom].push_back(*i);
+deleteIntervalTrees_DERoi(TreeMap &t) {
+  for (TreeMap::iterator it = t.begin(); it != t.end(); it++) {
+    vector<DERoi*> v;
+    it->second.squash(v);
+    for (size_t i = 0; i < v.size(); ++i) delete v[i];
   }
-  separated_by_chrom.clear();
-  for (Separator::iterator i = separator.begin(); i != separator.end(); ++i)
-    separated_by_chrom.push_back(i->second);
+  t.clear();
 }
 
-static void
-make_inputs(const vector<MappedRead> &mapped_reads,
-            const string experiment,
-            vector<GenomicRegion> &diagnostic_events) {
-  vector<vector<MappedRead> > separated_by_chrom;
-  separate_mapped_reads_chromosomes(mapped_reads, separated_by_chrom);
-  for (size_t i = 0; i < separated_by_chrom.size(); ++i) {
-    add_diagnostic_events(separated_by_chrom[i], experiment, diagnostic_events);
-    separated_by_chrom[i].clear();
-  }
-}
+/******************************************************************************
+ *               functions for preparing and writing output
+ *****************************************************************************/
 
-
-/***
- * \summary Count the number of DEs that fall at each position within a
- *          set of genomic regions
- * \param events    must be sorted
- * \param regions   must be non-overlapping and sorted.
- * \param binCounts \todo
- * \throws SMITHLABException \todo
+/**
+ * \brief write diagnostic event counts to file.
+ * \param counts
+ * \param fn                    file to write output to. If this is the empty
+ *                              string, we'll write to stdout instead.
+ * \param VERBOSE               if true, output additional status messages to
+ *                              stderr about the progress of the computation
+ * \throw SMITHLABException     if the specified file cannot be opened for
+ *                              writing, or if the filename is equal to the
+ *                              empty string and we fail to get a good handle
+ *                              for stdout.
  */
 void
-countDEs (const vector<GenomicRegion> &events,
-          const vector<GenomicRegion> &regions, vector<vector<size_t> > &counts) {
-  if (!check_sorted(events))
-    throw SMITHLABException("DE event locations must be in sorted order");
-  if (!check_sorted(regions))
-    throw SMITHLABException("Regions must be in sorted order");
-  if (check_overlapping(regions))
-    throw SMITHLABException("Regions must be non-overlapping");
-
-  if ((regions.size() == 0) || (events.size() == 0)) return;
-
-  counts.clear();
-  counts.resize(regions.size());
-  for (size_t i = 0; i < regions.size(); ++i)
-    counts[i].resize(regions[i].get_width());
-
-  size_t bin_idx = 0, de_idx = 0;
-  while (bin_idx < regions.size()) {
-    // while we haven't run out of des, and the de chrom is less than the bin,
-    // or it's the same but the end of the de is still less than the start of
-    // the bin...
-    while ((de_idx < events.size()) &&
-           ((events[de_idx].get_chrom() < regions[bin_idx].get_chrom()) ||
-            ((events[de_idx].get_chrom() == regions[bin_idx].get_chrom()) &&
-                (events[de_idx].get_end() < regions[bin_idx].get_start())))) {
-      de_idx += 1;
-    }
-    // if not (we ran out of des, or the de chrom is greater than the bin, or
-    // it's the same but the start of the de is greater than the end of the
-    // bin...)
-    if (!((de_idx == events.size()) ||
-        (events[de_idx].get_chrom() > regions[bin_idx].get_chrom()) ||
-        ((events[de_idx].get_chrom() == regions[bin_idx].get_chrom()) &&
-            (events[de_idx].get_start() > regions[bin_idx].get_end())))) {
-      // the de falls inside the bin; count them up while they
-      // continue to do so
-      while ((de_idx < events.size()) &&
-             (regions[bin_idx].overlaps(events[de_idx]))) {
-        size_t relIndex = events[de_idx].get_start() -\
-                          regions[bin_idx].get_start();
-        assert (relIndex < counts[bin_idx].size());
-        counts[bin_idx][relIndex] += 1;
-        de_idx += 1;
-      }
-    }
-    bin_idx += 1;
+writeDEs(const vector< vector <size_t> > &counts, const string &fn,
+         const bool VERBOSE=false) {
+  if (VERBOSE) cerr << "WRITING OUTPUT... ";
+  std::ofstream of;
+  if (!fn.empty()) of.open(fn.c_str());
+  ostream ostrm(fn.empty() ? cout.rdbuf() : of.rdbuf());
+  if (!ostrm.good()) {
+    if (!fn.empty())
+      throw SMITHLABException("Failed to open " + fn + " for writing");
+    else
+      throw SMITHLABException("Unable to write to standard out");
   }
+
+  for (size_t i = 0; i < counts.size(); ++i) {
+    for (size_t j = 0; j < counts[i].size(); ++j) {
+      ostrm << counts[i][j];
+      if (j != counts[i].size() - 1) ostrm << ", ";
+    }
+    ostrm << endl;
+  }
+  if (VERBOSE) cerr << "DONE" << endl;
 }
 
+/******************************************************************************
+ *              Main entry point and code for extracting DEs
+ *****************************************************************************/
 
-/****
- * \summary TODO
+/**
+ * \brief given a file of mapped reads for a particular type of experiment
+ *        from a particular short read mapper, and a file with a set of
+ *        target regions in BED format, count the number of diagnostic
+ *        events that occur at each position within each of the target
+ *        regions.
+ * \param mappedReads_fn        the file with the mapped reads
+ * \param targetRegions_fn      the file with the target regions (BED format)
+ * \param experimentType        Which type of experiment (iCLIP, PAR-CLIP,
+ *                              HITS-CLIP)
+ * \param mapperType            Which short read mapper was used
+ * \param counts                will be populated such that counts[i][j] will
+ *                              be the number of DEs that occurred at
+ *                              position j in region/sequence i.
+ * \param VERBOSE               if true, output additional status messages to
+ *                              stderr about the progress of the computation
+ */
+void
+countDEs(const string &mappedReads_fn, const string &targetRegions_fn,
+         const string &experimentType, const string &mapperType,
+         vector< vector<size_t> > &counts, const bool VERBOSE = false) {
+  const size_t BUFFER_SIZE = 200;
+  vector<GenomicRegion> targets;
+  ReadBEDFile(targetRegions_fn, targets);
+
+  if (VERBOSE) cerr << "LOADING INTERVAL TREES FROM "
+                    << targetRegions_fn << "... ";
+  typedef unordered_map<string, IntervalTree<DERoi*, size_t> > TreeMap;
+  TreeMap trees;
+  loadIntervalTrees_DERoi(targetRegions_fn, trees);
+  if (VERBOSE) cerr << "DONE" << endl;
+
+  std::ifstream in(mappedReads_fn.c_str());
+  if (!in)
+    throw SMITHLABException("cannot open input file " + mappedReads_fn);
+
+  // for status message
+  std::ifstream::pos_type start_of_data = in.tellg();
+  in.seekg(0, std::ios::end);
+  std::ifstream::pos_type end_of_data = in.tellg();
+  in.seekg(start_of_data);
+  size_t current_done = 101;
+
+  vector<MappedRead> buffer(BUFFER_SIZE);
+  do {
+    fill_buffer_mapped_reads(in, mapperType, buffer);
+    vector<GenomicRegion> deLocs;
+    addDiagEvents(buffer, experimentType, mapperType, deLocs);
+    for (size_t i = 0; i < deLocs.size(); ++i) {
+      if (trees.count(deLocs[i].get_chrom()) == 0) continue;
+      vector<DERoi*> hits;
+      TreeMap::iterator t = trees.find(deLocs[i].get_chrom());
+      t->second.intersectingInterval(deLocs[i].get_start(),
+                                     deLocs[i].get_end(), hits);
+      for (size_t j = 0; j < hits.size(); ++j) {
+        const size_t relPos = deLocs[i].get_start() - hits[j]->r.get_start();
+        if (relPos > hits[j]->counts.size()) {
+          stringstream ss;
+          ss << "failed counting diagnostic events. DE at location "
+             << deLocs[i] << " was found to intersect " << hits[j]->r
+             << ", but gave relative position (" << relPos
+             << ") beyond range of region";
+          throw SMITHLABException(ss.str());
+        }
+        hits[j]->counts[relPos] += 1;
+      }
+    }
+    size_t percent_done = static_cast<size_t>(in.tellg()) * 100 / end_of_data;
+    if ((percent_done != current_done) && (VERBOSE)) {
+      std::cerr << "\r" << "PROCESSING " << mappedReads_fn << "... "
+                << percent_done << "% completed..." << std::flush;
+      current_done = percent_done;
+    }
+  } while (buffer.size() == BUFFER_SIZE);   // stop when we can't fill
+                                            // the buffer anymore (i.e. EOF)
+  if (VERBOSE)
+    std::cerr << "\r" << "PROCESSING " << mappedReads_fn
+              << "... DONE                     " << endl;
+
+  // squash the trees and sort the resultant vector so things have the same
+  // order as the input.
+  vector<DERoi*> regionsWithCounts;
+  for (TreeMap::iterator it = trees.begin(); it != trees.end(); ++it)
+    it->second.squash(regionsWithCounts);
+  sort(regionsWithCounts.begin(), regionsWithCounts.end(),
+      DERoiRankComparator());
+
+  // copy the results and delete the memory allocated by the TreeMap
+  for (size_t i = 0; i < regionsWithCounts.size(); ++i) {
+    counts.push_back(regionsWithCounts[i]->counts);
+  }
+  deleteIntervalTrees_DERoi(trees);
+}
+
+/**
+ * \summary Main entry point for the program; parses command line, extracts
+ *          diagnostic events and writes output.
+ * \param argc  count of arguments passed to the program
+ * \param argv  array of arguments as strings
  */
 int
 main(int argc, const char **argv) {
   try {
+    const string about("This is a program that is part of the Zagros package. "
+                       "It's function is to compute the counts of diagnostic "
+                       "events within a set of target regions (that the user "
+                       "specifies) by extracting them from mapping results.");
     string outputFn = "";
     string regionsFn = "";
     string mapper = "rmap";
     string tech = "iCLIP";
     bool VERBOSE = false;
 
-
-    // TODO specify defaults below for options
-
     /****************** COMMAND LINE OPTIONS ********************/
-    static OptionParser opt_parse(strip_path(argv[0]),
-                                  "program for extracting diagnostic events "
-                                  "from mapped reads files");
+    static OptionParser opt_parse(strip_path(argv[0]), about);
     opt_parse.add_opt("output", 'o', "Write output to this file (STDOUT if "
                       "omitted).", OptionParser::OPTIONAL, outputFn);
     opt_parse.add_opt("regions", 'r', "the genomic regions, in BED format, "
                       "corresponding to the input sequences for Zagros.",
                       OptionParser::REQUIRED, regionsFn);
-    opt_parse.add_opt("mapper", 'm', "the mapper used to map the reads",
-                       OptionParser::OPTIONAL, mapper);
-    opt_parse.add_opt("tech", 't', "the technology type used in the experiment",
+    opt_parse.add_opt("mapper", 'm', "the mapper used to map the reads "
+                      "(Default: " + mapper + ")", OptionParser::OPTIONAL,
+                      mapper);
+    opt_parse.add_opt("tech", 't', "the technology type used in the "
+                      "experiment (default " + tech + ")",
                       OptionParser::OPTIONAL, tech);
-    opt_parse.add_opt("verbose", 'v', "print more run info",
-                      OptionParser::OPTIONAL, VERBOSE);
+    opt_parse.add_opt("verbose", 'v', "print more run info (default: " +\
+                      toString(VERBOSE), OptionParser::OPTIONAL, VERBOSE);
     vector<string> leftover_args;
     opt_parse.parse(argc, argv, leftover_args);
     if (argc == 1 || opt_parse.help_requested()) {
@@ -502,67 +636,24 @@ main(int argc, const char **argv) {
     const string mappedReadFn(leftover_args.front());
     /****************** END COMMAND LINE OPTIONS *****************/
 
-    if (VERBOSE) cerr << "LOADING MAPPING INFORMATION... ";
-    vector<MappedRead> mapped_reads;
-    load_mapped_reads(mappedReadFn, mapper, mapped_reads);
-    if (VERBOSE) cerr << "DONE" << endl;
-
-    if (VERBOSE) cerr << "LOADING TARGET REGIONS... ";
-    vector<GenomicRegion> targets;
-    ReadBEDFile(regionsFn, targets);
-    if (check_overlapping(targets))
-      throw SMITHLABException("Target regions are overlapping!");
-    if (VERBOSE) cerr << "DONE" << endl;
-
-    if (VERBOSE) cerr << "PROCESSING MAPPED READS... ";
-    vector<GenomicRegion> de_regions;
-    make_inputs(mapped_reads, tech, de_regions);
-    sort(de_regions.begin(), de_regions.end());
-    sift(targets, de_regions);
-    sort(de_regions.begin(), de_regions.end());
-    vector<vector<size_t> > counts;
-    countDEs(de_regions, targets, counts);
-    if (VERBOSE) cerr << "DONE" << endl;
-
-    if (VERBOSE) cerr << "WRITING OUTPUT... ";
-    std::ofstream of;
-    if (!outputFn.empty()) of.open(outputFn.c_str());
-    ostream ostrm(outputFn.empty() ? cout.rdbuf() : of.rdbuf());
-    if (!ostrm.good()) {
-      if (!outputFn.empty())
-        throw SMITHLABException("Failed to open " + outputFn + " for writing");
-      else
-        throw SMITHLABException("Unable to write to standard out");
-    }
-    for (size_t i = 0; i < counts.size(); ++i) {
-      for (size_t j = 0; j < counts[i].size(); ++j) {
-        ostrm << counts[i][j];
-        if (j != counts[i].size() - 1) ostrm << ", ";
-      }
-      ostrm << endl;
-    }
-    if (VERBOSE) cerr << endl;
+    vector< vector <size_t> > counts;
+    countDEs(mappedReadFn, regionsFn, tech, mapper, counts, VERBOSE);
+    writeDEs(counts, outputFn, VERBOSE);
   }
   catch (std::bad_alloc &ba) {
     cerr << "ERROR: could not allocate memory" << endl;
     return EXIT_FAILURE;
   }
   catch (SMITHLABException &e) {
-    cerr << "ERROR: " << e.what() << endl;
+    cerr << "ERROR: " << e.what();
+    cerr << endl;
     return EXIT_FAILURE;
   }
   catch (std::exception &e) {
-    cerr << "ERROR: " << e.what() << endl;
+    cerr << "ERROR: " << e.what();
+    cerr << endl;
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
 }
-
-
-
-
-
-
-
-
 

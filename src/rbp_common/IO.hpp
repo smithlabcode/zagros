@@ -58,6 +58,10 @@ load_mapped_reads(const std::string &reads_file,
                   std::vector<MappedRead> &mapped_reads);
 
 void
+fill_buffer_mapped_reads(std::ifstream &in, const std::string &mapper,
+                         std::vector<MappedRead> &buffer);
+
+void
 load_structures(const std::string structure_file,
                 std::vector<std::vector<double> > &structures);
 
