@@ -260,33 +260,6 @@ replace_Ns(vector<string> &sequences, const Runif &rng) {
   }
 }
 
-////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////
-///////////
-///////////  CODE FOR FORMATTING MOTIF / MODEL OUTPUT BELOW HERE
-///////////
-
-/**
- * \brief TODO
- * \param model     TODO
- * \param region    TODO
- * \param seq       TODO
- * \param site_pow  TODO
- */
-static string
-format_site(const Model &model,
-            const GenomicRegion &region,
-            const string &seq,
-            const size_t site_pos) {
-  const size_t width = model.size();
-  std::ostringstream ss;
-  ss << "BS\t" << seq.substr(site_pos, width) << "; "
-     << assemble_region_name(region) << "; " << site_pos << "; " << width
-     << ";  ;" << (region.pos_strand() ? "p;" : "n;");
-  return ss.str();
-}
-
 /***
  * \summary given a set of sequences and indicators for motif occurrences,
  *          mask out the most likely occurrences of the motif in the sequences
@@ -318,7 +291,6 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
     throw SMITHLABException(ss.str());
   }
 
-
   for (size_t i = 0; i < seqs.size(); ++i) {
     if (zoops[i] >= 0.8) {      // TODO -- PJU: Abracadabra!
       double max_X = -1;
@@ -333,6 +305,38 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
       seqs[i].replace(max_indx, motifLen, junk);
     }
   }
+}
+
+
+/******************************************************************************
+ *                 CODE FOR FORMATTING MOTIF / MODEL OUTPUT
+*******************************************************************************/
+
+/**
+ * \brief Format a motif occurrence into a string for output with the motif.
+ *        The output will follow this pattern: BS   XXXXX; NAME; A; B; ; C;
+ *        where XXXXX is the sequence of the occurrence, NAME is the parameter
+ *        <name> provided to this function, A is the parameter <site_pos>
+ *        provided to this function, B is the parameter <width> provided to
+ *        this function, and C is the parameter <strand> provided to this
+ *        function.
+ * \param seq       the sequence that this occurrence is in
+ * \param width     the length of the motif occurrence
+ * \param name      the name of the region the occurrence is in; this should
+ *                  be the assembled region name if it's available, but any
+ *                  string will do (e.g. if the user provided only fasta input,
+ *                  then a sensible choice would be the name of the sequence).
+ * \param strand    the strand that this occurrence is on
+ * \param site_pow  the relative position (zero-based) within seq that the
+ *                  occurrence is at.
+ */
+static string
+format_site(const string &seq, const size_t width, const string &name,
+            const char strand, const size_t site_pos) {
+  std::ostringstream ss;
+  ss << "BS\t" << seq.substr(site_pos, width) << "; " << name << "; "
+     << site_pos << "; " << width << ";  ;" << strand;
+  return ss.str();
 }
 
 /**
@@ -351,7 +355,6 @@ format_motif_header(const string &name) {
  * \brief TODO
  * \param model         TODO
  * \param motif_name    TODO
- * \param targets       TODO
  * \param sequences     TODO
  * \param indicators    TODO
  * \param zoops_i       TODO
@@ -361,8 +364,9 @@ format_motif_header(const string &name) {
 static string
 format_motif(const Model &model,
              const string &motif_name,
-             const vector<GenomicRegion> &targets,
              const vector<string> &sequences,
+             const vector<string> &names,
+             const vector<GenomicRegion> &targets,
              const vector<vector<double> > &indicators,
              const vector<double> &zoops_i) {
   if (sequences.size() != indicators.size()) {
@@ -426,10 +430,12 @@ format_motif(const Model &model,
         site_pos = i;
       }
     }
-    if (!targets.empty()) {
-      if (zoops_i[n] >= 0.8)
-        ss << format_site(model, targets[n], sequences[n], site_pos) << "\t"
-	       << zoops_i[n] << endl;
+    if (zoops_i[n] >= 0.8) {
+      // assume positive strand, unless we know the region was negative strand
+      char strand = '+';
+      if (targets.size() != 0) strand = targets[n].get_strand();
+      ss << format_site(sequences[n], model.size(), names[n], strand, site_pos)
+         << "\t" << zoops_i[n] << endl;
     }
   }
   ss << "XX" << endl << "//";
@@ -628,14 +634,15 @@ int main(int argc, const char **argv) {
         }
       }
 
-      if (VERBOSE)
-        cerr << "\t" << "WRITING MOTIF " << endl;
-      out << format_motif(model, "ZAGROS" + toa(i), targets, seqs,
-			  indicators, has_motif) << endl;
+      if (VERBOSE) cerr << "\t" << "WRITING MOTIF " << endl;
+      out << format_motif(model, "ZAGROS" + toa(i), seqs, names, targets,
+                          indicators, has_motif) << endl;
 
-      if (VERBOSE)
-              cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
-      maskOccurrences(seqs, indicators, has_motif, motif_width, rng);
+      // if not the last motif, mask occurrences
+      if (i != n_motifs - 1) {
+        if (VERBOSE) cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
+        maskOccurrences(seqs, indicators, has_motif, motif_width, rng);
+      }
     }
   } 
   catch (const SMITHLABException &e) {
