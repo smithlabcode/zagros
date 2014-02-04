@@ -128,10 +128,15 @@ calculate_number_of_bases_fg_bg(const vector<string> &sequences,
   nb_fg.clear();
   nb_fg.resize(motif_width,
                vector<double>(alphabet_size, 0.0));
-  for (size_t i = 0; i < site_indic.size(); ++i)
-    for (size_t j = 0; j < site_indic[i].size(); ++j)
-      for (size_t k = 0; k < motif_width; ++k)
+  for (size_t i = 0; i < site_indic.size(); ++i) {
+    for (size_t j = 0; j < site_indic[i].size(); ++j) {
+      for (size_t k = 0; k < motif_width; ++k) {
+        assert(std::isfinite(site_indic[i][j]));
         nb_fg[k][base2int(sequences[i][j + k])] += site_indic[i][j];
+        assert(std::isfinite(nb_fg[k][base2int(sequences[i][j + k])]));
+      }
+    }
+  }
 
   nb_bg.clear();
   nb_bg.resize(alphabet_size, 0.0);
@@ -229,20 +234,31 @@ maximization_seq(const vector<string> &sequences,
 
   for (size_t i = 0; i < matrix.size(); ++i) {
     const double total = accumulate(nb_fg[i].begin(), nb_fg[i].end(), 0.0);
+    assert(std::isfinite(total));
     transform(nb_fg[i].begin(), nb_fg[i].end(), matrix[i].begin(),
               std::bind2nd(std::divides<double>(), total));
 
     // don't let anything get to zero; that'll be bad for log later.
-    for (size_t j = 0; j < matrix[i].size(); ++j)
-      if (matrix[i][j] < TINY) matrix[i][j] = TINY;
+    // also, check that everything is finite.
+    for (size_t j = 0; j < matrix[i].size(); ++j) {
+      if (matrix[i][j] < TINY) {
+        matrix[i][j] = TINY;
+      }
+      assert(std::isfinite(matrix[i][j]));
+    }
   }
 
   const double total = accumulate(nb_bg.begin(), nb_bg.end(), 0.0);
   transform(nb_bg.begin(), nb_bg.end(), freq.begin(),
             std::bind2nd(std::divides<double>(), total));
 
+  // set gamma, which is, in essence, the probability that all sequences
+  // in the data have an occurrence of the motif, assuming all prior probs of
+  // seeing a motif in any sequence are equal. Be careful here to not let it
+  // exceed 1.0
   gamma = accumulate(seq_indic.begin(), seq_indic.end(), 0.0)
       / sequences.size();
+  gamma = std::min(gamma, 1.0);
 }
 
 /***
@@ -435,6 +451,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
 
 /***
  * \summary TODO
+ * \param gamma the fraction of the sequences that contain the motif
  */
 static void
 expectation_seq_str_de_for_single_seq(const string &seq,
@@ -449,15 +466,26 @@ expectation_seq_str_de_for_single_seq(const string &seq,
                                       const double gamma,
                                       vector<double> &site_indic,
                                       double &seq_indic) {
+  // used to stop values reaching exactly zero and then taking their log..
+  const double TINY = 1e-100;
 
+  // sanity check on gamma
+  if ((gamma > 1.0 ) || (gamma < 0.0)) {
+    stringstream ss;
+    ss << "failed expectation step: gamma (faction of sequences containing "
+       << "the motif) was outside the expected bounds: " << gamma;
+    throw SMITHLABException(ss.str());
+  }
 
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
-  for (size_t i = 0; i < site_indic.size(); ++i)
+  for (size_t i = 0; i < site_indic.size(); ++i) {
     get_numerator_seq_str_de_for_site(seq, secondary_structure,
                                       diagnostic_events, matrix, motif_sec_str,
                                       freqs, f_sec_str, geo_p, geo_delta, gamma,
                                       i, numerator[i]);
+    assert(std::isfinite(numerator[i]));
+  }
 
   double no_motif = 0.0;
   for (size_t i = 0; i < seq.length(); i++) {
@@ -468,18 +496,22 @@ expectation_seq_str_de_for_single_seq(const string &seq,
     if (diagnostic_events.size() > 0)
       no_motif -= (diagnostic_events.size() * log(seq.length()));
   }
-  numerator.push_back(no_motif + log(1.0 - gamma));
+  const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
+  numerator.push_back(no_motif + log(fracSeqsWithoutMotif));
 
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
+  assert(std::isfinite(denominator));
   for (size_t i = 0; i < site_indic.size(); ++i)
     site_indic[i] = exp(numerator[i] - denominator);
 
   seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
+  assert(std::isfinite(seq_indic));
 }
 
 /***
  * \summary TODO
+ * \param gamma the fraction of the sequences that contain the motif
  */
 static void
 expectation_seq_de_for_single_seq(const string &seq,
@@ -491,6 +523,17 @@ expectation_seq_de_for_single_seq(const string &seq,
                                   const double gamma,
                                   vector<double> &site_indic,
                                   double &seq_indic) {
+  // used to stop values reaching exactly zero and then taking their log..
+  const double TINY = 1e-100;
+
+  // sanity check on gamma
+  if ((gamma > 1.0 ) || (gamma < 0.0)) {
+    stringstream ss;
+    ss << "failed expectation step: gamma (faction of sequences containing "
+       << "the motif) was outside the expected bounds: " << gamma;
+    throw SMITHLABException(ss.str());
+  }
+
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i)
@@ -502,7 +545,8 @@ expectation_seq_de_for_single_seq(const string &seq,
     no_motif += log(freqs[base2int(seq[i])]);
   if (diagnostic_events.size() > 0)
     no_motif -= (diagnostic_events.size() * log(seq.length()));
-  numerator.push_back(no_motif + log(1.0 - gamma));
+  const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
+  numerator.push_back(no_motif + log(fracSeqsWithoutMotif));
 
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
@@ -678,6 +722,8 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
                              const vector<vector<size_t> > &diagnostic_events,
                              const vector<vector<double> > &site_indic,
                              const vector<double> &seq_indic) const {
+  // used to stop values reaching exactly zero and then taking their log..
+  const double TINY = 1e-100;
 
   vector<vector<double> > nb_fg;
   vector<double> nb_bg;
@@ -733,9 +779,8 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
     if (diagnostic_events[i].size() > 0)
       has_no_motif -= (diagnostic_events[i].size() * log(sequences[i].length()));
     ret += (1 - seq_indic[i]) * has_no_motif;
-    ret += (1 - seq_indic[i]) * log(1 - gamma);
-    ret += seq_indic[i]
-        * log(gamma / site_indic[i].size());
+    ret += (1 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0));
+    ret += seq_indic[i] * log(gamma / site_indic[i].size());
   }
   //--------
 
@@ -776,6 +821,9 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
                              const vector<vector<size_t> > &diagnostic_events,
                              const vector<vector<double> > &site_indic,
                              const vector<double> &seq_indic) const {
+  // used to stop values reaching exactly zero and then taking their log..
+  const double TINY = 1e-100;
+
   // this function makes some implicit assumptions; let's just check them..
   checkAndThrow_consistent(sequences, secondary_structure,
                            diagnostic_events, "Likelihood calculation failed.");
@@ -831,7 +879,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       has_no_motif -=
           (diagnostic_events[i].size() * log(sequences[i].length()));
     ret += (1 - seq_indic[i]) * has_no_motif;
-    ret += (1 - seq_indic[i]) * log(1 - gamma);
+    ret += (1 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0));
     ret += seq_indic[i] * log(gamma / site_indic[i].size());
   }
   // ZOOPS-specific calculation ends here --------
