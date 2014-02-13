@@ -478,13 +478,11 @@ get_numerator_seq_de_for_site(const string &seq,
   const double N_LOG_PROB = -10000;
 
   vector<double> f_powers(alphabet_size, 0.0);
-  bool junk = false;
   for (size_t i = 0; i < seq.length(); ++i) {
     const size_t base = base2int(seq[i]);
     if (i >= site && i < site + matrix.size()) {
       // Penalize N's heavily if they fall in the motif
       if ((seq[i] == 'N') || (seq[i] == 'n')) {
-        junk = true;
         num += N_LOG_PROB;
       }
       else {
@@ -497,8 +495,7 @@ get_numerator_seq_de_for_site(const string &seq,
           throw SMITHLABException(ss.str());
         }
       }
-    }
-    else {
+    } else {
       // Just ignore N's outside of the motif
       if ((seq[i] != 'N') && (seq[i] != 'n')) {
         assert(base < alphabet_size);
@@ -553,7 +550,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
                                const double gamma,
                                const size_t site,
                                double &num) {
-  const double N_LOG_PROB = -1e100;
+  const double N_LOG_PROB = -10000;
 
   // calculating the contribution of the foreground and the powers
   // that will be needed for the background calculations (below).
@@ -561,27 +558,30 @@ get_numerator_seq_str_de_for_site(const string &seq,
   vector<double> f_powers_ds(alphabet_size, 0.0);
   for (size_t i = 0; i < seq.length(); ++i) {
     const size_t base = base2int(seq[i]);
-    assert(base < alphabet_size);
     if (i >= site && i < site + matrix.size()) {
       // Penalize N's heavily if they fall in the motif
-      if ((seq[i] == 'N') || (seq[i] == 'n')) num += N_LOG_PROB;
+      if ((seq[i] == 'N') || (seq[i] == 'n')) {
+        num += N_LOG_PROB;
+      }
       else {
+        assert(base < alphabet_size);
         num += (secondary_structure[i]
             * log(matrix[i - site][base] * motif_sec_str[i - site]));
         num += ((1.0 - secondary_structure[i])
             * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
-      }
-      if (!std::isfinite(num)) {
-        stringstream ss;
-        ss << "failed expectation calculation; numerator non-finite. BPP was: "
-           << secondary_structure[i] << " matrix entry was: "
-           << matrix[i - site][base] << " motif secondary structure was: "
-           << motif_sec_str[i - site];
-        throw SMITHLABException(ss.str());
+        if (!std::isfinite(num)) {
+          stringstream ss;
+          ss << "failed expectation calculation; numerator non-finite. BPP was: "
+             << secondary_structure[i] << " matrix entry was: "
+             << matrix[i - site][base] << " motif secondary structure was: "
+             << motif_sec_str[i - site];
+          throw SMITHLABException(ss.str());
+        }
       }
     } else {
       // Just ignore N's outside of the motif
       if ((seq[i] != 'N') && (seq[i] != 'n')) {
+        assert(base < alphabet_size);
         f_powers_ss[base] += (1.0 - secondary_structure[i]);
         f_powers_ds[base] += (secondary_structure[i]);
       }
@@ -597,11 +597,13 @@ get_numerator_seq_str_de_for_site(const string &seq,
   for (size_t b = 0; b < alphabet_size; b++) {
     num += f_powers_ss[b] * log(freqs[b] * (1 - f_sec_str));
     num += f_powers_ds[b] * log(freqs[b] * (f_sec_str));
+    assert(std::isfinite(num));
   }
   if (diagnostic_events.size() > 0) {
     double power = 0.0;
     for (size_t j = 0; j < diagnostic_events.size(); j++)
       power += abs(diagnostic_events[j] - (site + geo_delta));
+    assert(std::isfinite(power));
     num += ((power * log(1 - geo_p)) + (diagnostic_events.size() * log(geo_p)));
   }
   num += log(gamma / (seq.length() - matrix.size() + 1.0));
