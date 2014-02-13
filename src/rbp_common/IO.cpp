@@ -230,7 +230,8 @@ read_bowtie_output(const vector<string> &parts,
  */
 static bool
 isUniqueMapper_novoAlign(const vector<string> &parts) {
-  return (parts.size() == 14 && parts[4] == "U");
+  // TODO fix magic numbers
+  return (parts.size() >= 13 && parts[4] == "U");
 }
 
 /**
@@ -256,7 +257,8 @@ isUniqueMapper(const vector<string> &tokens, const string &mapper) {
  */
 static void
 parseMappedRead_novoAlign(const vector<string> &parts, MappedRead &mr) {
-  if (parts.size() == 14 && parts[4] == "U") {
+  // TODO fix magic numbers 13 and 4
+  if (parts.size() >= 13 && parts[4] == "U") {
     vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
     char strand = ((parts[9] == "F") ? '+' : '-');
     mr.r.set_chrom(parts[7].substr(1));
@@ -266,7 +268,7 @@ parseMappedRead_novoAlign(const vector<string> &parts, MappedRead &mr) {
     mr.r.set_score(convertString(parts[5]));
     mr.r.set_strand(strand);
     mr.seq = parts[2];
-    mr.scr = parts[13];
+    if (parts.size() >= 14) mr.scr = parts[13];
   } else {
     throw SMITHLABException("failed to parse novoalign read. Unexpected "
                             "format. Can only parse uniquely mapping reads");
@@ -617,7 +619,6 @@ fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
   static const size_t line_buffer_size = 10000;
   size_t i = 0;
   while (i < buffer.size() && !in.eof()) {
-
     char line_buffer[line_buffer_size];
     in.getline(line_buffer, line_buffer_size);
     if (in.gcount() == line_buffer_size - 1)

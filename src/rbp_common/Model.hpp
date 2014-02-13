@@ -143,12 +143,12 @@ struct Model {
 
   static const double DEFAULT_GEO_P;
 
-  static const int MIN_DELTA = -2;
-  static const int MAX_DELTA = 2;
+  static const int MIN_DELTA = -5;
+  static const int MAX_DELTA = 5;
   static const int DEFAULT_DELTA = 0;
   static const bool HOLD_DELTA_FIXED = true;
 
-  static const bool DEBUG_MESSAGES = false;
+  static const size_t DEBUG_LEVEL = 0;
 };
 
 #endif

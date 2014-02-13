@@ -36,6 +36,8 @@ using std::max;
 using std::min;
 using std::accumulate;
 
+// TODO -- PJU there is also an alphabet size specified in RNA_Utils; check
+// whether this one is needed and if not, remove.
 using smithlab::alphabet_size;
 
 // initialization of non-integral constants
@@ -49,7 +51,17 @@ const double Model::DEFAULT_GEO_P = 0.5;
  *****************************************************************************/
 
 /***
- * \summary TODO
+ * \summary this function checks that the sequences, structure and diagnostic
+ *          events vectors are consistent, and throws an exception if they are
+ *          not. Consistent means their dimensions are all matching.
+ * \param seqs          seqs[i][j] is the nuc. at the jth pos. in the ith seq
+ * \param struc         struc[i][j] is the prob. that nuc. j in seq. i is paired
+ * \param diagEvents    diagEvents[i][j] is the jth diagnostic event in seq i
+ * \param msg           message to use in exception if not consistent
+ * \throw SMTIHLABException if the number of structure vectors or the number of
+ *                          diagnostic events vectors does not match the number
+ *                          of sequences, or if the length of any of those does
+ *                          not match the length of the corresponding sequence.
  */
 static void
 checkAndThrow_consistent(const vector<string> &seqs,
@@ -86,7 +98,9 @@ checkAndThrow_consistent(const vector<string> &seqs,
  ******************************************************************************/
 
 /***
- * \summary TODO
+ * \summary return a string representation of a vector of double
+ * \param v the vector to turn into a string
+ * \TODO -- PJU: should be a template really.
  */
 static string
 vecToString(const vector<double> &v) {
@@ -99,7 +113,9 @@ vecToString(const vector<double> &v) {
 }
 
 /***
- * \summary TODO
+ * \summary return a string representation of a matrix of double
+ * \param matrix the matrix to turn into a string
+ * \TODO -- PJU: should be a template really.
  */
 static string
 matrixToString(const vector<vector<double> > &matrix) {
@@ -116,94 +132,163 @@ matrixToString(const vector<vector<double> > &matrix) {
  ******************************************************************************/
 
 /***
- * \summary TODO
+ * \summary produce a probabilistic count of the number of each base that
+ *          occurs in the foreground (i.e. in the motif) and background (i.e.
+ *          outside of the motif) in a set of sequences, given probabilities on
+ *          where the motif occurrences start.
+ * \param sequences     sequences[i][j] is the nuc. position j of seq i. The
+ *                      sequences may have N's; these won't be counted.
+ * \param site_indic    site_indic[i][j] is the prob. that a motif occurs at
+ *                      position j of sequence i
+ * \param motif_width   the length/width of the motif
+ * \param nb_fg         this vector will be populated such that nb_fg[k][b] is
+ *                      the probabilistic count of the number of times base b
+ *                      is at position k of the motif (0 <= k <= motif_width).
+ *                      Any existing entries in the vector will be cleared.
+ * \param nb_bg         this vector will be populated such that nb_bg[b]
+ *                      is the probabilistic count of the number of times base
+ *                      b occurs in the background of the sequences.
+ * \pseudoCount         add this pseudo-count to the number of observations for
+ *                      each base
  */
 static void
-calculate_number_of_bases_fg_bg(const vector<string> &sequences,
+calculate_number_of_bases_fg_bg(const vector<string> &seqs,
                                 const vector<vector<double> > &site_indic,
                                 const size_t motif_width,
                                 vector<vector<double> > &nb_fg,
-                                vector<double> &nb_bg) {
-
+                                vector<double> &nb_bg,
+                                const double pseudoCount=1) {
   nb_fg.clear();
   nb_fg.resize(motif_width,
-               vector<double>(alphabet_size, 0.0));
+               vector<double>(alphabet_size, pseudoCount));
   for (size_t i = 0; i < site_indic.size(); ++i) {
     for (size_t j = 0; j < site_indic[i].size(); ++j) {
       for (size_t k = 0; k < motif_width; ++k) {
-        assert(std::isfinite(site_indic[i][j]));
-        nb_fg[k][base2int(sequences[i][j + k])] += site_indic[i][j];
-        assert(std::isfinite(nb_fg[k][base2int(sequences[i][j + k])]));
+        // can't count anything for N's
+        if ((seqs[i][j + k] == 'N') || (seqs[i][j + k] == 'n')) continue;
+
+        const size_t base = base2int(seqs[i][j + k]);
+        assert(base < alphabet_size);
+        nb_fg[k][base] += site_indic[i][j];
       }
     }
   }
 
   nb_bg.clear();
-  nb_bg.resize(alphabet_size, 0.0);
-  for (size_t i = 0; i < sequences.size(); ++i)
-    for (size_t j = 0; j < sequences[i].length(); ++j)
-      nb_bg[base2int(sequences[i][j])] += motif_width;
+  nb_bg.resize(alphabet_size, pseudoCount);
+  for (size_t i = 0; i < seqs.size(); ++i) {
+    for (size_t j = 0; j < seqs[i].length(); ++j) {
+      // can't count anything for N's
+      if ((seqs[i][j] == 'N') || (seqs[i][j] == 'n')) continue;
 
-  for (size_t i = 0; i < site_indic.size(); ++i)
-    for (size_t j = 0; j < site_indic[i].size(); ++j)
-      for (size_t k = 0; k < motif_width; ++k)
-        nb_bg[base2int(sequences[i][j + k])] -= site_indic[i][j];
+      // motif_width, rather than 1, since each position is considered
+      // that many times in the loop below.
+      const size_t base = base2int(seqs[i][j]);
+      assert(base < alphabet_size);
+      nb_bg[base] += motif_width;
+    }
+  }
+
+  for (size_t i = 0; i < site_indic.size(); ++i) {
+    for (size_t j = 0; j < site_indic[i].size(); ++j) {
+      for (size_t k = 0; k < motif_width; ++k) {
+        // can't count anything for N's
+        if ((seqs[i][j + k] == 'N') || (seqs[i][j + k] == 'n')) continue;
+
+        const size_t base = base2int(seqs[i][j + k]);
+        assert(base < alphabet_size);
+        nb_bg[base] -= site_indic[i][j];
+      }
+    }
+  }
 }
 
 /***
- * \summary TODO
+* \summary produce a probabilistic count of the number of each base that
+ *         occurs in the foreground (i.e. in the motif) and background (i.e.
+ *         outside of the motif) with a single-stranded or double-stranded
+ *         structure in a set of sequences, given probabilities on
+ *         where the motif occurrences start.
+ * \param sequences     sequences[i][j] is the nuc. position j of seq i. The
+ *                      sequences may have N's; these won't be counted.
+ * \param secStr        TODO
+ * \param site_indic    site_indic[i][j] is the prob. that a motif occurs at
+ *                      position j of sequence i
+ * \param motif_width   the length/width of the motif
+ * \param nb_fg_ss      TODO
+ * \param nb_bg_ss      TODO
+ * \param nb_fg_ds      TODO
+ * \param nb_bg_ds      TODO
+ * \pseudoCount         add this pseudo-count to the number of observations for
+ *                      each base
  */
 static void
-calculate_number_of_bases_fg_bg_str(const vector<string> &sequences,
-                                    const vector<vector<double> > &secondary_structure,
+calculate_number_of_bases_fg_bg_str(const vector<string> &seqs,
+                                    const vector<vector<double> > &secStr,
                                     const vector<vector<double> > &site_indic,
                                     const size_t motif_width,
                                     vector<vector<double> > &nb_fg_ss,
                                     vector<double> &nb_bg_ss,
                                     vector<vector<double> > &nb_fg_ds,
-                                    vector<double> &nb_bg_ds) {
+                                    vector<double> &nb_bg_ds,
+                                    const double pseudoCount=1) {
 
   nb_fg_ss.clear();
-  nb_fg_ss.resize(motif_width, vector<double>(alphabet_size, 0.0));
+  nb_fg_ss.resize(motif_width, vector<double>(alphabet_size, pseudoCount));
   nb_fg_ds.clear();
-  nb_fg_ds.resize(motif_width, vector<double>(alphabet_size, 0.0));
+  nb_fg_ds.resize(motif_width, vector<double>(alphabet_size, pseudoCount));
 
   // this loop calculates the number of bases occurring at a
   // particular location of the motif with particular secondary
   // structure
-  for (size_t i = 0; i < site_indic.size(); ++i)
-    for (size_t j = 0; j < site_indic[i].size(); ++j)
+  for (size_t i = 0; i < site_indic.size(); ++i) {
+    for (size_t j = 0; j < site_indic[i].size(); ++j) {
       for (size_t k = 0; k < motif_width; ++k) {
-        const char base_idx = base2int(sequences[i][j + k]);
-        const double curr_sec_str = secondary_structure[i][j + k];
+        // can't count anything for N's
+        if ((seqs[i][j + k] == 'N') || (seqs[i][j + k] == 'n')) continue;
+
+        const size_t base_idx = base2int(seqs[i][j + k]);
+        assert(base_idx < alphabet_size);
+
+        const double curr_sec_str = secStr[i][j + k];
         const double curr_site_indic = site_indic[i][j];
         nb_fg_ss[k][base_idx] += (1.0 - curr_sec_str) * curr_site_indic;
         nb_fg_ds[k][base_idx] += curr_sec_str * curr_site_indic;
       }
+    }
+  }
 
   nb_bg_ss.clear();
-  nb_bg_ss.resize(alphabet_size, 0.0);
+  nb_bg_ss.resize(alphabet_size, pseudoCount);
   nb_bg_ds.clear();
-  nb_bg_ds.resize(alphabet_size, 0.0);
+  nb_bg_ds.resize(alphabet_size, pseudoCount);
 
   // the next two loop sets calculate the number of bases occurring in
   // the background with a particular secondary structure
-  for (size_t i = 0; i < sequences.size(); ++i)
-    for (size_t j = 0; j < sequences[i].length(); ++j) {
-      nb_bg_ss[base2int(sequences[i][j])] += (1.0 - secondary_structure[i][j])
-          * motif_width;
-      nb_bg_ds[base2int(sequences[i][j])] += (secondary_structure[i][j]
-          * motif_width);
+  for (size_t i = 0; i < seqs.size(); ++i) {
+    for (size_t j = 0; j < seqs[i].length(); ++j) {
+      // can't count anything for N's
+      if ((seqs[i][j] == 'N') || (seqs[i][j] == 'n')) continue;
+
+      const size_t base_idx = base2int(seqs[i][j]);
+      assert(base_idx < alphabet_size);
+      nb_bg_ss[base_idx] += (1.0 - secStr[i][j]) * motif_width;
+      nb_bg_ds[base_idx] += (secStr[i][j] * motif_width);
     }
-  for (size_t i = 0; i < site_indic.size(); ++i)
-    for (size_t j = 0; j < site_indic[i].size(); ++j)
+  }
+  for (size_t i = 0; i < site_indic.size(); ++i) {
+    for (size_t j = 0; j < site_indic[i].size(); ++j) {
       for (size_t k = 0; k < motif_width; ++k) {
-        nb_bg_ss[base2int(sequences[i][j + k])] -= (1.0
-            - secondary_structure[i][j + k])
-                                                   * site_indic[i][j];
-        nb_bg_ds[base2int(sequences[i][j + k])] -=
-            (secondary_structure[i][j + k] * site_indic[i][j]);
+        // can't count anything for N's
+        if ((seqs[i][j + k] == 'N') || (seqs[i][j + k] == 'n')) continue;
+
+        const size_t base_idx = base2int(seqs[i][j + k]);
+        assert(base_idx < alphabet_size);
+        nb_bg_ss[base_idx] -= ((1.0 - secStr[i][j + k]) * site_indic[i][j]);
+        nb_bg_ds[base_idx] -= (secStr[i][j + k] * site_indic[i][j]);
       }
+    }
+  }
 }
 
 
@@ -212,25 +297,28 @@ calculate_number_of_bases_fg_bg_str(const vector<string> &sequences,
  ******************************************************************************/
 
 /***
- * \summary TODO
+ * \summary maximize the sequence component of the model given a set of
+ *          sequences and indicator variables specifying probabilities of where
+ *          the motif occurs in them.
+ * \param seqs      TODO
+ * \param siteInd   TODO
+ * \param seqIndic  TODO
+ * \param matrix    TODO
+ * \param freq      TODO
+ * \param gamma     TODO
  */
 static void
-maximization_seq(const vector<string> &sequences,
-                 const vector<vector<double> > &site_indic,
-                 vector<double> &seq_indic,
+maximization_seq(const vector<string> &seqs,
+                 const vector<vector<double> > &siteInd,
+                 vector<double> &seqIndic,
                  vector<vector<double> > &matrix,
                  vector<double> &freq,
                  double &gamma) {
-
-  static const double pseudocount = 1e-6;
   static const double TINY = 1e-100;
 
-  vector<vector<double> > nb_fg(matrix.size(),
-  // This value needs to be changed
-                                vector<double>(alphabet_size, pseudocount));
-  vector<double> nb_bg(alphabet_size, pseudocount);
-  calculate_number_of_bases_fg_bg(sequences, site_indic, matrix.size(), nb_fg,
-                                  nb_bg);
+  vector<vector<double> > nb_fg;
+  vector<double> nb_bg;
+  calculate_number_of_bases_fg_bg(seqs, siteInd, matrix.size(), nb_fg, nb_bg);
 
   for (size_t i = 0; i < matrix.size(); ++i) {
     const double total = accumulate(nb_fg[i].begin(), nb_fg[i].end(), 0.0);
@@ -241,9 +329,7 @@ maximization_seq(const vector<string> &sequences,
     // don't let anything get to zero; that'll be bad for log later.
     // also, check that everything is finite.
     for (size_t j = 0; j < matrix[i].size(); ++j) {
-      if (matrix[i][j] < TINY) {
-        matrix[i][j] = TINY;
-      }
+      if (matrix[i][j] < TINY) matrix[i][j] = TINY;
       assert(std::isfinite(matrix[i][j]));
     }
   }
@@ -255,16 +341,14 @@ maximization_seq(const vector<string> &sequences,
   // set gamma, which is, in essence, the probability that all sequences
   // in the data have an occurrence of the motif, assuming all prior probs of
   // seeing a motif in any sequence are equal. Be careful here to not let it
-  // exceed 1.0
-  gamma = accumulate(seq_indic.begin(), seq_indic.end(), 0.0)
-      / sequences.size();
-  gamma = std::min(gamma, 1.0);
+  // exceed 1.0, or get to exactly 0 (we take log of it later)
+  gamma = accumulate(seqIndic.begin(), seqIndic.end(), 0.0) / seqs.size();
+  gamma = std::max(std::min(gamma, 1.0), TINY);
 }
 
 /***
  * \summary maximize parameters for the structure component of the model based
  *          on the data and the indicators.
- * \param sequences             TODO
  * \param secondary_structure   secondary_structure[i][j] gives the probability
  *                              that the jth nuc. in the ith sequence is paired
  * \param site_indic            site_indic[i][j] gives the probability that the
@@ -277,8 +361,7 @@ maximization_seq(const vector<string> &sequences,
  * \param f_sec_str             the background base-pair probability
  */
 static void
-maximization_str(const vector<string> &sequences,
-                 const vector<vector<double> > &secondary_structure,
+maximization_str(const vector<vector<double> > &secondary_structure,
                  const vector<vector<double> > &site_indic,
                  const vector<double> &seq_indic,
                  vector<vector<double> > &matrix,
@@ -305,39 +388,69 @@ maximization_str(const vector<string> &sequences,
 }
 
 /***
- * \summary TODO
+ * \summary given a set of diagnostic event locations within sequences, and
+ *          both indicators on the probability of motif occurrence at each
+ *          position within each sequence and the probability that each
+ *          sequence has a motif, calculate the MLE estimate for the geometric
+ *          distribution of distances between diagnostic events and motif
+ *          occurrences.
+ * \param diagEvents diagEvents[i][k] is the (relative) position of the kth
+ *                   diagnostic event in sequence i
+ * \param siteInd    siteInd[i][j] is the probability that the motif occurrence
+ *                   in sequence i is at position j, given that an sequence i
+ *                   contains an occurrence.
+ * \param seqInd     seqInd[i] is the prob. that sequence i contains an
+ *                   occurrence of the motif
+ * \param matrix     matrix[j][b] is the prob. that base b occurs at position j
+ *                   of the motif
+ * \param geoP       TODO
+ * \param geoDelta   TODO
+ * \bug \todo PJU: geoDelta isn't updated here -- should it be? if not, it
+ *            should be set to const, and an explanation about why it isn't
+ *            updated added to comments.
  */
 static void
-maximization_de(const vector<string> &sequences,
-                const vector<vector<size_t> > &diagEvents,
-                const vector<vector<double> > &site_indic,
-                const vector<double> &seq_indic,
+maximization_de(const vector<vector<size_t> > &diagEvents,
+                const vector<vector<double> > &siteInd,
+                const vector<double> &seqInd,
                 vector<vector<double> > &matrix,
-                double &geo_p,
-                int &geo_delta) {
-  // if we have no diagnostic events, we can't do anything.. just set this to
-  // some default value
-  size_t numDEs = 0;
-  for (size_t i = 0; i < diagEvents.size(); ++i) numDEs += diagEvents[i].size();
-  if (numDEs == 0) {
-    geo_p = Model::DEFAULT_GEO_P;
+                double &geoP,
+                int &geoDelta) {
+  // weighted count of diagnostic events
+  double numerator = 0.0;
+  for (size_t i = 0; i < siteInd.size(); i++)
+    for (size_t k = 0; k < siteInd[i].size(); k++)
+      numerator += (seqInd[i] * siteInd[i][k] * diagEvents[i].size());
+
+  // we might either have no diagnostic events, or none in practice because
+  // all of them fall in sequences where we think there are no motif
+  // occurrences; either way, we can't estimate P.. just set it to some default
+  if (numerator == 0.0) {
+    geoP = Model::DEFAULT_GEO_P;
   } else {
-    double numerator = 0.0;
     double denominator = 0.0;
-    for (size_t i = 0; i < site_indic.size(); i++) {
+    for (size_t i = 0; i < siteInd.size(); i++) {
       double seq_sum = 0.0;
-      for (size_t k = 0; k < site_indic[i].size(); k++) {
-        numerator += (seq_indic[i] * site_indic[i][k] * diagEvents[i].size());
+      for (size_t k = 0; k < siteInd[i].size(); k++) {
         double site_sum = 0.0;
-        if (diagEvents[i].size() > 0)
-          for (size_t j = 0; j < diagEvents[i].size(); j++)
-            site_sum += abs(diagEvents[i][j] - (k + geo_delta));
-        seq_sum += site_indic[i][k] * (diagEvents[i].size() + site_sum);
+        for (size_t j = 0; j < diagEvents[i].size(); j++)
+          site_sum += abs(diagEvents[i][j] - (k + geoDelta));
+        seq_sum += siteInd[i][k] * (diagEvents[i].size() + site_sum);
       }
-      denominator += seq_indic[i] * seq_sum;
+      denominator += seqInd[i] * seq_sum;
     }
-    geo_p = max(min(numerator / denominator, 0.999),
-                std::numeric_limits<double>::min());
+
+    geoP = max(min(numerator / denominator, 0.999),
+               std::numeric_limits<double>::min());
+
+    // sanity check
+    if (!std::isfinite(geoP)) {
+      stringstream ss;
+      ss << "failed maximization of geometric parameter; numerator was "
+         << numerator << " denominator was " << denominator << " siteInd were "
+         << matrixToString(siteInd) << " seqInd were " << vecToString(seqInd);
+      throw SMITHLABException(ss.str());
+    }
   }
 }
 
@@ -351,7 +464,7 @@ maximization_de(const vector<string> &sequences,
  */
 static void
 get_numerator_seq_de_for_site(const string &seq,
-                              const vector<size_t> &diagnostic_events,
+                              const vector<size_t> &diagEvents,
                               const vector<vector<double> > &matrix,
                               const vector<double> &freqs,
                               const double geo_p,
@@ -359,33 +472,69 @@ get_numerator_seq_de_for_site(const string &seq,
                               const double gamma,
                               const size_t site,
                               double &num) {
+  // the log-likelihood of a nucleotide in the foreground (motif) if it is
+  // an N. We make this pretty bad, but be careful to make sure we could sum
+  // this across all positions of the matrix without causing an overflow.
+  const double N_LOG_PROB = -10000;
 
   vector<double> f_powers(alphabet_size, 0.0);
+  bool junk = false;
   for (size_t i = 0; i < seq.length(); ++i) {
     const size_t base = base2int(seq[i]);
-    if (i >= site && i < site + matrix.size())
-      num += log(matrix[i - site][base]);
-    else
-      f_powers[base]++;
-    if (!std::isfinite(f_powers[base]))
-      throw SMITHLABException("failed expectation calc; f_powers non-finite");
+    if (i >= site && i < site + matrix.size()) {
+      // Penalize N's heavily if they fall in the motif
+      if ((seq[i] == 'N') || (seq[i] == 'n')) {
+        junk = true;
+        num += N_LOG_PROB;
+      }
+      else {
+        assert(base < alphabet_size);
+        num += log(matrix[i - site][base]);
+        if (!std::isfinite(num)) {
+          stringstream ss;
+          ss << "failed expectation calculation; numerator non-finite. Matrix "
+             << "entry was: " << matrix[i - site][base];
+          throw SMITHLABException(ss.str());
+        }
+      }
+    }
+    else {
+      // Just ignore N's outside of the motif
+      if ((seq[i] != 'N') && (seq[i] != 'n')) {
+        assert(base < alphabet_size);
+        f_powers[base]++;
+      }
+      if (!std::isfinite(f_powers[base]))
+        throw SMITHLABException("failed expectation calc; f_powers non-finite");
+    }
+  }
+
+  for (size_t b = 0; b < alphabet_size; b++) {
+    num += f_powers[b] * log(freqs[b]);
+    assert(std::isfinite(num));
+  }
+  if (diagEvents.size() > 0) {
+    double power = 0.0;
+    for (size_t j = 0; j < diagEvents.size(); j++)
+      power += abs(diagEvents[j] - (site + geo_delta));
+    assert(std::isfinite(power));
+    num += ((power * log(1 - geo_p)) + (diagEvents.size() * log(geo_p)));
     if (!std::isfinite(num)) {
       stringstream ss;
-      ss << "failed expectation calculation; numerator non-finite. Matrix "
-         << "entry was: " << matrix[i - site][base];
+      ss << "failed expectation calculation; numerator non-finite. power is "
+         << power << " geo_p is " << geo_p << " num diag. events is "
+         << diagEvents.size();
       throw SMITHLABException(ss.str());
     }
   }
-  for (size_t b = 0; b < alphabet_size; b++)
-    num += f_powers[b] * log(freqs[b]);
-  if (diagnostic_events.size() > 0) {
-    double power = 0.0;
-    for (size_t j = 0; j < diagnostic_events.size(); j++)
-      power += abs(diagnostic_events[j] - (site + geo_delta));
-    num += ((power * log(1 - geo_p)) + (diagnostic_events.size() * log(geo_p)));
-  }
 
   num += log(gamma / (seq.length() - matrix.size() + 1.0));
+  if (!std::isfinite(num)) {
+    stringstream ss;
+    ss << "failed expectation calculation; numerator non-finite. gamma is "
+       << gamma;
+    throw SMITHLABException(ss.str());
+  }
 }
 
 /***
@@ -404,6 +553,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
                                const double gamma,
                                const size_t site,
                                double &num) {
+  const double N_LOG_PROB = -1e100;
 
   // calculating the contribution of the foreground and the powers
   // that will be needed for the background calculations (below).
@@ -411,11 +561,16 @@ get_numerator_seq_str_de_for_site(const string &seq,
   vector<double> f_powers_ds(alphabet_size, 0.0);
   for (size_t i = 0; i < seq.length(); ++i) {
     const size_t base = base2int(seq[i]);
+    assert(base < alphabet_size);
     if (i >= site && i < site + matrix.size()) {
-      num += (secondary_structure[i]
-          * log(matrix[i - site][base] * motif_sec_str[i - site]));
-      num += ((1.0 - secondary_structure[i])
-          * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
+      // Penalize N's heavily if they fall in the motif
+      if ((seq[i] == 'N') || (seq[i] == 'n')) num += N_LOG_PROB;
+      else {
+        num += (secondary_structure[i]
+            * log(matrix[i - site][base] * motif_sec_str[i - site]));
+        num += ((1.0 - secondary_structure[i])
+            * log(matrix[i - site][base] * (1.0 - motif_sec_str[i - site])));
+      }
       if (!std::isfinite(num)) {
         stringstream ss;
         ss << "failed expectation calculation; numerator non-finite. BPP was: "
@@ -425,8 +580,11 @@ get_numerator_seq_str_de_for_site(const string &seq,
         throw SMITHLABException(ss.str());
       }
     } else {
-      f_powers_ss[base] += (1.0 - secondary_structure[i]);
-      f_powers_ds[base] += (secondary_structure[i]);
+      // Just ignore N's outside of the motif
+      if ((seq[i] != 'N') && (seq[i] != 'n')) {
+        f_powers_ss[base] += (1.0 - secondary_structure[i]);
+        f_powers_ds[base] += (secondary_structure[i]);
+      }
     }
     if (!std::isfinite(f_powers_ss[base]))
       throw SMITHLABException("failed expectation calc; f_powers_ss non-finite");
@@ -489,10 +647,15 @@ expectation_seq_str_de_for_single_seq(const string &seq,
 
   double no_motif = 0.0;
   for (size_t i = 0; i < seq.length(); i++) {
+    // skip N's
+    if ((seq[i] == 'N') || (seq[i] == 'n')) continue;
+    const size_t base = base2int(seq[i]);
+    assert(base < alphabet_size);
+
     no_motif += secondary_structure[i]
-        * log(freqs[base2int(seq[i])] * f_sec_str);
+        * log(freqs[base] * f_sec_str);
     no_motif += ((1 - secondary_structure[i])
-        * log(freqs[base2int(seq[i])] * (1 - f_sec_str)));
+        * log(freqs[base] * (1 - f_sec_str)));
     if (diagnostic_events.size() > 0)
       no_motif -= (diagnostic_events.size() * log(seq.length()));
   }
@@ -536,13 +699,20 @@ expectation_seq_de_for_single_seq(const string &seq,
 
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
-  for (size_t i = 0; i < site_indic.size(); ++i)
+  for (size_t i = 0; i < site_indic.size(); ++i) {
     get_numerator_seq_de_for_site(seq, diagnostic_events, matrix, freqs, geo_p,
                                   geo_delta, gamma, i, numerator[i]);
+    assert(std::isfinite(numerator[i]));
+  }
 
   double no_motif = 0.0;
-  for (size_t i = 0; i < seq.length(); i++)
-    no_motif += log(freqs[base2int(seq[i])]);
+  for (size_t i = 0; i < seq.length(); i++) {
+    // ignore N's
+    if ((seq[i] == 'N') || (seq[i] == 'n')) continue;
+    const size_t base = base2int(seq[i]);
+    assert(base < alphabet_size);
+    no_motif += log(freqs[base]);
+  }
   if (diagnostic_events.size() > 0)
     no_motif -= (diagnostic_events.size() * log(seq.length()));
   const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
@@ -550,8 +720,10 @@ expectation_seq_de_for_single_seq(const string &seq,
 
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
-  for (size_t i = 0; i < site_indic.size(); ++i)
+  for (size_t i = 0; i < site_indic.size(); ++i) {
     site_indic[i] = exp(numerator[i] - denominator);
+    assert(std::isfinite(site_indic[i]));
+  }
 
   seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
 }
@@ -614,14 +786,14 @@ expectation_seq_de(const vector<string> &sequences,
                    const double gamma,
                    vector<vector<double> > &site_indic,
                    vector<double> &seq_indic) {
-  if (Model::DEBUG_MESSAGES)
+  if (Model::DEBUG_LEVEL >= 2)
     cerr << "performing expectation step with matrix " << endl
          << matrixToString(matrix) << endl;
   for (size_t i = 0; i < sequences.size(); i++)
     expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
                                       matrix, freqs, geo_p, geo_delta, gamma,
                                       site_indic[i], seq_indic[i]);
-  if (Model::DEBUG_MESSAGES)
+  if (Model::DEBUG_LEVEL >= 2)
     cerr << "finished expectation step" << endl;
 }
 
@@ -650,7 +822,7 @@ expectation_seq_str_de(const vector<string> &sequences,
 }
 
 /******************************************************************************
- * GETTERS
+ *                             SIMPLE GETTERS
  *****************************************************************************/
 string
 Model::toString_pwm() const {
@@ -774,8 +946,13 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
   //--------
   for (size_t i = 0; i < sequences.size(); i++) {
     double has_no_motif = 0.0;
-    for (size_t j = 0; j < sequences[i].length(); j++)
-      has_no_motif += log(f[base2int(sequences[i][j])]);
+    for (size_t j = 0; j < sequences[i].length(); j++) {
+      // ignore N's
+      if ((sequences[i][j] == 'N') || (sequences[i][j] == 'n')) continue;
+      const size_t base = base2int(sequences[i][j]);
+      assert(base < alphabet_size);
+      has_no_motif += log(f[base]);
+    }
     if (diagnostic_events[i].size() > 0)
       has_no_motif -= (diagnostic_events[i].size() * log(sequences[i].length()));
     ret += (1 - seq_indic[i]) * has_no_motif;
@@ -873,8 +1050,13 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
 
   for (size_t i = 0; i < sequences.size(); i++) {
     double has_no_motif = 0.0;
-    for (size_t j = 0; j < sequences[i].length(); j++)
-      has_no_motif += log(f[base2int(sequences[i][j])]);
+    for (size_t j = 0; j < sequences[i].length(); j++) {
+      // ignore N's
+      if ((sequences[i][j] == 'N') || (sequences[i][j] == 'n')) continue;
+      const size_t base = base2int(sequences[i][j]);
+      assert(base < alphabet_size);
+      has_no_motif += log(f[base]);
+    }
     if (diagnostic_events[i].size() > 0)
       has_no_motif -=
           (diagnostic_events[i].size() * log(sequences[i].length()));
@@ -931,7 +1113,7 @@ Model::expectation_maximization_seq(const vector<string> &seqs,
     if (!first) {
       const double delta = fabs(prev_score - score);
       const double deltaProp = delta / fabs(prev_score);
-      if (Model::DEBUG_MESSAGES)
+      if (Model::DEBUG_LEVEL >= 2)
         cerr << "new ll: " << score << " old ll: " << prev_score << " "
              << "absolute change is " << delta << " fraction change "
              << deltaProp << endl;
@@ -969,15 +1151,22 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
   bool first = true;
   double score = 0.0;
   for (size_t i = 0; i < max_iterations; ++i) {
+    if (Model::DEBUG_LEVEL >= 1) {
+      cerr << "EM, sequence and DE, iteration number " << i << endl
+           << "expectation step" << endl;
+    }
     expectation_seq_de(seqs, diagEvents, matrix, f, p, delta, gamma,
                        site_indic, seq_indic);
+    if (Model::DEBUG_LEVEL >= 1) cerr << "sequence maximization step" << endl;
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
-    maximization_de(seqs, diagEvents, site_indic, seq_indic, matrix, p, delta);
+    if (Model::DEBUG_LEVEL >= 1) cerr << "DE maximization step" << endl;
+    maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta);
+    if (Model::DEBUG_LEVEL >= 1) cerr << "calculating log-likelihood" << endl;
     score = calculate_zoops_log_l(seqs, diagEvents, site_indic, seq_indic);
     if (!first) {
       const double delta = fabs(prev_score - score);
       const double deltaProp = delta / fabs(prev_score);
-      if (Model::DEBUG_MESSAGES)
+      if (Model::DEBUG_LEVEL >= 1)
         cerr << "new ll: " << score << " old ll: " << prev_score << " "
              << "absolute change is " << delta << " fraction change "
              << deltaProp << endl;
@@ -994,41 +1183,37 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
  * \summary use the expectation maximization algorithm to estimate the
  *          parameters for this model given a set of sequences, their structure
  *          and diagnostic events.
- * \param sequences           TODO
- * \param secStructure        TODO
- * \param diagnostic_events   diagnostic_events[i][j] is the location of the jth
+ * \param seqs                TODO
+ * \param secStr              TODO
+ * \param diagEvents          diagnostic_events[i][j] is the location of the jth
  *                            diagnostic event in the ith sequence.
  *                            diagnostic_events[i] can be empty for any value
  *                            of i (i.e. there are no diagnostic events in that
  *                            sequence).
- * \param site_indic          TODO
- * \param seq_indic           TODO
+ * \param siteInd             TODO
+ * \param seqInd              TODO
  */
 void
-Model::expectationMax_SeqStrDE(const vector<string> &sequences,
-                               const vector<vector<double> > &secStructure,
-                               const vector<vector<size_t> > &diagnostic_events,
-                               vector<vector<double> > &site_indic,
-                               vector<double> &seq_indic) {
-  estimateDelta(sequences, diagnostic_events);
+Model::expectationMax_SeqStrDE(const vector<string> &seqs,
+                               const vector<vector<double> > &secStr,
+                               const vector<vector<size_t> > &diagEvents,
+                               vector<vector<double> > &siteInd,
+                               vector<double> &seqInd) {
+  estimateDelta(seqs, diagEvents);
   double prev_score = std::numeric_limits<double>::max();
   double score = 0.0;
   bool first = true;
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq_str_de(sequences, secStructure, diagnostic_events,
-                           matrix, motif_sec_str, f, f_sec_str, p, delta, gamma,
-                           site_indic, seq_indic);
-    maximization_seq(sequences, site_indic, seq_indic, matrix, f, gamma);
-    maximization_str(sequences, secStructure, site_indic, seq_indic,
-                     matrix, motif_sec_str, f_sec_str);
-    maximization_de(sequences, diagnostic_events, site_indic, seq_indic, matrix,
-                    p, delta);
-    score = calculate_zoops_log_l(sequences, secStructure,
-                                  diagnostic_events, site_indic, seq_indic);
+    expectation_seq_str_de(seqs, secStr, diagEvents, matrix, motif_sec_str,
+                           f, f_sec_str, p, delta, gamma, siteInd, seqInd);
+    maximization_seq(seqs, siteInd, seqInd, matrix, f, gamma);
+    maximization_str(secStr, siteInd, seqInd, matrix, motif_sec_str, f_sec_str);
+    maximization_de(diagEvents, siteInd, seqInd, matrix, p, delta);
+    score = calculate_zoops_log_l(seqs, secStr, diagEvents, siteInd, seqInd);
     if (!first) {
       const double delta = fabs(prev_score - score);
       const double deltaProp = delta / fabs(prev_score);
-      if (Model::DEBUG_MESSAGES)
+      if (Model::DEBUG_LEVEL >= 1)
         cerr << "new ll: " << score << " old ll: " << prev_score << " "
              << "absolute change is " << delta << " fraction change "
              << deltaProp << endl;
@@ -1124,7 +1309,7 @@ Model::estimateDelta(const vector<string> &seqs,
     for (size_t i = 0; i < ll_delta.size(); i++) {
       if (ll_delta[i] > max_ll) {
         max_ll = ll_delta[i];
-        max_i = i - 10;
+        max_i = i + Model::MIN_DELTA;
       }
     }
 
@@ -1168,8 +1353,11 @@ Model::set_model_by_word(const double pseudocount,
   model.matrix.resize(len, vector<double>(alphabet_size, pseudocount));
 
   // set the matrix to the word
-  for (size_t i = 0; i < len; ++i)
-    model.matrix[i][base2int(kmer[i])] += 1.0;
+  for (size_t i = 0; i < len; ++i) {
+    const size_t base = base2int(kmer[i]);
+    assert(base < alphabet_size);
+    model.matrix[i][base] += 1.0;
+  }
 
   // normalize matrix columns
   for (size_t i = 0; i < len; ++i)

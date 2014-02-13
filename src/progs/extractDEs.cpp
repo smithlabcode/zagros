@@ -246,8 +246,8 @@ addDiagEvents_iCLIP(const MappedRead &read, const string &mapper,
       diagEventLocs.push_back(g);
     }
     else {
-      GenomicRegion g(read.r.get_chrom(), read.r.get_end(),
-                       read.r.get_end() + 1, name, score, read.r.get_strand());
+      GenomicRegion g(read.r.get_chrom(), read.r.get_end() - 1,
+                       read.r.get_end(), name, score, read.r.get_strand());
       diagEventLocs.push_back(g);
     }
   }

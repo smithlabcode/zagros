@@ -53,6 +53,35 @@ using std::max;
 using std::pair;
 using std::numeric_limits;
 
+/******************************************************************************
+ *                       Simple Formatting functions
+ ******************************************************************************/
+
+/**
+ * \TODO PJU -- this essentially duplicates a function in model.cpp; both should
+ *              be replaced with a template version.
+ */
+/*static string
+vecToString(vector<size_t> x) {
+  stringstream ss;
+  for (size_t i = 0; i < x.size(); ++i) {
+    ss << x[i];
+    if (i != x.size() - 1) ss << ", ";
+  }
+  return ss.str();
+}*/
+
+/***
+ * \summary Convert an int to a string
+ * \TODO duplicates code in simulate; should go into some library file
+ */
+string
+intToString(const int n) {
+  std::stringstream ss;
+  ss << n;
+  return ss.str();
+}
+
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 /////////////
@@ -97,8 +126,17 @@ compute_base_comp(const vector<string> &sequences,
   base_comp.resize(smithlab::alphabet_size, 0.0);
   size_t total = 0;
   for (size_t i = 0; i < sequences.size(); ++i) {
-    for (size_t j = 0; j < sequences[i].length(); ++j)
-      ++base_comp[base2int(sequences[i][j])];
+    for (size_t j = 0; j < sequences[i].length(); ++j) {
+      const size_t base = base2int(sequences[i][j]);
+      if ((sequences[i][j] == 'N') || (sequences[i][j] == 'n')) continue;
+      if (base >= smithlab::alphabet_size) {
+        stringstream ss;
+        ss << "failed computing base composition, unexpected base: "
+           << sequences[i][j];
+        throw SMITHLABException(ss.str());
+      }
+      ++base_comp[base];
+    }
     total += sequences[i].length();
   }
   std::transform(
@@ -116,8 +154,11 @@ static double
 compute_kmer_prob(const string &kmer,
                   const vector<double> &base_comp) {
   double prob = 1.0;
-  for (size_t i = 0; i < kmer.length(); ++i)
-    prob *= base_comp[base2int(kmer[i])];
+  for (size_t i = 0; i < kmer.length(); ++i) {
+    const size_t base = base2int(kmer[i]);
+    assert(base < smithlab::alphabet_size);
+    prob *= base_comp[base];
+  }
   return prob;
 }
 
@@ -205,77 +246,57 @@ find_best_kmers(const size_t k_value,
 /////////////  INPUT DATA TEST AND REFINEMENT
 /////////////
 
-// PJU: following aren't used currently; should they be removed?
-/*
-static bool
-check_overlapping_chrom(const vector<GenomicRegion> &targets_chrom) {
-
-  vector<pair<size_t, bool> > boundaries;
-  for (size_t i = 0; i < targets_chrom.size(); ++i) {
-    boundaries.push_back(std::make_pair(targets_chrom[i].get_start(), false));
-    boundaries.push_back(std::make_pair(targets_chrom[i].get_end(), true));
-  }
-  sort(boundaries.begin(), boundaries.end());
-
-  size_t count = 0;
-  for (size_t i = 0; i < boundaries.size(); ++i)
-    if (boundaries[i].second)
-      --count;
-    else {
-      ++count;
-      if (count > 1) {
-        cerr << targets_chrom[i].tostring() << endl;
-        return true;
-      }
-    }
-  return false;
-}
-
-
-static bool
-check_overlapping(const vector<GenomicRegion> &targets) {
-
-  vector<vector<GenomicRegion> > targets_chroms;
-  separate_chromosomes(targets, targets_chroms);
-  bool ret_val = false;
-  for (size_t i = 0; i < targets_chroms.size() && !ret_val; ++i)
-    ret_val |= check_overlapping_chrom(targets_chroms[i]);
-  return ret_val;
-}*/
-
-
-/***
- * \brief           TODO
- * \param sequences TODO
- * \param rng       TODO
- * \TODO -- PJU This probably belongs in RNA_Utils, rather than here.
+/**
+ * \summary given a set of diagnostic events, and a threshold <thresh> on the
+ *          total number of diagnostic events to include in each sequence,
+ *          sample from the complete set of diagnostic events (without
+ *          replacement) such that each sequence has <= <thresh> events.
+ * \param   dEvents dEvents[i][j] is the (relative) position of the jth
+ *                  diagnostic even in sequence i. The down sampling is
+ *                  done in-place, so this contains the result after the call
+ * \param   thresh  the number of diagnostic events to sample for each seq.
+ *                  this can be either -1, signifying that no down-sampling
+ *                  should be done, or >= 0 (setting to 0 will remove all
+ *                  diagnostic events)
  */
 static void
-replace_Ns(vector<string> &sequences, const Runif &rng) {
-  vector<double> probs(vector<double>(smithlab::alphabet_size, 
-				      1.0/smithlab::alphabet_size));
-  for (size_t i = 0; i < sequences.size(); ++i) {
-    char n = RNAUtils::sampleNuc(rng);
-    std::replace(sequences[i].begin(), sequences[i].end(), 'N', n);
+downsampleDiagEvents(vector<vector<size_t> > &dEvents, const int thresh) {
+  if (thresh == -1) return;
+  if (thresh < 0) {
+    stringstream ss;
+    ss << "invalid down-sampling threshold for diagnostic events: " << thresh
+       << "; must be either -1 (no down-sampling) or >= 0";
+    throw SMITHLABException(ss.str());
+  }
+  for (size_t i = 0; i < dEvents.size(); ++i) {
+    // it's okay to cast to size_t, we know thresh >= 0 from above if-statement
+    const size_t tThresh = std::min(static_cast<size_t>(thresh),
+                                    dEvents[i].size());
+    random_shuffle(dEvents[i].begin(), dEvents[i].end());
+    dEvents[i].resize(tThresh);
+    sort(dEvents[i].begin(), dEvents[i].end());
   }
 }
 
 /***
  * \summary given a set of sequences and indicators for motif occurrences,
  *          mask out the most likely occurrences of the motif in the sequences
- * \param seqs          TODO
- * \param indicators    TODO
- * \param zoops         TODO
- * \param motifLen      TODO
- * \param rng           Random number generator used for generating the
- *                      masking sequences.
+ * \param seqs          the sequences to mask occurrences in
+ * \param indicators    indicators[i][j] is the prob. that a motif occurrence
+ *                      starts at position j of sequence i
+ * \param zoops         zoops[i] is the prob. that the ith sequence contains an
+ *                      occurrence of the motif.
+ * \param motifLen      the length of the motif. i.e. how much to mask.
  * \throw SMITHLABException if the dimensions of seqs doesn't match indicators
  *        or zoops_i
  */
 static void
 maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
-                const vector<double> &zoops, const size_t motifLen,
-                const Runif &rng) {
+                const vector<double> &zoops, const size_t motifLen) {
+  // we won't consider masking any sequences where the prob. that the motif is
+  // in the sequence is lower than this.
+  const double ZOOPS_OCCURRENCE_THRESHOLD = 0.8;
+
   if (seqs.size() != indicators.size()) {
     stringstream ss;
     ss << "failed to mask motif occurrences, number of indicator vectors ("
@@ -292,7 +313,7 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
   }
 
   for (size_t i = 0; i < seqs.size(); ++i) {
-    if (zoops[i] >= 0.8) {      // TODO -- PJU: Abracadabra!
+    if (zoops[i] >= ZOOPS_OCCURRENCE_THRESHOLD) {
       double max_X = -1;
       int max_indx = -1;
       for (size_t j = 0; j < indicators[i].size(); j++) {
@@ -301,8 +322,8 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
           max_indx = j;
         }
       }
-      string junk = RNAUtils::sampleSeq(motifLen, rng);
-      seqs[i].replace(max_indx, motifLen, junk);
+      string mask = string(motifLen, 'N');
+      seqs[i].replace(max_indx, motifLen, mask);
     }
   }
 }
@@ -398,8 +419,15 @@ format_motif(const Model &model,
       }
     }
     if (zoops_i[n] >= 0.8 )
-      for (size_t j = 0; j < model.size(); ++j)
-        tmp_m[j][base2int(sequences[n][max_i + j])] += zoops_i[n];
+      for (size_t j = 0; j < model.size(); ++j) {
+        // just skip N's
+        if ((sequences[n][max_i + j] == 'N') || (sequences[n][max_i + j] == 'n'))
+          continue;
+
+        const size_t base = base2int(sequences[n][max_i + j]);
+        assert(base < smithlab::alphabet_size);
+        tmp_m[j][base] += zoops_i[n];
+      }
   }
 
   for (size_t j = 0; j < tmp_m.size(); j++) {
@@ -421,6 +449,7 @@ format_motif(const Model &model,
   ss << "XX" << endl << "AT\tGEO_P=" << model.p << endl;
   ss << "AT\tGEO_DELTA=" << model.delta << endl << "XX" << endl;
 
+  size_t numSitesFound = 0;
   for (size_t n = 0; n < indicators.size(); ++n) {
     double max_X = -1;
     size_t site_pos = 0;
@@ -436,10 +465,15 @@ format_motif(const Model &model,
       if (targets.size() != 0) strand = targets[n].get_strand();
       ss << format_site(sequences[n], model.size(), names[n], strand, site_pos)
          << "\t" << zoops_i[n] << endl;
+      numSitesFound += 1;
     }
   }
   ss << "XX" << endl << "//";
-  return ss.str();
+
+  // if we found no sites that actually matched the motif, don't bother
+  // to return the empty formatted version.
+  if (numSitesFound == 0) return "";
+  else return ss.str();
 }
 
 int main(int argc, const char **argv) {
@@ -459,8 +493,7 @@ int main(int argc, const char **argv) {
     string chrom_dir = "";
     string structure_file;
     string reads_file;
-    // TODO -- PJU: not currently implemented.
-    //double level = std::numeric_limits<double>::max();
+    int diagEventsThresh = -1;
     size_t numStartingPoints = 3;
 
     /****************** COMMAND LINE OPTIONS ********************/
@@ -480,9 +513,10 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, structure_file);
     opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
                       OptionParser::OPTIONAL, reads_file);
-    // TODO -- PJU: not currently implemented.
-    /*opt_parse.add_opt("level", 'l', "level of influence by diagnostic events "
-                      "(default: maximum)", OptionParser::OPTIONAL, level);*/
+    opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
+                      "to this many per sequence (-1 for no down-sampling; "
+                      "default: " + intToString(diagEventsThresh) +  ")",
+                      OptionParser::OPTIONAL, diagEventsThresh);
     opt_parse.add_opt("starting-points", 's', "number of starting points to try "
                       "for EM search. Higher values will be slower, but more "
                       "likely to find the global maximum.",
@@ -540,7 +574,6 @@ int main(int argc, const char **argv) {
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
     load_sequences(targets_file, chrom_dir, seqs, names, targets);
-    replace_Ns(seqs, rng);
 
     // Data structures and input preparation for secondary structure
     vector<vector<double> > secondary_structure;
@@ -569,6 +602,7 @@ int main(int argc, const char **argv) {
       if (VERBOSE)
         cerr << "DONE (FOUND " << deCount << " EVENTS IN TOTAL)" << endl;
     }
+    downsampleDiagEvents(diagEvents, diagEventsThresh);
 
     // find and output each of the motifs that the user asked for.
     for (size_t i = 0; i < n_motifs ; ++i) {
@@ -635,18 +669,23 @@ int main(int argc, const char **argv) {
       }
 
       if (VERBOSE) cerr << "\t" << "WRITING MOTIF " << endl;
-      out << format_motif(model, "ZAGROS" + toa(i), seqs, names, targets,
-                          indicators, has_motif) << endl;
+      const string m = format_motif(model, "ZAGROS" + toa(i), seqs, names,
+                                    targets, indicators, has_motif);
+      if (m.empty() && VERBOSE)
+        cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
+      if (!m.empty())
+        out << m << endl;
 
       // if not the last motif, mask occurrences
       if (i != n_motifs - 1) {
         if (VERBOSE) cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
-        maskOccurrences(seqs, indicators, has_motif, motif_width, rng);
+        maskOccurrences(seqs, indicators, has_motif, motif_width);
       }
     }
   } 
   catch (const SMITHLABException &e) {
-    cerr << "ERROR: " << e.what() << endl;
+    cerr << "ERROR: " << e.what();
+    cerr << endl;
     return EXIT_FAILURE;
   } 
   catch (std::bad_alloc &ba) {
