@@ -50,14 +50,8 @@ clean:
 .PHONY: clean
 
 distclean: clean
+	@make -C src OPT=1 clean
 	@rm -rf $(RBP)/bin
-	@rm -rf $(RBP)/lib
-	@rm -rf $(RBP)/include
-	@rm -rf $(RBP)/developmentDocs
-.PHONY: clean
-
-distclean: clean
-	@make -C src OPT=1 distclean
 	@rm -rf $(distdir) $(distdir).tar.gz
 .PHONY: distclean
 
