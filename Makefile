@@ -83,7 +83,9 @@ $(distdir) : FORCE
 	cp src/smithlab_cpp/*.cpp $(distdir)/src/smithlab_cpp
 	cp src/smithlab_cpp/*.hpp $(distdir)/src/smithlab_cpp
 	# copy the programs
-	cp src/progs/*.cpp $(distdir)/src/progs
+	cp src/progs/extractDEs.cpp $(distdir)/src/progs
+	cp src/progs/thermo.cpp $(distdir)/src/progs
+	cp src/progs/zagros.cpp $(distdir)/src/progs
 	cp src/progs/Makefile $(distdir)/src/progs
 	# copy the common files
 	cp src/rbp_common/*.cpp $(distdir)/src/rbp_common

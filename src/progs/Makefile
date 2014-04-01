@@ -21,14 +21,14 @@ ifndef SMITHLAB_CPP
 $(error Must define SMITHLAB_CPP variable)
 endif
 
-PROGS = zagros thermo simulate extractDEs
+PROGS = zagros thermo extractDEs
 
 CXX = g++
 CFLAGS = -g -Wall -fPIC -fmessage-length=50
 OPTFLAGS = -O3
 DEBUGFLAGS =
 COMMON_DIR = ../rbp_common/
-LIBS = -lgsl -lgslcblas
+LIBS =
 
 INCLUDEDIRS = $(SMITHLAB_CPP) $(COMMON_DIR)
 INCLUDEARGS = $(addprefix -I,$(INCLUDEDIRS))
