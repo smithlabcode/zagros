@@ -591,7 +591,7 @@ main(int argc, const char **argv) {
     bool VERBOSE = false;
 
     /****************** COMMAND LINE OPTIONS ********************/
-    static OptionParser opt_parse(strip_path(argv[0]), about);
+    static OptionParser opt_parse(strip_path(argv[0]), about, "<mapped reads>");
     opt_parse.add_opt("output", 'o', "Write output to this file (STDOUT if "
                       "omitted).", OptionParser::OPTIONAL, outputFn);
     opt_parse.add_opt("regions", 'r', "the genomic regions, in BED format, "
