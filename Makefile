@@ -18,6 +18,11 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+package = zagros
+version = 1.0.0
+tarname = $(package)
+distdir = $(tarname)-$(version)
+
 RBP = $(shell pwd)
 export PATH := $(shell pwd):$(PATH)
 
@@ -49,4 +54,51 @@ distclean: clean
 	@rm -rf $(RBP)/lib
 	@rm -rf $(RBP)/include
 	@rm -rf $(RBP)/developmentDocs
+.PHONY: clean
+
+distclean: clean
+	@make -C src OPT=1 distclean
+	@rm -rf $(distdir) $(distdir).tar.gz
 .PHONY: distclean
+
+dist: $(distdir).tar.gz
+
+distcheck : $(distdir).tar.gz
+	gzip -cd $(distdir).tar.gz | tar xvf -
+	cd $(distdir) && ./configure && $(MAKE) all && $(MAKE) test
+	cd $(distdir) && $(MAKE) clean
+	rm -rf $(distdir)
+	@echo "*** Package $(distdir).tar.gz is ready for distribution"
+
+$(distdir).tar.gz : $(distdir)
+	tar chof - $(distdir) | gzip -9 -c > $@
+	rm -rf $(distdir)
+
+$(distdir) : FORCE
+	# make the directory structure 
+	mkdir -p $(distdir)/src
+	mkdir -p $(distdir)/src/rbp_common
+	mkdir -p $(distdir)/src/progs
+	mkdir -p $(distdir)/src/smithlab_cpp
+	# copy top level files
+	cp Makefile $(distdir)
+	cp README.TXT $(distdir)
+	# copy smithlab_cpp src files
+	cp src/Makefile $(distdir)/src
+	cp src/smithlab_cpp/Makefile $(distdir)/src/smithlab_cpp
+	cp src/smithlab_cpp/*.cpp $(distdir)/src/smithlab_cpp
+	cp src/smithlab_cpp/*.hpp $(distdir)/src/smithlab_cpp
+	# copy the programs
+	cp src/progs/*.cpp $(distdir)/src/progs
+	cp src/progs/Makefile $(distdir)/src/progs
+	# copy the common files
+	cp src/rbp_common/*.cpp $(distdir)/src/rbp_common
+	cp src/rbp_common/*.hpp $(distdir)/src/rbp_common
+	cp src/rbp_common/Makefile $(distdir)/src/rbp_common
+.PHONY: dist
+
+FORCE:
+	-rm $(distdir).tar.gz > /dev/null 2>&1
+	-rm -rf $(distdir) > /dev/null 2>&1
+.PHONY: FORCE
+
