@@ -1,3 +1,17 @@
+
+                    ______                         
+                   |___  /                         
+                      / / __ _  __ _ _ __ ___  ___ 
+                     / / / _` |/ _` | '__/ _ \/ __|
+                    / /_| (_| | (_| | | | (_) \__ \
+                   /_____\__,_|\__, |_|  \___/|___/
+                                __/ |              
+                               |___/               
+                   ********************************
+                   *            V1.1.0            *
+                   ********************************
+
+
 *********************************
 Copyright and License Information
 *******************************************************************************
@@ -136,7 +150,7 @@ Then run zagros program by inputing the diagnostic events file as one of the opt
 4.) Sequence, Structure and Diagnostic events
     > ./thermo -o input.str input.fa
     > ./extractDEs -m novoalign -t iCLIP -o input.des -r mapped_reads.nov
-    > ./zagros -c path/to/chrom_directory -t input.structure -d input.des input.bed
+    > ./zagros -t input.str -d input.des input.fa
 
 
 ********************
@@ -151,7 +165,7 @@ Options:
   -n, -number             number of motifs to output (default: 1) 
   -c, -chrom              directory with chrom files (FASTA format) 
   -t, -structure          structure information file 
-  -d, -diagnostic_events  mapped reads file 
+  -d, -diagnostic_events  diagnostic events information file 
   -i, -diagEventsThresh   down-sample diagnostic events to this many per 
                           sequence (-1 for no down-sampling; default: -1) 
   -s, -starting-points    number of starting points to try for EM search. Higher 

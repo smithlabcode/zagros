@@ -511,7 +511,7 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, chrom_dir);
     opt_parse.add_opt("structure", 't', "structure information file", 
                       OptionParser::OPTIONAL, structure_file);
-    opt_parse.add_opt("diagnostic_events", 'd', "mapped reads file", 
+    opt_parse.add_opt("diagnostic_events", 'd', "diagnostic events information file", 
                       OptionParser::OPTIONAL, reads_file);
     opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
                       "to this many per sequence (-1 for no down-sampling; "
