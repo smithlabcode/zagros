@@ -142,6 +142,69 @@ toString(const bool b) {
  *   functions for doing the actual extraction of DEs from mapping results
  *****************************************************************************/
 
+
+/**
+ * \brief parse a Novoalign mismatch string to extract any diagnostic events
+ * 
+ *        Novoalign (native format) mapped reads have a tab-delimited
+ *        format; there are a lot of possible fields, and they vary depending
+ *        on the exact input provided, but the final one is what I call here
+ *        the "mismatch string". Note that only this field should be provided
+ *        to this function, not the full read string. The mismatch string is
+ *        space delimited; we're interested in entries that specify insertions,
+ *        deletions or mismatches between the read and the reference (there may
+ *        be other entries, but we don't care about them).
+ *        Mismatch:  Format is 'offset''refbase'>'readbase'
+ *        Insertion: Format is 'offset'+'insertedbases'
+ *        Deletion:  Format is 'offset'-'refbase'
+ *        --
+ *        deletion means the base(s) is (are) in the ref., not in the read
+ *        insertion means the base(s) is (are) in the read, not the ref.
+ *        offset is the mm/indel offset from the mapping location (not the
+ *        position within the read).
+ *
+ * \param novo_mmString     the mismatch string from a Novoalign read
+ *                          (can be the empty string, or all whitespace)
+ * \param des               any extracted DEs will be added to the back of this
+ *                          vector. No existing entries in the vector will be
+ *                          modified.
+ **/
+static void
+extractDEs_bowtie(const string &bowtie_mmString, vector<DE> &des) {
+  vector<string> parts(smithlab::split_whitespace_quoted(bowtie_mmString));
+  for (size_t i = 0; i < parts.size(); ++i) {
+    DE de;
+    size_t idx = parts[i].find(">");
+    if (idx != string::npos) {
+      de.type = "mutation";
+      de.position = stringToSize_t(parts[i].substr(0, idx - 1));
+      de.refBase = parts[i].substr(idx - 1, 1);
+      de.readBase = parts[i].substr(idx + 1, 1);
+      des.push_back(de);
+    }
+    else {
+      idx = parts[i].find("+");
+      if (idx != string::npos) {
+        de.type = "insertion";
+        de.position = stringToSize_t(parts[i].substr(0, idx));
+        de.readBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+        de.refBase = "-";
+        des.push_back(de);
+      } else {
+        idx = parts[i].find("-");
+        if (idx != string::npos) {
+          de.type = "deletion";
+          de.position = stringToSize_t(parts[i].substr(0, idx));
+          de.refBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+          de.readBase = "-";
+          des.push_back(de);
+        }
+      }
+    }
+  }
+}
+
+
 /**
  * \brief parse a Novoalign mismatch string to extract any diagnostic events
  *
@@ -222,8 +285,12 @@ static void
 addDiagEvents_iCLIP(const MappedRead &read, const string &mapper,
                     vector<GenomicRegion> &diagEventLocs) {
   vector<DE> des;
-  if (mapper == "novoalign") extractDEs_novo(read.scr, des);
-  else throw SMITHLABException("unsupported short-read mapper for iCLIP "
+  if (mapper == "novoalign") 
+    extractDEs_novo(read.scr, des);
+  else if (mapper == "bowtie")
+    extractDEs_bowtie(read.scr, des);
+  else 
+    throw SMITHLABException("unsupported short-read mapper for iCLIP "
                                "data: " + mapper);
 
   // check for 'T' deletion in the read that signifies an RT read-through of
@@ -271,11 +338,15 @@ static void
 addDiagEvents_hCLIP(const MappedRead &read, const string &mapper,
                     vector<GenomicRegion> &diagEventLocs) {
   vector<DE> des;
-  if (mapper == "novoalign") extractDEs_novo(read.scr, des);
-  else throw SMITHLABException("unsupported short-read mapper for HITS-CLIP "
+  if (mapper == "novoalign")
+    extractDEs_novo(read.scr, des);
+  else if (mapper == "bowtie")
+    extractDEs_bowtie(read.scr, des);
+  else
+    throw SMITHLABException("unsupported short-read mapper for iCLIP "
                                "data: " + mapper);
 
-  extractDEs_novo(read.scr, des);
+//  extractDEs_novo(read.scr, des);
   if (des.size() == 1) {
     const string name("X");
     const size_t score = 0;
@@ -286,6 +357,7 @@ addDiagEvents_hCLIP(const MappedRead &read, const string &mapper,
            read.r.get_start() + des[0].position, name, score,
            read.r.get_strand());
       diagEventLocs.push_back(gr);
+      cout << gr.get_start() << endl;
     }
     else if (!read.r.pos_strand() &&
          des[0].type == "deletion" && des[0].refBase == "A") {
@@ -316,8 +388,12 @@ static void
 addDiagEvents_pCLIP(const MappedRead &read, const string &mapper,
                     vector<GenomicRegion> &diagEventLocs) {
   vector<DE> des;
-  if (mapper == "novoalign") extractDEs_novo(read.scr, des);
-  else throw SMITHLABException("unsupported short-read mapper for PAR-CLIP "
+  if (mapper == "novoalign")
+    extractDEs_novo(read.scr, des);
+  else if (mapper == "bowtie")
+    extractDEs_bowtie(read.scr, des);
+  else
+    throw SMITHLABException("unsupported short-read mapper for iCLIP "
                                "data: " + mapper);
 
   if (des.size() == 1) {

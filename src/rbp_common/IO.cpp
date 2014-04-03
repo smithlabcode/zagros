@@ -89,6 +89,19 @@ convertSizet(const size_t number) {
 }
 
 /**
+ *  * \brief convert a string to a size_t
+ *   * \param   s   the string to convert
+ *    * \return      the size_t corresponding to s
+ *     */
+static size_t
+stringToSize_t(const string& s) {
+  std::istringstream buffer(s);
+  size_t value;
+  buffer >> value;
+  return value;
+}
+
+/**
  * \brief TODO
  * \param line  TODO
  * \return TODO
@@ -130,7 +143,7 @@ is_track_line(const char *line) {
 static vector<string>
 split_extended_whitespace_quoted(string to_split) {
 
-  static const char *non_word_chars = "\t\"'";
+  static const char *non_word_chars = "\t";
   to_split = smithlab::strip(to_split);
   std::vector<std::string> words;
   size_t start_pos = 0, end_pos = 0;
@@ -178,9 +191,77 @@ split_extended_whitespace_quoted(string to_split) {
 
 
 static void
-convert_bowtie_extra(string &extra) {
+convert_bowtie_extra(string &extra, size_t read_length, char strand) {
   std::replace(extra.begin(), extra.end(), ',', ' ');
   extra.erase(std::remove(extra.begin(), extra.end(), ':'), extra.end());
+  if (strand == '-') {
+    vector<string> parts(smithlab::split_whitespace_quoted(extra));
+    string result = "";
+    size_t position;
+    string refBase;
+    string readBase;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      size_t idx = parts[i].find(">");
+      if (idx != string::npos) {
+        position = stringToSize_t(parts[i].substr(0, idx - 1));
+        refBase = parts[i].substr(idx - 1, 1);
+        readBase = parts[i].substr(idx + 1, 1);
+        result = result + " " + convertSizet(read_length - position) + refBase + ">" + readBase;
+      }
+      else {
+        idx = parts[i].find("+");
+        if (idx != string::npos) {
+          position = stringToSize_t(parts[i].substr(0, idx));
+          readBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+          refBase = "-";
+          result = result + " " + convertSizet(read_length - position) + "+" + readBase;
+        } else {
+          idx = parts[i].find("-");
+          if (idx != string::npos) {
+            position = stringToSize_t(parts[i].substr(0, idx));
+            refBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+            readBase = "-";
+            result = result + " " + convertSizet(read_length - position) + "-" + refBase;
+          }
+        }
+      }
+    }
+    extra = result.substr(1);
+  } else 
+  if (strand == '+') {
+    vector<string> parts(smithlab::split_whitespace_quoted(extra));
+    string result = "";
+    size_t position;
+    string refBase;
+    string readBase;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      size_t idx = parts[i].find(">");
+      if (idx != string::npos) {
+        position = stringToSize_t(parts[i].substr(0, idx - 1));
+        refBase = parts[i].substr(idx - 1, 1);
+        readBase = parts[i].substr(idx + 1, 1);
+        result = result + " " + convertSizet(position + 1) + refBase + ">" + readBase;
+      }
+      else {
+        idx = parts[i].find("+");
+        if (idx != string::npos) {
+          position = stringToSize_t(parts[i].substr(0, idx));
+          readBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+          refBase = "-";
+          result = result + " " + convertSizet(position + 1) + "+" + readBase;
+        } else {
+          idx = parts[i].find("-");
+          if (idx != string::npos) {
+            position = stringToSize_t(parts[i].substr(0, idx));
+            refBase = parts[i].substr(idx + 1, parts[i].length() - idx - 1);
+            readBase = "-";
+            result = result + " " + convertSizet(position + 1) + "-" + refBase;
+          }
+        }
+      }
+    }
+    extra = result.substr(1);
+  }
 }
 
 static void
@@ -211,8 +292,9 @@ read_bowtie_output(const vector<string> &parts,
                    vector<MappedRead> &regions) {
   if (parts.size() == 8) {
     vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
+    char strand = ((parts[1] == "+") ? '+' : '-');
     string extra = parts[7];
-    convert_bowtie_extra(extra);
+    convert_bowtie_extra(extra, parts[4].length(), strand);
     string gr = parts[2] + "\t" + parts[3] + "\t"
         + convertSizet(convertString(parts[3]) + parts[4].length()) + "\t"
         + name[0] + "\t" + parts[6] + "\t" + parts[1];
@@ -275,6 +357,30 @@ parseMappedRead_novoAlign(const vector<string> &parts, MappedRead &mr) {
   }
 }
 
+static void
+parseMappedRead_bowtie(const vector<string> &parts, MappedRead &mr) {
+  if (parts.size() >= 7) {
+    vector<string> name(smithlab::split_whitespace_quoted(parts[0]));
+    char strand = ((parts[1] == "+") ? '+' : '-');
+    mr.r.set_chrom(parts[2]);
+    mr.r.set_start(convertString(parts[3]) + 1);
+    mr.r.set_end(convertString(parts[3]) + 1 + parts[4].length());
+    mr.r.set_name(name[0]);
+    mr.r.set_score(convertString(parts[6]));
+    mr.r.set_strand(strand);
+    mr.seq = parts[4];
+    string extra;
+    if (parts.size() == 8) {
+      extra = parts[7];
+      convert_bowtie_extra(extra, parts[4].length(), strand);
+    }
+    if (parts.size() == 8) mr.scr = extra;
+  } else {
+    throw SMITHLABException("failed to parse novoalign read. Unexpected "
+                            "format. Can only parse uniquely mapping reads");
+  }
+}
+
 /**
  * \brief parse a tokenized novoalign read-string, create a mapped read from
  *        it and add the new MR to the provided vector. The tokenized read must
@@ -301,6 +407,7 @@ static void
 parseMappedRead(const vector<string> &parts, const string &mapper,
                 MappedRead &mr) {
   if (mapper == "novoalign") parseMappedRead_novoAlign(parts, mr);
+  else if (mapper == "bowtie") parseMappedRead_bowtie(parts, mr);
   else throw SMITHLABException("The mapper '" + mapper +\
                                "' was not recognized!");
 }
@@ -588,7 +695,8 @@ load_mapped_reads(const string &reads_file,
     if (!is_header_line(buffer) && !is_track_line(buffer)) {
       vector<string> tokens(split_extended_whitespace_quoted(buffer));
       if ((mapper != "novoalign") ||
-          ((mapper == "novoalign") && (isUniqueMapper(tokens, mapper)))) {
+          ((mapper == "novoalign") && (isUniqueMapper(tokens, mapper))) ||
+          ((mapper == "bowtie") && (tokens.size() > 0))) {
         parseMappedRead(tokens, mapper, mapped_reads);
       }
     }
@@ -625,8 +733,8 @@ fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
       throw SMITHLABException("Line too long");
     if (!is_header_line(line_buffer) && !is_track_line(line_buffer)) {
       vector<string> tokens(split_extended_whitespace_quoted(line_buffer));
-      if ((mapper != "novoalign") ||
-          ((mapper == "novoalign") && (isUniqueMapper(tokens, mapper)))) {
+      if (((mapper == "novoalign") && (isUniqueMapper(tokens, mapper))) ||
+          ((mapper == "bowtie") && (tokens.size() > 0))) {
         MappedRead mr;
         parseMappedRead(tokens, mapper, mr);
         buffer[i] = mr;
