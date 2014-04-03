@@ -289,7 +289,7 @@ addDiagEvents_iCLIP(const MappedRead &read, const string &mapper,
     extractDEs_novo(read.scr, des);
   else if (mapper == "bowtie")
     extractDEs_bowtie(read.scr, des);
-  else 
+  else if (mapper != "rmap")
     throw SMITHLABException("unsupported short-read mapper for iCLIP "
                                "data: " + mapper);
 
@@ -343,7 +343,7 @@ addDiagEvents_hCLIP(const MappedRead &read, const string &mapper,
   else if (mapper == "bowtie")
     extractDEs_bowtie(read.scr, des);
   else
-    throw SMITHLABException("unsupported short-read mapper for iCLIP "
+    throw SMITHLABException("unsupported short-read mapper for hCLIP "
                                "data: " + mapper);
 
 //  extractDEs_novo(read.scr, des);
@@ -393,7 +393,7 @@ addDiagEvents_pCLIP(const MappedRead &read, const string &mapper,
   else if (mapper == "bowtie")
     extractDEs_bowtie(read.scr, des);
   else
-    throw SMITHLABException("unsupported short-read mapper for iCLIP "
+    throw SMITHLABException("unsupported short-read mapper for pCLIP "
                                "data: " + mapper);
 
   if (des.size() == 1) {

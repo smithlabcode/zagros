@@ -279,7 +279,7 @@ read_rmap_output(const vector<string> &parts,
   if (parts.size() == 8) {
     string gr = parts[0] + "\t" + parts[1] + "\t" + parts[2] + "\t" + parts[3]
         + "\t" + parts[4] + "\t" + parts[5];
-    string read = gr + "\t" + parts[6] + "\t2C>C";
+    string read = gr + "\t" + parts[6] + "\t" + parts[7];
     MappedRead mr(read.c_str());
     regions.push_back(mr);
   }
@@ -381,6 +381,30 @@ parseMappedRead_bowtie(const vector<string> &parts, MappedRead &mr) {
   }
 }
 
+static void
+parseMappedRead_rmap(const vector<string> &parts, MappedRead &mr) {
+  if (parts.size() >= 6) {
+    char strand = ((parts[5] == "+") ? '+' : '-');
+    mr.r.set_chrom(parts[0]);
+    mr.r.set_start(convertString(parts[1]));
+    mr.r.set_end(convertString(parts[2]));
+    mr.r.set_name(parts[3]);
+    mr.r.set_score(convertString(parts[4]));
+    mr.r.set_strand(strand);
+    if (parts.size() == 8) {
+      mr.seq = parts[6];
+      mr.scr = parts[7];
+    } else {
+      mr.seq = "NA";
+      mr.scr = "NA";
+    }
+  } else {
+    throw SMITHLABException("failed to parse novoalign read. Unexpected "
+                            "format. Can only parse uniquely mapping reads");
+  }
+}
+
+
 /**
  * \brief parse a tokenized novoalign read-string, create a mapped read from
  *        it and add the new MR to the provided vector. The tokenized read must
@@ -408,8 +432,9 @@ parseMappedRead(const vector<string> &parts, const string &mapper,
                 MappedRead &mr) {
   if (mapper == "novoalign") parseMappedRead_novoAlign(parts, mr);
   else if (mapper == "bowtie") parseMappedRead_bowtie(parts, mr);
+  else if (mapper == "rmap") parseMappedRead_rmap(parts, mr);
   else throw SMITHLABException("The mapper '" + mapper +\
-                               "' was not recognized!");
+                                                     "' was not recognized!");
 }
 
 /**
@@ -734,7 +759,8 @@ fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
     if (!is_header_line(line_buffer) && !is_track_line(line_buffer)) {
       vector<string> tokens(split_extended_whitespace_quoted(line_buffer));
       if (((mapper == "novoalign") && (isUniqueMapper(tokens, mapper))) ||
-          ((mapper == "bowtie") && (tokens.size() > 0))) {
+          ((mapper == "bowtie") && (tokens.size() > 0)) ||
+          ((mapper == "rmap") && (tokens.size() > 0))) {
         MappedRead mr;
         parseMappedRead(tokens, mapper, mr);
         buffer[i] = mr;
