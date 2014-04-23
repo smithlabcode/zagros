@@ -21,7 +21,7 @@ ifndef SMITHLAB_CPP
 $(error Must define SMITHLAB_CPP variable)
 endif
 
-PROGS = zagros thermo extractDEs
+PROGS = zagros thermo extractDEs scan
 
 CXX = g++
 CFLAGS = -g -Wall -fPIC -fmessage-length=50
@@ -56,6 +56,10 @@ all:    $(PROGS)
 
 %: %.cpp
 	$(CXX) $(CFLAGS) -o $@ $^ $(INCLUDEARGS) $(LIBS)
+
+scan : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
+  smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
+scan : $(addprefix $(COMMON_DIR), Model.o IO.o RNA_Utils.o Part_Func.o)
 
 zagros : $(addprefix $(SMITHLAB_CPP)/, GenomicRegion.o smithlab_os.o \
 	smithlab_utils.o OptionParser.o RNG.o MappedRead.o)
