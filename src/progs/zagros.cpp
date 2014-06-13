@@ -88,6 +88,24 @@ intToString(const int n) {
 /////////////  STUFF FOR FINDING THE STARTING POINT BELOW HERE
 /////////////
 
+struct motif_info {
+  double motifLogLike;
+  Model motifModel;
+  size_t motifNumber;
+  vector<vector<double> > motifIndicators;
+  vector<double> hasMotif;
+  motif_info(const double ml, const Model &mm, const size_t mn,
+             const vector<vector<double> > &mi, const vector<double> &hm) :
+    motifLogLike(ml), motifNumber(mn) {
+      motifModel = mm;
+      motifIndicators = mi;
+      hasMotif = hm;
+  }
+  double score() const {
+    return motifLogLike;
+  }
+};
+
 struct kmer_info {
   std::string kmer;
   double expected;
@@ -604,7 +622,11 @@ int main(int argc, const char **argv) {
     }
     downsampleDiagEvents(diagEvents, diagEventsThresh);
 
+
     // find and output each of the motifs that the user asked for.
+    vector<motif_info> top_motifs;
+    vector<string> original_seqs = seqs;
+
     for (size_t i = 0; i < n_motifs ; ++i) {
       if (VERBOSE)
         cerr << "FITTING MOTIF PARAMETERS FOR MOTIF " << (i+1)
@@ -669,17 +691,38 @@ int main(int argc, const char **argv) {
       }
 
       if (VERBOSE) cerr << "\t" << "WRITING MOTIF " << endl;
-      const string m = format_motif(model, "ZAGROS" + toa(i), seqs, names,
-                                    targets, indicators, has_motif);
-      if (m.empty() && VERBOSE)
-        cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
-      if (!m.empty())
-        out << m << endl;
+      top_motifs.push_back(motif_info(bestLogLike, model, i, indicators, has_motif));
+      // const string m = format_motif(model, "ZAGROS" + toa(i), seqs, names,
+      //                              targets, indicators, has_motif);
+      //if (m.empty() && VERBOSE)
+      //  cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
+      //if (!m.empty())
+      //  out << m << endl;
 
       // if not the last motif, mask occurrences
       if (i != n_motifs - 1) {
         if (VERBOSE) cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
         maskOccurrences(seqs, indicators, has_motif, motif_width);
+      }
+
+      while (!top_motifs.empty()) {
+        double maxScore = top_motifs[0].score();
+        size_t maxIndex = 0;
+        for (size_t i = 1; i < top_motifs.size(); ++i)
+          if (top_motifs[i].score() > maxScore) {
+            maxScore = top_motifs[i].score();
+            maxIndex = i;
+          }
+        const string m = format_motif(top_motifs[maxIndex].motifModel, 
+                                      "ZAGROS" + toa(top_motifs[maxIndex].motifNumber),
+                                      original_seqs, names, targets, 
+                                      top_motifs[maxIndex].motifIndicators, 
+                                      top_motifs[maxIndex].hasMotif);
+        if (m.empty() && VERBOSE)
+          cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
+        if (!m.empty())
+          out << m << endl;
+        top_motifs.erase(top_motifs.begin()+maxIndex);
       }
     }
   } 
