@@ -704,26 +704,25 @@ int main(int argc, const char **argv) {
         if (VERBOSE) cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
         maskOccurrences(seqs, indicators, has_motif, motif_width);
       }
-
-      while (!top_motifs.empty()) {
-        double maxScore = top_motifs[0].score();
-        size_t maxIndex = 0;
-        for (size_t i = 1; i < top_motifs.size(); ++i)
-          if (top_motifs[i].score() > maxScore) {
-            maxScore = top_motifs[i].score();
-            maxIndex = i;
-          }
-        const string m = format_motif(top_motifs[maxIndex].motifModel, 
-                                      "ZAGROS" + toa(top_motifs[maxIndex].motifNumber),
-                                      original_seqs, names, targets, 
-                                      top_motifs[maxIndex].motifIndicators, 
-                                      top_motifs[maxIndex].hasMotif);
-        if (m.empty() && VERBOSE)
-          cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
-        if (!m.empty())
-          out << m << endl;
-        top_motifs.erase(top_motifs.begin()+maxIndex);
-      }
+    }  
+    while (!top_motifs.empty()) {
+      double maxScore = top_motifs[0].score();
+      size_t maxIndex = 0;
+      for (size_t i = 1; i < top_motifs.size(); ++i)
+        if (top_motifs[i].score() > maxScore) {
+          maxScore = top_motifs[i].score();
+          maxIndex = i;
+        }
+      const string m = format_motif(top_motifs[maxIndex].motifModel, 
+                                    "ZAGROS" + toa(top_motifs[maxIndex].motifNumber),
+                                    original_seqs, names, targets, 
+                                    top_motifs[maxIndex].motifIndicators, 
+                                    top_motifs[maxIndex].hasMotif);
+      if (m.empty() && VERBOSE)
+        cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
+      if (!m.empty())
+        out << m << endl;
+      top_motifs.erase(top_motifs.begin()+maxIndex);
     }
   } 
   catch (const SMITHLABException &e) {
