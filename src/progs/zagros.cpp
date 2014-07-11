@@ -464,8 +464,11 @@ format_motif(const Model &model,
     ss << model.motif_sec_str[model.motif_sec_str.size() - 1] << endl;
   }
 
-  ss << "XX" << endl << "AT\tGEO_P=" << model.p << endl;
-  ss << "AT\tGEO_DELTA=" << model.delta << endl << "XX" << endl;
+  ss << "XX" << endl;
+  if (model.useDEs) {
+    ss << "AT\tGEO_P=" << model.p << endl;
+    ss << "AT\tGEO_DELTA=" << model.delta << endl << "XX" << endl;
+  }
 
   size_t numSitesFound = 0;
   for (size_t n = 0; n < indicators.size(); ++n) {
@@ -647,11 +650,14 @@ int main(int argc, const char **argv) {
       for (size_t j = 0; j < numStartingPoints; ++j) {
         Model model_l;
         Model::set_model_by_word(Model::pseudocount, top_kmers[j].kmer, model_l);
+        if (!reads_file.empty())
+          model_l.useDEs = true;
         model_l.p = 0.5;
         model_l.gamma = ((seqs.size() - (zoops_expansion_factor*
                        (seqs.size() - top_kmers[j].observed)))/
                static_cast<double>(seqs.size()));
         if (!secondary_structure.empty()) {
+          model_l.useStructure = true;
           model_l.motif_sec_str = vector<double>(motif_width, 0.5);
           model_l.f_sec_str = 0.5;
         }

@@ -43,6 +43,8 @@ struct Model {
       f(
           std::vector<double>(
               smithlab::alphabet_size, 1.0 / smithlab::alphabet_size)) {
+    useStructure = false;
+    useDEs = false;
   }
 
   void
@@ -134,6 +136,10 @@ struct Model {
   double p;
   double gamma;
   int delta;
+
+  // Flags for identifying the extra information, if they are used
+  bool useStructure;
+  bool useDEs;
 
   // class constants (probably some should be adjustable)
   static const size_t max_iterations = 10;
