@@ -144,17 +144,15 @@ toString(const bool b) {
 
 
 /**
- * \brief parse a Novoalign mismatch string to extract any diagnostic events
+ * \brief parse a Bowtie mismatch string to extract any diagnostic events
  * 
- *        Novoalign (native format) mapped reads have a tab-delimited
- *        format; there are a lot of possible fields, and they vary depending
- *        on the exact input provided, but the final one is what I call here
- *        the "mismatch string". Note that only this field should be provided
- *        to this function, not the full read string. The mismatch string is
- *        space delimited; we're interested in entries that specify insertions,
- *        deletions or mismatches between the read and the reference (there may
- *        be other entries, but we don't care about them).
- *        Mismatch:  Format is 'offset''refbase'>'readbase'
+ *        Bowtie (native format) mapped reads have a tab-delimited
+ *        format; the eighth field is the "mismatch string". Note that only 
+ *        this field should be provided to this function, not the full read string. 
+ *        The mismatch string is comma delimited; we're interested in entries 
+ *        that specify insertions, deletions or mismatches between the read and 
+ *        the reference (there may be other entries, but we don't care about them).
+ *        Mismatch:  Format is 'offset':'refbase'>'readbase'
  *        Insertion: Format is 'offset'+'insertedbases'
  *        Deletion:  Format is 'offset'-'refbase'
  *        --
@@ -163,7 +161,7 @@ toString(const bool b) {
  *        offset is the mm/indel offset from the mapping location (not the
  *        position within the read).
  *
- * \param novo_mmString     the mismatch string from a Novoalign read
+ * \param bowtie_mmString   the mismatch string from a Bowtie read
  *                          (can be the empty string, or all whitespace)
  * \param des               any extracted DEs will be added to the back of this
  *                          vector. No existing entries in the vector will be
