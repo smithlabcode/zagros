@@ -671,10 +671,10 @@ int main(int argc, const char **argv) {
             indicators_l, has_motif_l);
         double logLike;
         if (secondary_structure.size() == 0) {
-          logLike = model_l.calculate_zoops_log_l(seqs, diagEvents,
+          logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents,
                                                   indicators_l, has_motif_l);
         } else {
-          logLike = model_l.calculate_zoops_log_l(seqs, secondary_structure,
+          logLike = model_l.calculate_zoops_log_l(original_seqs, secondary_structure,
                                                   diagEvents, indicators_l,
                                                   has_motif_l);
         }
