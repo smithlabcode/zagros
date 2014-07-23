@@ -355,7 +355,7 @@ addDiagEvents_hCLIP(const MappedRead &read, const string &mapper,
            read.r.get_start() + des[0].position, name, score,
            read.r.get_strand());
       diagEventLocs.push_back(gr);
-      cout << gr.get_start() << endl;
+//      cout << gr.get_start() << endl;
     }
     else if (!read.r.pos_strand() &&
          des[0].type == "deletion" && des[0].refBase == "A") {
