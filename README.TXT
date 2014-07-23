@@ -179,7 +179,7 @@ Help options:
 
 
 **************************************
-4. Input and output formats of Piranha
+4. Input and output formats of Zagros
 *******************************************************************************
 
 Zagros takes three possible inputs for mapped reads:
