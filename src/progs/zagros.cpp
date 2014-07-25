@@ -136,6 +136,8 @@ compute_base_comp(const vector<string> &sequences,
   for (size_t i = 0; i < sequences.size(); ++i) {
     for (size_t j = 0; j < sequences[i].length(); ++j) {
       const size_t base = base2int(sequences[i][j]);
+      // ADS: poor coding style below -- complement the condition, and
+      // remove the continue!!!
       if ((sequences[i][j] == 'N') || (sequences[i][j] == 'n')) continue;
       if (base >= smithlab::alphabet_size) {
         stringstream ss;
@@ -147,8 +149,7 @@ compute_base_comp(const vector<string> &sequences,
     }
     total += sequences[i].length();
   }
-  std::transform(
-		 base_comp.begin(), base_comp.end(), base_comp.begin(),
+  std::transform(base_comp.begin(), base_comp.end(), base_comp.begin(),
 		 std::bind2nd(std::divides<double>(), total));
 }
 
@@ -330,7 +331,7 @@ maskOccurrences(vector<string> &seqs, const vector<vector<double> > &indicators,
           max_indx = j;
         }
       }
-      string mask = string(motifLen, 'N');
+      const string mask = string(motifLen, 'N');
       seqs[i].replace(max_indx, motifLen, mask);
     }
   }
@@ -398,6 +399,11 @@ format_motif(const Model &model,
              const vector<GenomicRegion> &targets,
              const vector<vector<double> > &indicators,
              const vector<double> &zoops_i) {
+  
+  static const string BLANK_LINE = "XX";
+  static const string ATTRIBUTE_TAG = "AT";
+  static const double ZOOPS_OCCURRENCE_THRESHOLD = 0.8;
+
   if (sequences.size() != indicators.size()) {
     stringstream ss;
     ss << "failed to format motif for output. Number of site indicator vectors "
@@ -426,9 +432,10 @@ format_motif(const Model &model,
         max_i = i;
       }
     }
-    if (zoops_i[n] >= 0.8 )
+    if (zoops_i[n] >= ZOOPS_OCCURRENCE_THRESHOLD)
       for (size_t j = 0; j < model.size(); ++j) {
         // just skip N's
+	// ADS: poor coding style again below here
         if ((sequences[n][max_i + j] == 'N') || (sequences[n][max_i + j] == 'n'))
           continue;
 
@@ -448,18 +455,20 @@ format_motif(const Model &model,
   }
 
   if (model.motif_sec_str.size() > 0) {
-    ss << "XX" << endl << "AT\tSEC_STR=";
+    ss << BLANK_LINE << endl 
+       << ATTRIBUTE_TAG << '\t' << "SEC_STR=";
     for (size_t i = 0; i < model.motif_sec_str.size() - 1; ++i)
       ss << model.motif_sec_str[i] << ",";
     ss << model.motif_sec_str[model.motif_sec_str.size() - 1] << endl;
   }
 
-  ss << "XX" << endl;
+  ss << BLANK_LINE << endl;
   if (model.useDEs) {
-    ss << "AT\tGEO_P=" << model.p << endl;
-    ss << "AT\tGEO_DELTA=" << model.delta << endl << "XX" << endl;
+    ss << ATTRIBUTE_TAG << '\t' << "GEO_P=" << model.p << endl;
+    ss << ATTRIBUTE_TAG << '\t' << "GEO_DELTA=" << model.delta << endl 
+       << BLANK_LINE << endl;
   }
-
+  
   size_t numSitesFound = 0;
   for (size_t n = 0; n < indicators.size(); ++n) {
     double max_X = -1;
@@ -470,7 +479,7 @@ format_motif(const Model &model,
         site_pos = i;
       }
     }
-    if (zoops_i[n] >= 0.8) {
+    if (zoops_i[n] >= ZOOPS_OCCURRENCE_THRESHOLD) {
       // assume positive strand, unless we know the region was negative strand
       char strand = '+';
       if (targets.size() != 0) strand = targets[n].get_strand();
@@ -479,7 +488,7 @@ format_motif(const Model &model,
       numSitesFound += 1;
     }
   }
-  ss << "XX" << endl << "//";
+  ss << BLANK_LINE << endl << "//";
 
   // if we found no sites that actually matched the motif, don't bother
   // to return the empty formatted version.
@@ -579,7 +588,7 @@ int main(int argc, const char **argv) {
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
     load_sequences(targets_file, chrom_dir, seqs, names, targets);
-
+    
     // Data structures and input preparation for secondary structure
     vector<vector<double> > secondary_structure;
     if (!structure_file.empty()) {
@@ -596,7 +605,7 @@ int main(int argc, const char **argv) {
     if (!reads_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING DIAGNOSTIC EVENTS... ";
-      size_t deCount = loadDiagnosticEvents(reads_file, diagEvents);
+      const size_t deCount = loadDiagnosticEvents(reads_file, diagEvents);
       if (diagEvents.size() != seqs.size()) {
         stringstream ss;
         ss << "inconsistent dimensions of sequence and diagnostic events data. "
