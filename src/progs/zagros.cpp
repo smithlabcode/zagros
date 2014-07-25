@@ -399,29 +399,16 @@ format_motif(const Model &model,
              const vector<GenomicRegion> &targets,
              const vector<vector<double> > &indicators,
              const vector<double> &zoops_i) {
-  
+
   static const string BLANK_LINE = "XX";
   static const string ATTRIBUTE_TAG = "AT";
   static const double ZOOPS_OCCURRENCE_THRESHOLD = 0.8;
 
-  if (sequences.size() != indicators.size()) {
-    stringstream ss;
-    ss << "failed to format motif for output. Number of site indicator vectors "
-       << "(" << indicators.size() << ") does not equal number of sequences ("
-       << sequences.size() << ")";
-    throw SMITHLABException(ss.str());
-  }
-  if (zoops_i.size() != sequences.size()) {
-    stringstream ss;
-    ss << "failed to format motif for output. Number of sequence indicators "
-       << "(" << zoops_i.size() << ") " << "does not match number of sequences "
-       << sequences.size();
-    throw SMITHLABException(ss.str());
-  }
-
+  assert(indicators.size() != sequences.size());
+  
   std::ostringstream ss;
   ss << format_motif_header(motif_name) << endl;
-
+  
   vector<vector<double> > tmp_m = model.matrix;
   for (size_t n = 0; n < sequences.size(); n++) {
     double max_X = -1;
@@ -436,9 +423,10 @@ format_motif(const Model &model,
       for (size_t j = 0; j < model.size(); ++j) {
         // just skip N's
 	// ADS: poor coding style again below here
-        if ((sequences[n][max_i + j] == 'N') || (sequences[n][max_i + j] == 'n'))
+        if ((sequences[n][max_i + j] == 'N') || 
+	    (sequences[n][max_i + j] == 'n'))
           continue;
-
+	
         const size_t base = base2int(sequences[n][max_i + j]);
         assert(base < smithlab::alphabet_size);
         tmp_m[j][base] += zoops_i[n];
@@ -453,7 +441,7 @@ format_motif(const Model &model,
       ss << '\t' << static_cast<int>(tmp_m[j][b]);
     ss << endl;
   }
-
+  
   if (model.motif_sec_str.size() > 0) {
     ss << BLANK_LINE << endl 
        << ATTRIBUTE_TAG << '\t' << "SEC_STR=";
@@ -520,7 +508,8 @@ int main(int argc, const char **argv) {
     // TODO -- PJU: some options below don't have their defaults specified,
     //              they need to be fixed so defaults are shown, but not
     //              hard-coded into the strings. Ditto acceptable ranges.
-    OptionParser opt_parse(strip_path(argv[0]), "", "<target_regions/sequences>");
+    OptionParser opt_parse(strip_path(argv[0]), "", 
+			   "<target_regions/sequences>");
     opt_parse.add_opt("output", 'o', "output file name (default: stdout)", 
                       OptionParser::OPTIONAL, outfile);
     opt_parse.add_opt("width", 'w', "width of motifs to find (4 <= w <= 12; "
@@ -531,15 +520,16 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, chrom_dir);
     opt_parse.add_opt("structure", 't', "structure information file", 
                       OptionParser::OPTIONAL, structure_file);
-    opt_parse.add_opt("diagnostic_events", 'd', "diagnostic events information file", 
+    opt_parse.add_opt("diagnostic_events", 'd', 
+		      "diagnostic events information file", 
                       OptionParser::OPTIONAL, reads_file);
     opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
                       "to this many per sequence (-1 for no down-sampling; "
                       "default: " + toa(diagEventsThresh) +  ")",
                       OptionParser::OPTIONAL, diagEventsThresh);
-    opt_parse.add_opt("starting-points", 's', "number of starting points to try "
-                      "for EM search. Higher values will be slower, but more "
-                      "likely to find the global maximum.",
+    opt_parse.add_opt("starting-points", 's', "number of starting points to try"
+                      " for EM search. Higher values will be slower, but more"
+                      " likely to find the global maximum.",
                       OptionParser::OPTIONAL, numStartingPoints);
     opt_parse.add_opt("verbose", 'v', "print more run info",
                       OptionParser::OPTIONAL, VERBOSE);
@@ -646,9 +636,10 @@ int main(int argc, const char **argv) {
         if (!reads_file.empty())
           model_l.useDEs = true;
         model_l.p = 0.5;
-        model_l.gamma = ((seqs.size() - (zoops_expansion_factor*
-                       (seqs.size() - top_kmers[j].observed)))/
-               static_cast<double>(seqs.size()));
+        model_l.gamma = ((seqs.size() - 
+			  (zoops_expansion_factor*
+			   (seqs.size() - top_kmers[j].observed)))/
+			 static_cast<double>(seqs.size()));
         if (!secondary_structure.empty()) {
           model_l.useStructure = true;
           model_l.motif_sec_str = vector<double>(motif_width, 0.5);
@@ -673,7 +664,8 @@ int main(int argc, const char **argv) {
           logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents,
                                                   indicators_l, has_motif_l);
         } else {
-          logLike = model_l.calculate_zoops_log_l(original_seqs, secondary_structure,
+          logLike = model_l.calculate_zoops_log_l(original_seqs, 
+						  secondary_structure,
                                                   diagEvents, indicators_l,
                                                   has_motif_l);
         }
@@ -689,9 +681,13 @@ int main(int argc, const char **argv) {
         }
       }
 
-      if (VERBOSE) cerr << "\t" << "WRITING MOTIF " << endl;
-      top_motifs.push_back(motif_info(bestLogLike, model, i, indicators, has_motif));
-      // const string m = format_motif(model, "ZAGROS" + toa(i), seqs, names,
+      if (VERBOSE) 
+	cerr << "\t" << "WRITING MOTIF " << endl;
+      
+      top_motifs.push_back(motif_info(bestLogLike, model, i, 
+				      indicators, has_motif));
+      
+      // const string m = format_motif(model, "ZAGROS" + toa(i), seqs, names,   
       //                              targets, indicators, has_motif);
       //if (m.empty() && VERBOSE)
       //  cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
@@ -713,7 +709,8 @@ int main(int argc, const char **argv) {
           maxIndex = i;
         }
       const string m = format_motif(top_motifs[maxIndex].motifModel, 
-                                    "ZAGROS" + toa(top_motifs[maxIndex].motifNumber),
+                                    "ZAGROS" + 
+				    toa(top_motifs[maxIndex].motifNumber),
                                     original_seqs, names, targets, 
                                     top_motifs[maxIndex].motifIndicators, 
                                     top_motifs[maxIndex].hasMotif);
