@@ -71,16 +71,6 @@ vecToString(vector<size_t> x) {
   return ss.str();
 }*/
 
-/***
- * \summary Convert an int to a string
- * \TODO duplicates code in simulate; should go into some library file
- */
-string
-intToString(const int n) {
-  std::stringstream ss;
-  ss << n;
-  return ss.str();
-}
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -536,7 +526,7 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, reads_file);
     opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
                       "to this many per sequence (-1 for no down-sampling; "
-                      "default: " + intToString(diagEventsThresh) +  ")",
+                      "default: " + toa(diagEventsThresh) +  ")",
                       OptionParser::OPTIONAL, diagEventsThresh);
     opt_parse.add_opt("starting-points", 's', "number of starting points to try "
                       "for EM search. Higher values will be slower, but more "
