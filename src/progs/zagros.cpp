@@ -566,14 +566,8 @@ int main(int argc, const char **argv) {
     const string targets_file(leftover_args.back());
     /****************** END COMMAND LINE OPTIONS *****************/
 
-    // seed the random number generator using the time, and make a uniform
-    // random number generator object
-    struct timeval time;
-    gettimeofday(&time,NULL);
-    size_t seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
-    srand(seed);
-    const Runif rng(seed);
-
+    const Runif rng;
+    
     std::ofstream of;
     if (!outfile.empty())
       of.open(outfile.c_str());
