@@ -1,0 +1,23 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+*.dSYM
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+/bin/*
+/src/progs/extractDEs
+/src/progs/thermo
+/src/progs/zagros
