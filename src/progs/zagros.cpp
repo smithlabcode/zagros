@@ -404,7 +404,7 @@ format_motif(const Model &model,
   static const string ATTRIBUTE_TAG = "AT";
   static const double ZOOPS_OCCURRENCE_THRESHOLD = 0.8;
 
-  assert(indicators.size() != sequences.size());
+  assert(indicators.size() == sequences.size());
   
   std::ostringstream ss;
   ss << format_motif_header(motif_name) << endl;
