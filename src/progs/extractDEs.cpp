@@ -305,16 +305,9 @@ addDiagEvents_iCLIP(const MappedRead &read, const string &mapper,
   if (contains_de) {
     const string name("X");
     const size_t score = 0;
-    if (read.r.pos_strand()) {
-      GenomicRegion g(read.r.get_chrom(), read.r.get_start(),
-                      read.r.get_start() + 1, name, score, read.r.get_strand());
-      diagEventLocs.push_back(g);
-    }
-    else {
-      GenomicRegion g(read.r.get_chrom(), read.r.get_end() - 1,
-                       read.r.get_end(), name, score, read.r.get_strand());
-      diagEventLocs.push_back(g);
-    }
+    GenomicRegion g(read.r.get_chrom(), read.r.get_start(),
+                    read.r.get_start() + 1, name, score, read.r.get_strand());
+    diagEventLocs.push_back(g);
   }
 }
 
@@ -351,17 +344,16 @@ addDiagEvents_hCLIP(const MappedRead &read, const string &mapper,
     if (read.r.pos_strand() &&
     des[0].type == "deletion" && des[0].refBase == "T") {
       GenomicRegion gr(read.r.get_chrom(),
-           read.r.get_start() + des[0].position - 1,
-           read.r.get_start() + des[0].position, name, score,
+           read.r.get_start() + des[0].position - 2,
+           read.r.get_start() + des[0].position - 1, name, score,
            read.r.get_strand());
       diagEventLocs.push_back(gr);
-//      cout << gr.get_start() << endl;
     }
     else if (!read.r.pos_strand() &&
          des[0].type == "deletion" && des[0].refBase == "A") {
       GenomicRegion gr(read.r.get_chrom(),
-           read.r.get_start() + des[0].position - 2,
-           read.r.get_start() + des[0].position - 1, name, score,
+           read.r.get_start() + des[0].position - 1,
+           read.r.get_start() + des[0].position, name, score,
            read.r.get_strand());
       diagEventLocs.push_back(gr);
     }
@@ -400,15 +392,15 @@ addDiagEvents_pCLIP(const MappedRead &read, const string &mapper,
     if (read.r.pos_strand() && des[0].type == "mutation"
         && des[0].refBase == "T" && des[0].readBase == "C") {
       GenomicRegion gr(read.r.get_chrom(),
-          read.r.get_start() + des[0].position - 1,
-          read.r.get_start() + des[0].position, name, score,
+          read.r.get_start() + des[0].position - 2,
+          read.r.get_start() + des[0].position - 1, name, score,
           read.r.get_strand());
       diagEventLocs.push_back(gr);
     } else if (!read.r.pos_strand() && des[0].type == "mutation"
        && des[0].refBase == "A" && des[0].readBase == "G") {
       GenomicRegion gr(read.r.get_chrom(),
-          read.r.get_start() + des[0].position - 2,
-          read.r.get_start() + des[0].position - 1, name, score,
+          read.r.get_start() + des[0].position - 1,
+          read.r.get_start() + des[0].position, name, score,
           read.r.get_strand());
       diagEventLocs.push_back(gr);
     }
@@ -606,7 +598,15 @@ countDEs(const string &mappedReads_fn, const string &targetRegions_fn,
       t->second.intersectingInterval(deLocs[i].get_start(),
                                      deLocs[i].get_end(), hits);
       for (size_t j = 0; j < hits.size(); ++j) {
-        const size_t relPos = deLocs[i].get_start() - hits[j]->r.get_start();
+        size_t relPos = 0;
+        if (experimentType == "iCLIP")
+          relPos = deLocs[i].get_start() - hits[j]->r.get_start();
+        else { 
+          if ( deLocs[i].pos_strand())
+            relPos = deLocs[i].get_start() - hits[j]->r.get_start();
+          else
+            relPos = hits[j]->r.get_width() - (deLocs[i].get_start() - hits[j]->r.get_start());
+        }
         if (relPos > hits[j]->counts.size()) {
           stringstream ss;
           ss << "failed counting diagnostic events. DE at location "
