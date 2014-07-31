@@ -1,4 +1,4 @@
-/*    
+/*
  *    Copyright (C) 2013 University of Southern California and
  *                       Andrew D. Smith
  *
@@ -230,9 +230,9 @@ find_best_kmers(const size_t k_value,
   for (size_t i = 0; i < sequences.size(); ++i)
     lengths.push_back(sequences[i].length());
 
-  std::priority_queue<kmer_info, vector<kmer_info>, 
+  std::priority_queue<kmer_info, vector<kmer_info>,
 		      std::greater<kmer_info> > best_kmers;
-  
+
   for (size_t i = 0; i < n_kmers; ++i) {
     const string kmer(i2mer(k_value, i));
     const double expected = expected_seqs_with_kmer(kmer, base_comp, lengths);
@@ -241,7 +241,7 @@ find_best_kmers(const size_t k_value,
     if (best_kmers.size() > n_top_kmers)
       best_kmers.pop();
   }
-  
+
   while (!best_kmers.empty()) {
     top_kmers.push_back(best_kmers.top());
     best_kmers.pop();
@@ -405,10 +405,10 @@ format_motif(const Model &model,
   static const double ZOOPS_OCCURRENCE_THRESHOLD = 0.8;
 
   assert(indicators.size() == sequences.size());
-  
+
   std::ostringstream ss;
   ss << format_motif_header(motif_name) << endl;
-  
+
   vector<vector<double> > tmp_m = model.matrix;
   for (size_t n = 0; n < sequences.size(); n++) {
     double max_X = -1;
@@ -423,10 +423,10 @@ format_motif(const Model &model,
       for (size_t j = 0; j < model.size(); ++j) {
         // just skip N's
 	// ADS: poor coding style again below here
-        if ((sequences[n][max_i + j] == 'N') || 
+        if ((sequences[n][max_i + j] == 'N') ||
 	    (sequences[n][max_i + j] == 'n'))
           continue;
-	
+
         const size_t base = base2int(sequences[n][max_i + j]);
         assert(base < smithlab::alphabet_size);
         tmp_m[j][base] += zoops_i[n];
@@ -441,9 +441,9 @@ format_motif(const Model &model,
       ss << '\t' << static_cast<int>(tmp_m[j][b]);
     ss << endl;
   }
-  
+
   if (model.motif_sec_str.size() > 0) {
-    ss << BLANK_LINE << endl 
+    ss << BLANK_LINE << endl
        << ATTRIBUTE_TAG << '\t' << "SEC_STR=";
     for (size_t i = 0; i < model.motif_sec_str.size() - 1; ++i)
       ss << model.motif_sec_str[i] << ",";
@@ -453,10 +453,10 @@ format_motif(const Model &model,
   ss << BLANK_LINE << endl;
   if (model.useDEs) {
     ss << ATTRIBUTE_TAG << '\t' << "GEO_P=" << model.p << endl;
-    ss << ATTRIBUTE_TAG << '\t' << "GEO_DELTA=" << model.delta << endl 
+    ss << ATTRIBUTE_TAG << '\t' << "GEO_DELTA=" << model.delta << endl
        << BLANK_LINE << endl;
   }
-  
+
   size_t numSitesFound = 0;
   for (size_t n = 0; n < indicators.size(); ++n) {
     double max_X = -1;
@@ -501,6 +501,7 @@ int main(int argc, const char **argv) {
     string chrom_dir = "";
     string structure_file;
     string reads_file;
+    string indicators_file = "";
     int diagEventsThresh = -1;
     size_t numStartingPoints = 3;
 
@@ -508,25 +509,28 @@ int main(int argc, const char **argv) {
     // TODO -- PJU: some options below don't have their defaults specified,
     //              they need to be fixed so defaults are shown, but not
     //              hard-coded into the strings. Ditto acceptable ranges.
-    OptionParser opt_parse(strip_path(argv[0]), "", 
+    OptionParser opt_parse(strip_path(argv[0]), "",
 			   "<target_regions/sequences>");
-    opt_parse.add_opt("output", 'o', "output file name (default: stdout)", 
+    opt_parse.add_opt("output", 'o', "output file name (default: stdout)",
                       OptionParser::OPTIONAL, outfile);
     opt_parse.add_opt("width", 'w', "width of motifs to find (4 <= w <= 12; "
                       "default: 6)", OptionParser::OPTIONAL, motif_width);
-    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 1)", 
+    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 1)",
                       OptionParser::OPTIONAL, n_motifs);
-    opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)", 
+    opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)",
                       OptionParser::OPTIONAL, chrom_dir);
-    opt_parse.add_opt("structure", 't', "structure information file", 
+    opt_parse.add_opt("structure", 't', "structure information file",
                       OptionParser::OPTIONAL, structure_file);
-    opt_parse.add_opt("diagnostic_events", 'd', 
-		      "diagnostic events information file", 
+    opt_parse.add_opt("diagnostic_events", 'd',
+                      "diagnostic events information file",
                       OptionParser::OPTIONAL, reads_file);
     opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
                       "to this many per sequence (-1 for no down-sampling; "
                       "default: " + toa(diagEventsThresh) +  ")",
                       OptionParser::OPTIONAL, diagEventsThresh);
+    opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
+                      "each sequence and motif to this file",
+                      OptionParser::OPTIONAL, indicators_file);
     opt_parse.add_opt("starting-points", 's', "number of starting points to try"
                       " for EM search. Higher values will be slower, but more"
                       " likely to find the global maximum.",
@@ -566,7 +570,7 @@ int main(int argc, const char **argv) {
     /****************** END COMMAND LINE OPTIONS *****************/
 
     const Runif rng;
-    
+
     std::ofstream of;
     if (!outfile.empty())
       of.open(outfile.c_str());
@@ -578,7 +582,7 @@ int main(int argc, const char **argv) {
     vector<string> seqs, names;
     vector<GenomicRegion> targets;
     load_sequences(targets_file, chrom_dir, seqs, names, targets);
-    
+
     // Data structures and input preparation for secondary structure
     vector<vector<double> > secondary_structure;
     if (!structure_file.empty()) {
@@ -636,7 +640,7 @@ int main(int argc, const char **argv) {
         if (!reads_file.empty())
           model_l.useDEs = true;
         model_l.p = 0.5;
-        model_l.gamma = ((seqs.size() - 
+        model_l.gamma = ((seqs.size() -
 			  (zoops_expansion_factor*
 			   (seqs.size() - top_kmers[j].observed)))/
 			 static_cast<double>(seqs.size()));
@@ -664,7 +668,7 @@ int main(int argc, const char **argv) {
           logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents,
                                                   indicators_l, has_motif_l);
         } else {
-          logLike = model_l.calculate_zoops_log_l(original_seqs, 
+          logLike = model_l.calculate_zoops_log_l(original_seqs,
 						  secondary_structure,
                                                   diagEvents, indicators_l,
                                                   has_motif_l);
@@ -681,25 +685,22 @@ int main(int argc, const char **argv) {
         }
       }
 
-      if (VERBOSE) 
-	cerr << "\t" << "WRITING MOTIF " << endl;
-      
-      top_motifs.push_back(motif_info(bestLogLike, model, i, 
-				      indicators, has_motif));
-      
-      // const string m = format_motif(model, "ZAGROS" + toa(i), seqs, names,   
-      //                              targets, indicators, has_motif);
-      //if (m.empty() && VERBOSE)
-      //  cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
-      //if (!m.empty())
-      //  out << m << endl;
+      if (VERBOSE)
+        cerr << "\t" << "WRITING MOTIF " << endl;
+
+      top_motifs.push_back(motif_info(bestLogLike, model, i,
+                           indicators, has_motif));
 
       // if not the last motif, mask occurrences
       if (i != n_motifs - 1) {
         if (VERBOSE) cerr << "\t" << "MASKING MOTIF OCCURRENCES" << endl;
         maskOccurrences(seqs, indicators, has_motif, motif_width);
       }
-    }  
+    }
+
+    // write out motif occurrences, and collect up the zoops indicators
+    // for potential output later.
+    stringstream indicators_output;
     while (!top_motifs.empty()) {
       double maxScore = top_motifs[0].score();
       size_t maxIndex = 0;
@@ -708,24 +709,35 @@ int main(int argc, const char **argv) {
           maxScore = top_motifs[i].score();
           maxIndex = i;
         }
-      const string m = format_motif(top_motifs[maxIndex].motifModel, 
-                                    "ZAGROS" + 
-				    toa(top_motifs[maxIndex].motifNumber),
-                                    original_seqs, names, targets, 
-                                    top_motifs[maxIndex].motifIndicators, 
+      const string m = format_motif(top_motifs[maxIndex].motifModel,
+                                    "ZAGROS" +
+                                    toa(top_motifs[maxIndex].motifNumber),
+                                    original_seqs, names, targets,
+                                    top_motifs[maxIndex].motifIndicators,
                                     top_motifs[maxIndex].hasMotif);
+
+      copy(top_motifs[maxIndex].hasMotif.begin(),
+           top_motifs[maxIndex].hasMotif.end(),
+           std::ostream_iterator<double>(indicators_output, "\n"));
+
       if (m.empty() && VERBOSE)
         cerr << "\t" << "WARNING, MOTIF HAD NO OCCURRENCES; SKIPPING" << endl;
       if (!m.empty())
         out << m << endl;
-      top_motifs.erase(top_motifs.begin()+maxIndex);
+      top_motifs.erase(top_motifs.begin() + maxIndex);
     }
-  } 
+
+    // write out zoops indicators, if have a filename to output them to
+    if (!indicators_file.empty()) {
+      std::ofstream ind_fs(indicators_file.c_str());
+      ind_fs << indicators_output.rdbuf() << endl;
+    }
+  }
   catch (const SMITHLABException &e) {
     cerr << "ERROR: " << e.what();
     cerr << endl;
     return EXIT_FAILURE;
-  } 
+  }
   catch (std::bad_alloc &ba) {
     cerr << "ERROR: could not allocate memory" << endl;
     return EXIT_FAILURE;
