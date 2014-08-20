@@ -227,7 +227,7 @@ convert_bowtie_extra(string &extra, size_t read_length, char strand) {
       }
     }
     extra = result.substr(1);
-  } else 
+  } else
   if (strand == '+') {
     vector<string> parts(smithlab::split_whitespace_quoted(extra));
     string result = "";
@@ -506,7 +506,7 @@ test_chrom_file_format(const string filename) {
   static const double NEWLINES_TO_CHECK = 10.0;
   const size_t expected_lines =
   static_cast<size_t>(get_filesize(filename)/(LINE_WIDTH + 1.0)) + 1;
-  
+
 
   std::ifstream in(filename.c_str());
   if (!in)
@@ -523,7 +523,7 @@ test_chrom_file_format(const string filename) {
 
   for (size_t i = 0; i < NEWLINES_TO_CHECK; ++i) {
     // get a position that should be a newline
-    const size_t should_be_newline = 
+    const size_t should_be_newline =
       name.length() + i*increment*(LINE_WIDTH + 1);
     // go to that position
     in.seekg(should_be_newline, std::ios::beg);
@@ -782,53 +782,78 @@ fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
  *        events observed at that location in the given sequence.
  * \param fn            the filename to read the events from
  * \param diagEvents    the events are added to this vector. Any existing data
- *                      is cleared from the vector. diagEvents[i][j] is the
- *                      location of the jth diagnostic event in sequence i.
- *                      locations are relative to the start of the sequence.
+ *                      is cleared from the vector. diagEvents[i][j] is
+ *                      fraction of diagnostic events in sequence i that fall
+ *                      at location j.
  * \return the count of diagnostic events that were found
  */
 double
-loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents) {
+loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
+                     const float epsilon) {
+  const bool DEBUG = false;
   size_t total = 0;
   static const size_t buffer_size = 100000; // TODO magic number
   ifstream in(fn.c_str());
   if (!in) throw SMITHLABException("failed to open input file " + fn);
 
-/*  diagEvents.clear();
-  while (!in.eof()) {
-    char buffer[buffer_size];
-    in.getline(buffer, buffer_size);
-    if (in.gcount() == buffer_size - 1)
-      throw SMITHLABException("Line too long in file: " + fn);
-    vector<string> parts(smithlab::split(string(buffer), ",", false));
-    if (parts.size() == 0) continue;
-    diagEvents.push_back(vector<size_t>());
-    for (size_t j = 0; j < parts.size(); ++j) {
-      size_t countAtJ = static_cast<size_t>(atoi(parts[j].c_str()));
-      for (size_t a = 0; a < countAtJ; ++a) {
-        diagEvents.back().push_back(j);
-        total += 1;
-      }
-    }
-  }*/
-
   diagEvents.clear();
   while (!in.eof()) {
+    // getting and splitting the line
     char buffer[buffer_size];
     in.getline(buffer, buffer_size);
     if (in.gcount() == buffer_size - 1)
       throw SMITHLABException("Line too long in file: " + fn);
     vector<string> parts(smithlab::split(string(buffer), ",", false));
     if (parts.size() == 0) continue;
-    diagEvents.push_back(vector<double>());
-    double total_sum = 0.0;
-    for (size_t j = 0; j < parts.size(); ++j) {
-      diagEvents.back().push_back(static_cast<double>(atof(parts[j].c_str()) + 1.0));
-      total_sum += static_cast<double>(atof(parts[j].c_str())) + 1.0;
-      total += atoi(parts[j].c_str());
+    if (DEBUG) {
+      std::cerr << "line is: " << string(buffer) << endl;
+      std::cerr << "split into " << parts.size() << " parts" << endl;
     }
-    for (size_t j = 0; j < parts.size(); ++j)
-      diagEvents.back()[j] = diagEvents.back()[j] / total_sum;
+
+    // parsing the line into a vector of counts ---------------->
+    // get the raw counts, with a pseudo-count added, and remember the total
+    // number of DEs in this sequence, before scaling, but after psuedo-count
+    vector<size_t> diag_counts;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      // convert the string to a size_t, being careful to check for vals < 0
+      int t_val = atoi(parts[i].c_str());
+      if (t_val < 0)
+        throw SMITHLABException("line contains negative counts: " +\
+                                string(buffer));
+      size_t st_val = static_cast<size_t>(t_val);
+      diag_counts.push_back(st_val + 1);
+      total += st_val;
+    }
+    size_t total_di_with_psuedo_count = std::accumulate(diag_counts.begin(),
+                                                        diag_counts.end(), 0);
+
+    // scale the counts up using epsilon
+    size_t min_val = static_cast<size_t> (epsilon * total_di_with_psuedo_count);
+    for (size_t i = 0; i < diag_counts.size(); ++i) {
+      if (diag_counts[i] < min_val) diag_counts[i] = min_val;
+    }
+    size_t total_di_after_scaling = std::accumulate(diag_counts.begin(),
+                                                    diag_counts.end(), 0);
+    if (DEBUG) {
+      std::cerr << "after scalling:" << endl;
+      for (size_t i = 0; i < diag_counts.size(); ++i) {
+        std::cerr << diag_counts[i] << ",";
+      }
+      std::cerr << endl;
+    }
+
+    // convert the diag counts into probabilities and add them to diagEvents
+    diagEvents.push_back(vector<double>());
+    for (size_t i = 0; i < diag_counts.size(); ++i) {
+      double frc = diag_counts[i] / static_cast<double>(total_di_after_scaling);
+      diagEvents.back().push_back(frc);
+    }
+    if (DEBUG) {
+      std::cerr << "after conversion to prob.:" << endl;
+      for (size_t i = 0; i < diagEvents.back().size(); ++i)
+        std::cerr << diagEvents.back()[i] << ",";
+      std::cerr << endl;
+    }
   }
   return total;
 }
@@ -940,4 +965,3 @@ save_structure_file(const vector<vector<double> > &sec_structure,
     out << endl;
   }
 }
-

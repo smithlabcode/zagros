@@ -42,7 +42,8 @@
 
 double
 loadDiagnosticEvents(const std::string &fn,
-                     std::vector<std::vector<double> > &diagEvents);
+                     std::vector<std::vector<double> > &diagEvents,
+                     const float epsilon=0);
 
 void
 load_sequences(const std::string &targets_file,
