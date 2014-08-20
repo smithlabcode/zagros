@@ -268,7 +268,7 @@ find_best_kmers(const size_t k_value,
  *                  should be done, or >= 0 (setting to 0 will remove all
  *                  diagnostic events)
  */
-static void
+/*static void
 downsampleDiagEvents(vector<vector<size_t> > &dEvents, const int thresh) {
   if (thresh == -1) return;
   if (thresh < 0) {
@@ -285,7 +285,7 @@ downsampleDiagEvents(vector<vector<size_t> > &dEvents, const int thresh) {
     dEvents[i].resize(tThresh);
     sort(dEvents[i].begin(), dEvents[i].end());
   }
-}
+}*/
 
 /***
  * \summary given a set of sequences and indicators for motif occurrences,
@@ -595,11 +595,11 @@ int main(int argc, const char **argv) {
     }
 
     // Load the diagnostic events
-    vector<vector<size_t> > diagEvents (seqs.size());
+    vector<vector<double> > diagEvents(seqs.size());
     if (!reads_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING DIAGNOSTIC EVENTS... ";
-      const size_t deCount = loadDiagnosticEvents(reads_file, diagEvents);
+      const double deCount = loadDiagnosticEvents(reads_file, diagEvents);
       if (diagEvents.size() != seqs.size()) {
         stringstream ss;
         ss << "inconsistent dimensions of sequence and diagnostic events data. "
@@ -610,7 +610,7 @@ int main(int argc, const char **argv) {
       if (VERBOSE)
         cerr << "DONE (FOUND " << deCount << " EVENTS IN TOTAL)" << endl;
     }
-    downsampleDiagEvents(diagEvents, diagEventsThresh);
+//    downsampleDiagEvents(diagEvents, diagEventsThresh);
 
 
     // find and output each of the motifs that the user asked for.

@@ -787,14 +787,14 @@ fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
  *                      locations are relative to the start of the sequence.
  * \return the count of diagnostic events that were found
  */
-size_t
-loadDiagnosticEvents(const string &fn, vector<vector<size_t> > &diagEvents) {
+double
+loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents) {
   size_t total = 0;
   static const size_t buffer_size = 100000; // TODO magic number
   ifstream in(fn.c_str());
   if (!in) throw SMITHLABException("failed to open input file " + fn);
 
-  diagEvents.clear();
+/*  diagEvents.clear();
   while (!in.eof()) {
     char buffer[buffer_size];
     in.getline(buffer, buffer_size);
@@ -810,6 +810,25 @@ loadDiagnosticEvents(const string &fn, vector<vector<size_t> > &diagEvents) {
         total += 1;
       }
     }
+  }*/
+
+  diagEvents.clear();
+  while (!in.eof()) {
+    char buffer[buffer_size];
+    in.getline(buffer, buffer_size);
+    if (in.gcount() == buffer_size - 1)
+      throw SMITHLABException("Line too long in file: " + fn);
+    vector<string> parts(smithlab::split(string(buffer), ",", false));
+    if (parts.size() == 0) continue;
+    diagEvents.push_back(vector<double>());
+    double total_sum = 0.0;
+    for (size_t j = 0; j < parts.size(); ++j) {
+      diagEvents.back().push_back(static_cast<double>(atof(parts[j].c_str()) + 1.0));
+      total_sum += static_cast<double>(atof(parts[j].c_str())) + 1.0;
+      total += atoi(parts[j].c_str());
+    }
+    for (size_t j = 0; j < parts.size(); ++j)
+      diagEvents.back()[j] = diagEvents.back()[j] / total_sum;
   }
   return total;
 }
