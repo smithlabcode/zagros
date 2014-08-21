@@ -505,7 +505,7 @@ maximization_de(const vector<vector<double> > &diagEvents,
                 int &geoDelta) {
   const double tol = 0.001;    // 0.0001 is the error level we wish
   const size_t max_iters = 10;
-  int best_delta = 0;
+  int best_delta = geoDelta;
   double best_delta_ll = de_log_like(diagEvents, siteInd, seqInd, geoP, geoDelta);
   size_t num_iters = 0;
   double old;
@@ -1224,7 +1224,6 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
                                        vector<vector<double> > &site_indic,
                                        vector<double> &seq_indic,
                                        const bool holdDelta = false) {
-  //if (!holdDelta) this->estimateDelta(seqs, diagEvents);
   this->delta = Model::DEFAULT_DELTA;
   double prev_score = std::numeric_limits<double>::max();
   bool first = true;
@@ -1278,7 +1277,7 @@ Model::expectationMax_SeqStrDE(const vector<string> &seqs,
                                const vector<vector<double> > &diagEvents,
                                vector<vector<double> > &siteInd,
                                vector<double> &seqInd) {
-  estimateDelta(seqs, diagEvents);
+  this->delta = Model::DEFAULT_DELTA;
   double prev_score = std::numeric_limits<double>::max();
   double score = 0.0;
   bool first = true;
@@ -1336,63 +1335,6 @@ Model::expectationMax(const vector<string> &seqs,
     // TODO -- throw an exception here if the size of the secStrc vectors
     // don't match the sequences...?
     expectationMax_SeqStrDE(seqs, secStruct, diagEvents, site_indic, seq_indic);
-  }
-}
-
-
-/******************************************************************************
- * SETTERS -- PARAMETER ESTIMATION BY EXHAUSTIVE SEARCH
- ******************************************************************************/
-
-/***
- * \summary estimate the delta parameter for this model given a set of
- *          sequences and the diagnostic events within them.
- * \param seqs          seqs[i] is the ith sequence (string)
- * \param diagEvents    diagEvents[i][j] is the jth diagnostic event in the
- *                      ith sequence
- */
-void
-Model::estimateDelta(const vector<string> &seqs,
-                     const vector<vector<double> > &diagEvents) {
-  // if we have no diagnostic events, then just set delta to be the default,
-  // otherwise we just try an exhaustive search of reasonable options with
-  // a uniform PWM.
-  size_t numDiagEvents = 0;
-  for (size_t i=0; i < diagEvents.size(); i++)
-    numDiagEvents += diagEvents[i].size();
-  if (numDiagEvents == 0) {
-    this->delta = Model::DEFAULT_DELTA;
-  } else {
-    vector<double> ll_delta;
-    for (int deltaP = Model::MIN_DELTA; deltaP <= Model::MAX_DELTA; ++deltaP) {
-      Model dummy;
-      Model::set_model_uniform(this->size(), dummy);
-      dummy.delta = deltaP;
-
-      vector<double> has_motif(seqs.size(), dummy.gamma);
-      vector<vector<double> > indicators;
-      for (size_t i = 0; i < seqs.size(); ++i) {
-        const size_t n_pos = seqs[i].length() - dummy.matrix.size() + 1;
-        indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
-      }
-      // use EM to fit the sequence component and the geometric distribution,
-      // but hold delta fixed (to avoid cyclic dependency)
-      dummy.expectation_maximization_seq_de(seqs, diagEvents, indicators,
-                                            has_motif, Model::HOLD_DELTA_FIXED);
-      double score = calculate_zoops_log_l(seqs, diagEvents, indicators, has_motif);
-      ll_delta.push_back(score);
-    }
-
-    double max_ll = -1.0 * std::numeric_limits<double>::max();
-    int max_i = 0;
-    for (size_t i = 0; i < ll_delta.size(); i++) {
-      if (ll_delta[i] > max_ll) {
-        max_ll = ll_delta[i];
-        max_i = i + Model::MIN_DELTA;
-      }
-    }
-
-    this->delta = max_i;
   }
 }
 
