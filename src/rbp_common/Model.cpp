@@ -437,6 +437,31 @@ newtonRaphson (const vector<vector<double> > &diagEvents,
   return geoP - (numerator / denominator);
 }
 
+
+
+
+
+static double
+de_log_like(const vector<vector<double> > &diagEvents,
+            const vector<vector<double> > &siteInd,
+            const vector<double> &seqInd,
+            double &geoP,
+            int &geoDelta) {
+  double res = 0;
+  for(size_t i = 0; i < diagEvents.size(); ++i) {
+    for (size_t j = 0; j < diagEvents[i].size(); ++i) {
+      vector<double> sum;
+      for (size_t l = 0; l < diagEvents[i].size(); ++l) {
+        sum.push_back(log(diagEvents[i][l]) + geoP +\
+                          (abs(l - (j + geoDelta)) * log(1.0 - geoP)));
+      }
+      res += smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j];
+    }
+  }
+  return res;
+}
+
+
 /***
  * \summary given a set of diagnostic event locations within sequences, and
  *          both indicators on the probability of motif occurrence at each
@@ -469,22 +494,30 @@ maximization_de(const vector<vector<double> > &diagEvents,
   const bool DEBUG = false;
   const double tol = 0.001;    // 0.0001 is the error level we wish
   const size_t max_iters = 10;
+  int best_delta = 0;
+  double best_delta_ll = de_log_like(diagEvents, siteInd, seqInd, geoP, geoDelta);
   size_t num_iters = 0;
   double old;
 
-  do {
-    old = geoP;
-    geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta), 0.999),
-               std::numeric_limits<double>::min());
+  for (geoDelta = -10; geoDelta <= 10; ++geoDelta) {
+    cerr << "trying delta = " << geoDelta << endl;
+    do {
+      old = geoP;
+      geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta), 0.999),
+                 std::numeric_limits<double>::min());
+      if (DEBUG)
+        cerr << "old geoP: " << old << " new geoP: "
+             << geoP << " diff is " << fabs(old - geoP) << endl;
+      num_iters += 1;
+    }
+    while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
     if (DEBUG)
-      cerr << "old geoP: " << old << " new geoP: "
-           << geoP << " diff is " << fabs(old - geoP) << endl;
-    num_iters += 1;
+      cerr << "finished optimising geo_p" << endl;
+    cerr << "delta loglike: " << de_log_like(diagEvents, siteInd, seqInd, geoP, geoDelta);
   }
-  while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
-  if (DEBUG)
-    cerr << "finished optimising geo_p" << endl;
 }
+
+
 
 
 /******************************************************************************
@@ -1159,7 +1192,8 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
                                        vector<vector<double> > &site_indic,
                                        vector<double> &seq_indic,
                                        const bool holdDelta = false) {
-  if (!holdDelta) this->estimateDelta(seqs, diagEvents);
+  //if (!holdDelta) this->estimateDelta(seqs, diagEvents);
+  this->delta = Model::DEFAULT_DELTA;
   double prev_score = std::numeric_limits<double>::max();
   bool first = true;
   double score = 0.0;
