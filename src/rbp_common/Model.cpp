@@ -45,6 +45,8 @@ const double Model::pseudocount = 0.1;
 const double Model::tolerance = 1e-10;
 const double Model::zoops_threshold = 0;
 const double Model::DEFAULT_GEO_P = 0.4;
+const double Model::MAX_GEO_P = 0.99;
+const double Model::MIN_GEO_P = 0.01;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -434,7 +436,9 @@ newtonRaphson (const vector<vector<double> > &diagEvents,
       numerator += (siteInd[i][j] * num_ij);
       denominator += (siteInd[i][j] * denom_ij);
     }
-  return geoP - (numerator / denominator);
+  assert(std::isfinite(numerator));
+  assert(std::isfinite(denominator));
+  return std::min(geoP - (numerator / denominator), Model::MAX_GEO_P);
 }
 
 
@@ -449,15 +453,23 @@ de_log_like(const vector<vector<double> > &diagEvents,
             int &geoDelta) {
   double res = 0;
   for(size_t i = 0; i < diagEvents.size(); ++i) {
-    for (size_t j = 0; j < diagEvents[i].size(); ++i) {
+    for (size_t j = 0; j < siteInd[i].size(); ++j) {
       vector<double> sum;
       for (size_t l = 0; l < diagEvents[i].size(); ++l) {
-        sum.push_back(log(diagEvents[i][l]) + geoP +\
-                          (abs(l - (j + geoDelta)) * log(1.0 - geoP)));
+        double t1 = log(diagEvents[i][l]);
+        assert(std::isfinite(t1));
+        assert(std::isfinite(geoP));
+        assert(std::isfinite(abs(l - (j + geoDelta))));
+        assert(std::isfinite(log(1.0 - geoP)));
+        double term = log(diagEvents[i][l]) + geoP +\
+                          (abs(l - (j + geoDelta)) * log(1.0 - geoP));
+        assert(std::isfinite(term));
+        sum.push_back(term);
       }
       res += smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j];
     }
   }
+  assert(std::isfinite(res));
   return res;
 }
 
@@ -491,7 +503,6 @@ maximization_de(const vector<vector<double> > &diagEvents,
                 vector<vector<double> > &matrix,
                 double &geoP,
                 int &geoDelta) {
-  const bool DEBUG = false;
   const double tol = 0.001;    // 0.0001 is the error level we wish
   const size_t max_iters = 10;
   int best_delta = 0;
@@ -499,22 +510,43 @@ maximization_de(const vector<vector<double> > &diagEvents,
   size_t num_iters = 0;
   double old;
 
-  for (geoDelta = -10; geoDelta <= 10; ++geoDelta) {
-    cerr << "trying delta = " << geoDelta << endl;
+  for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
+    if (Model::DEBUG_LEVEL >= 1)
+      cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
     do {
       old = geoP;
-      geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta), 0.999),
-                 std::numeric_limits<double>::min());
-      if (DEBUG)
-        cerr << "old geoP: " << old << " new geoP: "
+      geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta),
+                 Model::MAX_GEO_P), Model::MIN_GEO_P);
+      if (Model::DEBUG_LEVEL >= 2)
+        cerr << "\t\t\tOLD GEO_P: " << old << " NEW GEO_P: "
              << geoP << " diff is " << fabs(old - geoP) << endl;
       num_iters += 1;
     }
     while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
-    if (DEBUG)
-      cerr << "finished optimising geo_p" << endl;
-    cerr << "delta loglike: " << de_log_like(diagEvents, siteInd, seqInd, geoP, geoDelta);
+
+    if (Model::DEBUG_LEVEL >= 2)
+      cerr << "\t\t\tFINISHED GEO_P OPTIM.;" << endl;
+
+    double ll_delta_param = de_log_like(diagEvents, siteInd, seqInd,
+                                        geoP, geoDelta);
+    if (Model::DEBUG_LEVEL >= 1)
+      cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
+    if (ll_delta_param > best_delta_ll) {
+      best_delta_ll = ll_delta_param;
+      best_delta = geoDelta;
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
+             << " with LL " << best_delta_ll << endl;
+    }
   }
+
+  // use best delta to set geo_p
+  geoDelta = best_delta;
+  geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta),
+             Model::MAX_GEO_P), Model::MIN_GEO_P);
+  if (Model::DEBUG_LEVEL >= 1)
+    cerr << "\t\t\tSETTING DELTA PARAM TO: " << best_delta << "; "
+         << "SETTING GEO_P TO: " << geoP << endl;
 }
 
 
@@ -1199,16 +1231,16 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
   double score = 0.0;
   for (size_t i = 0; i < max_iterations; ++i) {
     if (Model::DEBUG_LEVEL >= 1) {
-      cerr << "EM, sequence and DE, iteration number " << i << endl
-           << "expectation step" << endl;
+      cerr << "EM, SEQ. AND DE, ITER NUM " << i << endl
+           << "\tEXPECTATION STEP" << endl;
     }
     expectation_seq_de(seqs, diagEvents, matrix, f, p, delta, gamma,
                        site_indic, seq_indic);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "sequence maximization step" << endl;
+    if (Model::DEBUG_LEVEL >= 1) cerr << "\tSEQUENCE MAX. STEP" << endl;
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "DE maximization step" << endl;
+    if (Model::DEBUG_LEVEL >= 1) cerr << "\tDE MAX. STEP" << endl;
     maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "calculating log-likelihood" << endl;
+    if (Model::DEBUG_LEVEL >= 1) cerr << "\tCALC. LOG-LIKE" << endl;
     score = calculate_zoops_log_l(seqs, diagEvents, site_indic, seq_indic);
     if (!first) {
       const double delta = fabs(prev_score - score);

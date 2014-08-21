@@ -142,6 +142,8 @@ struct Model {
   static const double tolerance;
 
   static const double DEFAULT_GEO_P;
+  static const double MIN_GEO_P;
+  static const double MAX_GEO_P;
 
   static const int MIN_DELTA = -8;
   static const int MAX_DELTA = 8;
