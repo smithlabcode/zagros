@@ -150,7 +150,7 @@ struct Model {
   static const int DEFAULT_DELTA = 0;
   static const bool HOLD_DELTA_FIXED = true;
 
-  static const size_t DEBUG_LEVEL = 1;
+  static const size_t DEBUG_LEVEL = 2;
 };
 
 #endif

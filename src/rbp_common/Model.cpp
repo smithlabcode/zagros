@@ -474,6 +474,31 @@ de_log_like(const vector<vector<double> > &diagEvents,
 }
 
 
+static void
+maximization_geoP(const vector<vector<double> > &diagEvents,
+                const vector<vector<double> > &siteInd,
+                const vector<double> &seqInd,
+                vector<vector<double> > &matrix,
+                double &geoP,
+                const int geoDelta) {
+  const double tol = 0.001;    // 0.0001 is the error level we wish
+  const size_t max_iters = 10;
+  size_t num_iters = 0;
+  double old;
+  do {
+    old = geoP;
+    geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta),
+               Model::MAX_GEO_P), Model::MIN_GEO_P);
+    if (Model::DEBUG_LEVEL >= 2)
+      cerr << "\t\t\tOLD GEO_P: " << old << " NEW GEO_P: "
+           << geoP << " diff is " << fabs(old - geoP) << endl;
+    num_iters += 1;
+  } while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
+  if (Model::DEBUG_LEVEL >= 2)
+    cerr << "\t\t\tFINISHED GEO_P OPTIM.;" << endl;
+}
+
+
 /***
  * \summary given a set of diagnostic event locations within sequences, and
  *          both indicators on the probability of motif occurrence at each
@@ -503,37 +528,24 @@ maximization_de(const vector<vector<double> > &diagEvents,
                 vector<vector<double> > &matrix,
                 double &geoP,
                 int &geoDelta) {
-  const double tol = 0.001;    // 0.0001 is the error level we wish
-  const size_t max_iters = 10;
-  int best_delta = geoDelta;
-  double best_delta_ll = de_log_like(diagEvents, siteInd, seqInd, geoP, geoDelta);
-  size_t num_iters = 0;
-  double old;
+  bool first = true;
+  int best_delta;
+  double best_delta_ll;
+  double best_geoP;
 
   for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
     if (Model::DEBUG_LEVEL >= 1)
       cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
-    do {
-      old = geoP;
-      geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta),
-                 Model::MAX_GEO_P), Model::MIN_GEO_P);
-      if (Model::DEBUG_LEVEL >= 2)
-        cerr << "\t\t\tOLD GEO_P: " << old << " NEW GEO_P: "
-             << geoP << " diff is " << fabs(old - geoP) << endl;
-      num_iters += 1;
-    }
-    while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
-
-    if (Model::DEBUG_LEVEL >= 2)
-      cerr << "\t\t\tFINISHED GEO_P OPTIM.;" << endl;
-
+    maximization_geoP(diagEvents, siteInd, seqInd, matrix, geoP, geoDelta);
     double ll_delta_param = de_log_like(diagEvents, siteInd, seqInd,
                                         geoP, geoDelta);
     if (Model::DEBUG_LEVEL >= 1)
       cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
-    if (ll_delta_param > best_delta_ll) {
+    if ((ll_delta_param > best_delta_ll) || (first)) {
       best_delta_ll = ll_delta_param;
       best_delta = geoDelta;
+      best_geoP = geoP;
+      first = false;
       if (Model::DEBUG_LEVEL >= 1)
         cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
              << " with LL " << best_delta_ll << endl;
@@ -542,11 +554,12 @@ maximization_de(const vector<vector<double> > &diagEvents,
 
   // use best delta to set geo_p
   geoDelta = best_delta;
-  geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta),
-             Model::MAX_GEO_P), Model::MIN_GEO_P);
-  if (Model::DEBUG_LEVEL >= 1)
-    cerr << "\t\t\tSETTING DELTA PARAM TO: " << best_delta << "; "
-         << "SETTING GEO_P TO: " << geoP << endl;
+  geoP = best_geoP;
+  if (Model::DEBUG_LEVEL >= 1) {
+    cerr << "\t\tSET DELTA TO " << geoDelta << endl;
+    cerr << "\t\tSET GEO_P TO " << geoP << endl;
+  }
+
 }
 
 
