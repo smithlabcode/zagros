@@ -489,10 +489,6 @@ int main(int argc, const char **argv) {
     // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
 
-    // TODO -- PJU: the level parameter, specifying how much influence the DEs
-    //              have, is currently not used, so I commented it out; it
-    //              needs to be (sensibly) implemented.
-
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
@@ -502,7 +498,7 @@ int main(int argc, const char **argv) {
     string structure_file;
     string reads_file;
     string indicators_file = "";
-    int diagEventsThresh = -1;
+    double epsilon = 0;
     size_t numStartingPoints = 3;
 
     /****************** COMMAND LINE OPTIONS ********************/
@@ -524,10 +520,10 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt("diagnostic_events", 'd',
                       "diagnostic events information file",
                       OptionParser::OPTIONAL, reads_file);
-    opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
-                      "to this many per sequence (-1 for no down-sampling; "
-                      "default: " + toa(diagEventsThresh) +  ")",
-                      OptionParser::OPTIONAL, diagEventsThresh);
+    opt_parse.add_opt("diagEventsThresh", 'e', "give equal weight to locations "
+                      "with fewer than this fraction of all DEs in a sequence."
+                      "default: " + toa(epsilon) +  ")",
+                      OptionParser::OPTIONAL, epsilon);
     opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
                       "each sequence and motif to this file",
                       OptionParser::OPTIONAL, indicators_file);
@@ -554,6 +550,10 @@ int main(int argc, const char **argv) {
     }
     if (motif_width < 4 || motif_width > 12) {
       cerr << "motif width should be between 4 and 12" << endl;
+      return EXIT_SUCCESS;
+    }
+    if ((epsilon < 0) || (epsilon > 1)) {
+      cerr << "diagEventsThresh option must be between 0 and 1" << endl;
       return EXIT_SUCCESS;
     }
     if (leftover_args.size() != 1) {
@@ -599,7 +599,8 @@ int main(int argc, const char **argv) {
     if (!reads_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING DIAGNOSTIC EVENTS... ";
-      const double deCount = loadDiagnosticEvents(reads_file, diagEvents);
+      const double deCount = loadDiagnosticEvents(reads_file, diagEvents,
+                                                  epsilon);
       if (diagEvents.size() != seqs.size()) {
         stringstream ss;
         ss << "inconsistent dimensions of sequence and diagnostic events data. "
