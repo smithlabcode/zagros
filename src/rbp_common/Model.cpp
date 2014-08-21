@@ -1,4 +1,4 @@
-/*    
+/*
  *    Copyright (C) 2013 University of Southern California and
  *                       Andrew D. Smith
  *
@@ -387,7 +387,7 @@ maximization_str(const vector<vector<double> > &secondary_structure,
   f_sec_str = 0.5;
 }
 
-static double 
+static double
 newtonRaphson (const vector<vector<double> > &diagEvents,
                const vector<vector<double> > &siteInd,
                const double &geoP,
@@ -466,25 +466,24 @@ maximization_de(const vector<vector<double> > &diagEvents,
                 vector<vector<double> > &matrix,
                 double &geoP,
                 int &geoDelta) {
-
-  geoP = Model::DEFAULT_GEO_P;
-  const double tol = 0.0001;    // 0.0001 is the error level we wish
+  const bool DEBUG = false;
+  const double tol = 0.001;    // 0.0001 is the error level we wish
+  const size_t max_iters = 10;
+  size_t num_iters = 0;
   double old;
 
-  do
-  {
+  do {
     old = geoP;
     geoP = max(min(newtonRaphson(diagEvents, siteInd, geoP, geoDelta), 0.999),
                std::numeric_limits<double>::min());
+    if (DEBUG)
+      cerr << "old geoP: " << old << " new geoP: "
+           << geoP << " diff is " << fabs(old - geoP) << endl;
+    num_iters += 1;
   }
-  while (abs(old - geoP) > tol);     // while loop because the
-
-//  if (!std::isfinite(geoP)) {
-//    stringstream ss;
-//    ss << "failed maximization of geometric parameter; numerator was "
-//       << matrixToString(siteInd) << " seqInd were " << vecToString(seqInd);
-//    throw SMITHLABException(ss.str());
-//  }
+  while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
+  if (DEBUG)
+    cerr << "finished optimising geo_p" << endl;
 }
 
 
@@ -544,7 +543,7 @@ get_numerator_seq_de_for_site(const string &seq,
     assert(std::isfinite(num));
   }
 
-  if (diagEvents.size() > 0) { 
+  if (diagEvents.size() > 0) {
     vector<double> powers;
     for (size_t j = 0; j < seq.length(); j++)
       powers.push_back(log(diagEvents[j]) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
@@ -621,7 +620,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
 
   if (diagnostic_events.size() > 0) {
     vector<double> powers;
-    for (size_t j = 0; j < seq.length(); j++) 
+    for (size_t j = 0; j < seq.length(); j++)
       powers.push_back(log(diagnostic_events[j]) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
@@ -1383,4 +1382,3 @@ Model::set_model_by_word(const double pseudocount,
                 std::bind2nd(std::divides<double>(), tot));
     }
 }
-
