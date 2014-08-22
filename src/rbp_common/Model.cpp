@@ -529,9 +529,9 @@ maximization_de(const vector<vector<double> > &diagEvents,
                 double &geoP,
                 int &geoDelta) {
   bool first = true;
-  int best_delta;
-  double best_delta_ll;
-  double best_geoP;
+  int best_delta = 0;
+  double best_delta_ll = 0.0;
+  double best_geoP = 0.0;
 
   for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
     if (Model::DEBUG_LEVEL >= 1)
@@ -1250,8 +1250,10 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
                        site_indic, seq_indic);
     if (Model::DEBUG_LEVEL >= 1) cerr << "\tSEQUENCE MAX. STEP" << endl;
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "\tDE MAX. STEP" << endl;
-    maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta);
+    if (diagEvents.front().size() > 0) {
+      if (Model::DEBUG_LEVEL >= 1) cerr << "\tDE MAX. STEP" << endl;
+      maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta);
+    }
     if (Model::DEBUG_LEVEL >= 1) cerr << "\tCALC. LOG-LIKE" << endl;
     score = calculate_zoops_log_l(seqs, diagEvents, site_indic, seq_indic);
     if (!first) {
@@ -1299,7 +1301,9 @@ Model::expectationMax_SeqStrDE(const vector<string> &seqs,
                            f, f_sec_str, p, delta, gamma, siteInd, seqInd);
     maximization_seq(seqs, siteInd, seqInd, matrix, f, gamma);
     maximization_str(secStr, siteInd, seqInd, matrix, motif_sec_str, f_sec_str);
-    maximization_de(diagEvents, siteInd, seqInd, matrix, p, delta);
+    if (diagEvents.front().size() > 0) {
+      maximization_de(diagEvents, siteInd, seqInd, matrix, p, delta);
+    }
     score = calculate_zoops_log_l(seqs, secStr, diagEvents, siteInd, seqInd);
     if (!first) {
       const double delta = fabs(prev_score - score);
