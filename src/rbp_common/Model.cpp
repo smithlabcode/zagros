@@ -47,6 +47,7 @@ const double Model::zoops_threshold = 0;
 const double Model::DEFAULT_GEO_P = 0.4;
 const double Model::MAX_GEO_P = 0.99;
 const double Model::MIN_GEO_P = 0.01;
+const double Model::DE_WEIGHT = 0.7;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -255,7 +256,7 @@ calculate_number_of_bases_fg_bg_str(const vector<string> &seqs,
         const double curr_sec_str = secStr[i][j + k];
         const double curr_site_indic = site_indic[i][j];
         nb_fg_ss[k][base_idx] += (1.0 - curr_sec_str) * curr_site_indic;
-        nb_fg_ds[k][base_idx] += curr_sec_str * curr_site_indic;
+        nb_fg_ds[k][base_idx] += (curr_sec_str * curr_site_indic);
       }
     }
   }
@@ -274,8 +275,8 @@ calculate_number_of_bases_fg_bg_str(const vector<string> &seqs,
 
       const size_t base_idx = base2int(seqs[i][j]);
       assert(base_idx < alphabet_size);
-      nb_bg_ss[base_idx] += (1.0 - secStr[i][j]) * motif_width;
-      nb_bg_ds[base_idx] += (secStr[i][j] * motif_width);
+      nb_bg_ss[base_idx] += ((1.0 - secStr[i][j]) * motif_width);
+      nb_bg_ds[base_idx] += ((secStr[i][j] * motif_width));
     }
   }
   for (size_t i = 0; i < site_indic.size(); ++i) {
@@ -375,8 +376,8 @@ maximization_str(const vector<vector<double> > &secondary_structure,
   for (size_t i = 0; i < matrix.size(); ++i) {
     for (size_t j = 0; j < site_indic.size(); ++j) {
       for (size_t site = 0; site < site_indic[j].size(); ++site) {
-        motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
-                            * secondary_structure[j][site + i];
+        motif_sec_str[i] += (seq_indic[j] * site_indic[j][site]
+                            * secondary_structure[j][site + i]);
       }
     }
 
@@ -424,9 +425,9 @@ newtonRaphson (const vector<vector<double> > &diagEvents,
         if ((abs(l - (j + geoDelta)) - 1) > 0)
           term_5 = ((abs(l - (j + geoDelta)) - 1) * log(1.0 - geoP));
 
-        sum_1.push_back(log(diagEvents[i][l]) + term_1 + term_2 + term_3);
-        sum_2.push_back(log(diagEvents[i][l]) + term_4);
-        sum_3.push_back(log(diagEvents[i][l]) + term_1 + term_5);
+        sum_1.push_back((log(diagEvents[i][l]) * Model::DE_WEIGHT) + term_1 + term_2 + term_3);
+        sum_2.push_back((log(diagEvents[i][l]) * Model::DE_WEIGHT) + term_4);
+        sum_3.push_back((log(diagEvents[i][l]) * Model::DE_WEIGHT) + term_1 + term_5);
       }
       const double log_A = smithlab::log_sum_log_vec(sum_1, sum_1.size());
       const double log_B = smithlab::log_sum_log_vec(sum_2, sum_2.size());
@@ -451,23 +452,37 @@ de_log_like(const vector<vector<double> > &diagEvents,
             const vector<double> &seqInd,
             double &geoP,
             int &geoDelta) {
+  string junk;
   double res = 0;
   for(size_t i = 0; i < diagEvents.size(); ++i) {
+    /*cerr << "diag events for sequence " << i << endl;
+    for (size_t j = 0; j < diagEvents[i].size(); ++j)
+      cerr << diagEvents[i][j] << ", ";
+    cerr << endl;
+    std::cin >> junk;*/
     for (size_t j = 0; j < siteInd[i].size(); ++j) {
       vector<double> sum;
       for (size_t l = 0; l < diagEvents[i].size(); ++l) {
         double t1 = log(diagEvents[i][l]);
-        assert(std::isfinite(t1));
-        assert(std::isfinite(geoP));
-        assert(std::isfinite(abs(l - (j + geoDelta))));
-        assert(std::isfinite(log(1.0 - geoP)));
-        double term = log(diagEvents[i][l]) + geoP +\
-                          (abs(l - (j + geoDelta)) * log(1.0 - geoP));
+        double prior_log_prob = log(diagEvents[i][l]) * Model::DE_WEIGHT;
+        double geo_log_prob = geoP + (abs(l - (j + geoDelta)) * log(1.0 - geoP));
+        double term = prior_log_prob + geo_log_prob;
         assert(std::isfinite(term));
+        /*cerr << "given that the motif in seq " << i << " is at pos " << j
+             << " the prob that the cross-link is at " << l << " is "
+             << exp(term) << " which is the prior, " << exp(prior_log_prob)
+             << " times the geo_prob, " << exp(geo_log_prob) << endl;*/
         sum.push_back(term);
       }
-      res += smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j];
+      /*cerr << "ll term far seq " << i << " at loc " << j << " is log-prob: "
+           << smithlab::log_sum_log_vec(sum, sum.size()) << " times site ind "
+           << siteInd[i][j] << " = "
+           << (smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j])
+           << endl;*/
+      res += (smithlab::log_sum_log_vec(sum, sum.size() * siteInd[i][j]));
     }
+    /*cerr << "ll so far: " << res << endl;
+    std::cin >> junk;*/
   }
   assert(std::isfinite(res));
   return res;
@@ -617,14 +632,14 @@ get_numerator_seq_de_for_site(const string &seq,
   }
 
   for (size_t b = 0; b < alphabet_size; b++) {
-    num += f_powers[b] * log(freqs[b]);
+    num += (f_powers[b] * log(freqs[b]));
     assert(std::isfinite(num));
   }
 
   if (diagEvents.size() > 0) {
     vector<double> powers;
     for (size_t j = 0; j < seq.length(); j++)
-      powers.push_back(log(diagEvents[j]) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+      powers.push_back((log(diagEvents[j]) * Model::DE_WEIGHT) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
   num += log(gamma);
@@ -691,15 +706,15 @@ get_numerator_seq_str_de_for_site(const string &seq,
   // calculating the contribution of the background (outside the motif
   // occurrences)
   for (size_t b = 0; b < alphabet_size; b++) {
-    num += f_powers_ss[b] * log(freqs[b] * (1.0 - f_sec_str));
-    num += f_powers_ds[b] * log(freqs[b] * (f_sec_str));
+    num += (f_powers_ss[b] * log(freqs[b] * (1.0 - f_sec_str)));
+    num += (f_powers_ds[b] * log(freqs[b] * (f_sec_str)));
     assert(std::isfinite(num));
   }
 
   if (diagnostic_events.size() > 0) {
     vector<double> powers;
     for (size_t j = 0; j < seq.length(); j++)
-      powers.push_back(log(diagnostic_events[j]) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+      powers.push_back((log(diagnostic_events[j]) * Model::DE_WEIGHT) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
 
@@ -751,8 +766,8 @@ expectation_seq_str_de_for_single_seq(const string &seq,
     const size_t base = base2int(seq[i]);
     assert(base < alphabet_size);
 
-    no_motif += secondary_structure[i]
-        * log(freqs[base] * f_sec_str);
+    no_motif += (secondary_structure[i]
+        * log(freqs[base] * f_sec_str));
     no_motif += ((1.0 - secondary_structure[i])
         * log(freqs[base] * (1.0 - f_sec_str)));
   }
@@ -960,9 +975,9 @@ Model::calculate_oops_log_l(const vector<string> &sequences,
 
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
-    ret += nb_bg[i] * log(f[i]);
+    ret += (nb_bg[i] * log(f[i]));
     for (size_t j = 0; j < matrix.size(); ++j)
-      ret += nb_fg[j][i] * log(matrix[j][i]);
+      ret += (nb_fg[j][i] * log(matrix[j][i]));
   }
 
   for (size_t i = 0; i < site_indic.size(); ++i)
@@ -1017,7 +1032,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
 
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
-    ret += nb_bg[i] * log(f[i]);
+    ret += (nb_bg[i] * log(f[i]));
     if (!std::isfinite(ret)) {
       stringstream ss;
       ss << "log-likelihood calculation failed; result not finite. background "
@@ -1025,7 +1040,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       throw SMITHLABException(ss.str());
     }
     for (size_t j = 0; j < matrix.size(); ++j) {
-      ret += nb_fg[j][i] * log(matrix[j][i]);
+      ret += (nb_fg[j][i] * log(matrix[j][i]));
       if (!std::isfinite(ret)) {
         stringstream ss;
         ss << "log-likelihood calculation failed; result not finite. "
@@ -1041,7 +1056,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
         for (size_t k = 0; k < site_indic[i].size(); k++) {
           vector<double> powers;
           for (size_t j = 0; j < sequences[i].length(); j++)
-            powers.push_back(log(diagnostic_events[i][j]) + log(p) + (abs(j - (k + delta)) * log(1.0-p)));
+            powers.push_back((log(diagnostic_events[i][j]) * Model::DE_WEIGHT) + log(p) + (abs(j - (k + delta)) * log(1.0-p)));
           ret += (site_indic[i][k] * smithlab::log_sum_log_vec(powers, powers.size()));
         }
       }
@@ -1069,9 +1084,9 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       has_no_motif += smithlab::log_sum_log_vec(powers, powers.size());
     }
 */
-    ret += (1.0 - seq_indic[i]) * has_no_motif;
-    ret += (1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0));
-    ret += seq_indic[i] * log(gamma);
+    ret += ((1.0 - seq_indic[i]) * has_no_motif);
+    ret += ((1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0)));
+    ret += (seq_indic[i] * log(gamma));
   }
   //--------
 
@@ -1124,7 +1139,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
         for (size_t k = 0; k < site_indic[i].size(); k++) {
           vector<double> powers;
           for (size_t j = 0; j < sequences[i].length(); j++)
-            powers.push_back(log(diagnostic_events[i][j]) + log(p) + (abs(j - (k + delta)) * log(1.0-p)));
+            powers.push_back((log(diagnostic_events[i][j]) * Model::DE_WEIGHT) + log(p) + (abs(j - (k + delta)) * log(1.0-p)));
           ret += (site_indic[i][k] * smithlab::log_sum_log_vec(powers, powers.size()));
         }
       }
@@ -1151,9 +1166,9 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       has_no_motif += smithlab::log_sum_log_vec(powers, powers.size());
     }*/
 
-    ret += (1.0 - seq_indic[i]) * has_no_motif;
-    ret += (1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0));
-    ret += seq_indic[i] * log(gamma);
+    ret += ((1.0 - seq_indic[i]) * has_no_motif);
+    ret += ((1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0)));
+    ret += (seq_indic[i] * log(gamma));
   }
   // ZOOPS-specific calculation ends here --------
 

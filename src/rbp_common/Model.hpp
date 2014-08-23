@@ -136,6 +136,8 @@ struct Model {
   bool useDEs;
 
   // class constants (probably some should be adjustable)
+  static const double DE_WEIGHT;
+
   static const size_t max_iterations = 10;
   static const double pseudocount;
   static const double zoops_threshold;
