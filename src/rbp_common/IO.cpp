@@ -824,13 +824,12 @@ loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
       diag_counts.push_back(st_val + 0.01);
       total += st_val;
     }
-    double total_di_with_psuedo_count = std::accumulate(diag_counts.begin(),
-                                                        diag_counts.end(), 0.0);
+    double max_peak = *std::max_element(diag_counts.begin(), diag_counts.end());
 
     // scale the counts up using epsilon
-    double min_val = (epsilon * total_di_with_psuedo_count);
+    double min_val = (epsilon * max_peak);
     for (size_t i = 0; i < diag_counts.size(); ++i) {
-      if (diag_counts[i] < min_val) diag_counts[i] = min_val;
+      diag_counts[i] = std::max(min_val, diag_counts[i]);
     }
     double total_di_after_scaling = std::accumulate(diag_counts.begin(),
                                                     diag_counts.end(), 0.0);

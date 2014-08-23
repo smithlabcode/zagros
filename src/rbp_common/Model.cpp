@@ -47,7 +47,7 @@ const double Model::zoops_threshold = 0;
 const double Model::DEFAULT_GEO_P = 0.4;
 const double Model::MAX_GEO_P = 0.99;
 const double Model::MIN_GEO_P = 0.01;
-const double Model::DE_WEIGHT = 0.7;
+const double Model::DE_WEIGHT = 1;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -711,6 +711,13 @@ get_numerator_seq_str_de_for_site(const string &seq,
     assert(std::isfinite(num));
   }
 
+  num += log(gamma);
+
+
+  double oldnum = num;
+  if (Model::DEBUG_LEVEL >= 3)
+    cerr << "\tlog prob before des: " << num << "; ";
+
   if (diagnostic_events.size() > 0) {
     vector<double> powers;
     for (size_t j = 0; j < seq.length(); j++)
@@ -718,7 +725,9 @@ get_numerator_seq_str_de_for_site(const string &seq,
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
 
-  num += log(gamma);
+  if (Model::DEBUG_LEVEL >= 3)
+    cerr << "\tlog prob after des: " << num << " diff = " << (num-oldnum) << endl;
+
 }
 
 /***
@@ -752,6 +761,8 @@ expectation_seq_str_de_for_single_seq(const string &seq,
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i) {
+    if (Model::DEBUG_LEVEL >= 3)
+      cerr << "loc  " << i << " = " << seq.substr(i,6) << endl;
     get_numerator_seq_str_de_for_site(seq, secondary_structure,
                                       diagnostic_events, matrix, motif_sec_str,
                                       freqs, f_sec_str, geo_p, geo_delta, gamma,
@@ -786,8 +797,11 @@ expectation_seq_str_de_for_single_seq(const string &seq,
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
   assert(std::isfinite(denominator));
-  for (size_t i = 0; i < site_indic.size(); ++i)
-    site_indic[i] = exp(numerator[i] - denominator);
+  for (size_t i = 0; i < site_indic.size(); ++i) {
+    site_indic[i] = std::max(std::numeric_limits<double>::min(), exp(numerator[i] - denominator));
+    /*cerr << "setting site indic at " << i << " to log prob "
+         << numerator[i] - denominator << " == prob " << site_indic[i] << endl;*/
+  }
 
   seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
   assert(std::isfinite(seq_indic));
@@ -849,7 +863,7 @@ expectation_seq_de_for_single_seq(const string &seq,
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
   for (size_t i = 0; i < site_indic.size(); ++i) {
-    site_indic[i] = exp(numerator[i] - denominator);
+    site_indic[i] = std::max(std::numeric_limits<double>::min(), exp(numerator[i] - denominator));
     assert(std::isfinite(site_indic[i]));
   }
 
@@ -941,12 +955,35 @@ expectation_seq_str_de(const vector<string> &sequences,
                        const double gamma,
                        vector<vector<double> > &site_indic,
                        vector<double> &seq_indic) {
-  for (size_t i = 0; i < sequences.size(); i++)
+  if (Model::DEBUG_LEVEL >= 3)
+    cerr << "performing expectation step with matrix " << endl
+         << matrixToString(matrix) << endl;
+  for (size_t i = 0; i < sequences.size(); i++) {
+    if (Model::DEBUG_LEVEL >= 3) {
+      cerr << "for seq " << i << endl;
+      cerr << "des: ";
+      for (size_t j = 0; j < diagnostic_events[i].size(); ++j)
+        cerr << diagnostic_events[i][j] << ", ";
+      cerr << endl;
+    }
     expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
                                           diagnostic_events[i], matrix,
                                           motif_sec_str, freqs, f_sec_str,
                                           geo_p, geo_delta, gamma,
                                           site_indic[i], seq_indic[i]);
+    if (Model::DEBUG_LEVEL >= 3) {
+      cerr << "site indicators after exp step: ";
+      for (size_t j = 0; j < site_indic[i].size(); ++j)
+        cerr << site_indic[i][j] << ", ";
+      size_t best_loc = std::distance(site_indic[i].begin(),
+                                      max_element(site_indic[i].begin(),
+                                                  site_indic[i].end()));
+      cerr << endl;
+      cerr << "most likely occurrence at location " << best_loc << " with prob "
+           << site_indic[i][best_loc] << " has seq "
+           << sequences[i].substr(best_loc,6) << endl;
+    }
+  }
 }
 
 /******************************************************************************
