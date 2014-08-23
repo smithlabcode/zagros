@@ -813,7 +813,7 @@ loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
     // parsing the line into a vector of counts ---------------->
     // get the raw counts, with a pseudo-count added, and remember the total
     // number of DEs in this sequence, before scaling, but after psuedo-count
-    vector<size_t> diag_counts;
+    vector<double> diag_counts;
     for (size_t i = 0; i < parts.size(); ++i) {
       // convert the string to a size_t, being careful to check for vals < 0
       int t_val = atoi(parts[i].c_str());
@@ -821,19 +821,19 @@ loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
         throw SMITHLABException("line contains negative counts: " +\
                                 string(buffer));
       size_t st_val = static_cast<size_t>(t_val);
-      diag_counts.push_back(st_val + 1);
+      diag_counts.push_back(st_val + 0.01);
       total += st_val;
     }
-    size_t total_di_with_psuedo_count = std::accumulate(diag_counts.begin(),
-                                                        diag_counts.end(), 0);
+    double total_di_with_psuedo_count = std::accumulate(diag_counts.begin(),
+                                                        diag_counts.end(), 0.0);
 
     // scale the counts up using epsilon
-    size_t min_val = static_cast<size_t> (epsilon * total_di_with_psuedo_count);
+    double min_val = (epsilon * total_di_with_psuedo_count);
     for (size_t i = 0; i < diag_counts.size(); ++i) {
       if (diag_counts[i] < min_val) diag_counts[i] = min_val;
     }
-    size_t total_di_after_scaling = std::accumulate(diag_counts.begin(),
-                                                    diag_counts.end(), 0);
+    double total_di_after_scaling = std::accumulate(diag_counts.begin(),
+                                                    diag_counts.end(), 0.0);
     if (DEBUG) {
       std::cerr << "after scalling:" << endl;
       for (size_t i = 0; i < diag_counts.size(); ++i) {
