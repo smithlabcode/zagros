@@ -821,7 +821,7 @@ loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
         throw SMITHLABException("line contains negative counts: " +\
                                 string(buffer));
       size_t st_val = static_cast<size_t>(t_val);
-      diag_counts.push_back(st_val + 0.01);
+      diag_counts.push_back(st_val + 1.0);
       total += st_val;
     }
     double max_peak = *std::max_element(diag_counts.begin(), diag_counts.end());

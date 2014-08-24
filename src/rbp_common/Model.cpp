@@ -47,7 +47,7 @@ const double Model::zoops_threshold = 0;
 const double Model::DEFAULT_GEO_P = 0.4;
 const double Model::MAX_GEO_P = 0.99;
 const double Model::MIN_GEO_P = 0.01;
-const double Model::DE_WEIGHT = 1;
+const double Model::DE_WEIGHT = 5;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -463,7 +463,6 @@ de_log_like(const vector<vector<double> > &diagEvents,
     for (size_t j = 0; j < siteInd[i].size(); ++j) {
       vector<double> sum;
       for (size_t l = 0; l < diagEvents[i].size(); ++l) {
-        double t1 = log(diagEvents[i][l]);
         double prior_log_prob = log(diagEvents[i][l]) * Model::DE_WEIGHT;
         double geo_log_prob = geoP + (abs(l - (j + geoDelta)) * log(1.0 - geoP));
         double term = prior_log_prob + geo_log_prob;
@@ -514,8 +513,8 @@ maximization_geoP(const vector<vector<double> > &diagEvents,
 }
 
 
-/***
- * \summary given a set of diagnostic event locations within sequences, and
+/**
+ * \brief   given a set of diagnostic event locations within sequences, and
  *          both indicators on the probability of motif occurrence at each
  *          position within each sequence and the probability that each
  *          sequence has a motif, calculate the MLE estimate for the geometric
@@ -542,39 +541,68 @@ maximization_de(const vector<vector<double> > &diagEvents,
                 const vector<double> &seqInd,
                 vector<vector<double> > &matrix,
                 double &geoP,
-                int &geoDelta) {
-  bool first = true;
-  int best_delta = 0;
-  double best_delta_ll = 0.0;
-  double best_geoP = 0.0;
-
-  for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
-    if (Model::DEBUG_LEVEL >= 1)
-      cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
+                int &geoDelta,
+                const bool max_geo,
+                const bool max_delta) {
+  if ((!max_geo) && (!max_delta)) return;
+  if ((max_geo) && (!max_delta)) {
     maximization_geoP(diagEvents, siteInd, seqInd, matrix, geoP, geoDelta);
-    double ll_delta_param = de_log_like(diagEvents, siteInd, seqInd,
-                                        geoP, geoDelta);
-    if (Model::DEBUG_LEVEL >= 1)
-      cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
-    if ((ll_delta_param > best_delta_ll) || (first)) {
-      best_delta_ll = ll_delta_param;
-      best_delta = geoDelta;
-      best_geoP = geoP;
-      first = false;
+  }
+  if ((!max_geo) && (max_delta)) {
+    bool first = true;
+    int best_delta = 0;
+    double best_delta_ll = 0.0;
+    for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
       if (Model::DEBUG_LEVEL >= 1)
-        cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
-             << " with LL " << best_delta_ll << endl;
+        cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
+      double ll_delta_param = de_log_like(diagEvents, siteInd, seqInd,
+                                          geoP, geoDelta);
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
+      if ((ll_delta_param > best_delta_ll) || (first)) {
+        best_delta_ll = ll_delta_param;
+        best_delta = geoDelta;
+        first = false;
+        if (Model::DEBUG_LEVEL >= 1)
+          cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
+               << " with LL " << best_delta_ll << endl;
+      }
+    }
+    geoDelta = best_delta;
+  }
+  if ((max_geo) && (max_delta)) {
+    bool first = true;
+    int best_delta = 0;
+    double best_delta_ll = 0.0;
+    double best_geoP = 0.0;
+
+    for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
+      maximization_geoP(diagEvents, siteInd, seqInd, matrix, geoP, geoDelta);
+      double ll_delta_param = de_log_like(diagEvents, siteInd, seqInd,
+                                          geoP, geoDelta);
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
+      if ((ll_delta_param > best_delta_ll) || (first)) {
+        best_delta_ll = ll_delta_param;
+        best_delta = geoDelta;
+        best_geoP = geoP;
+        first = false;
+        if (Model::DEBUG_LEVEL >= 1)
+          cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
+               << " with LL " << best_delta_ll << endl;
+      }
+    }
+
+    // use best delta to set geo_p
+    geoDelta = best_delta;
+    geoP = best_geoP;
+    if (Model::DEBUG_LEVEL >= 1) {
+      cerr << "\t\tSET DELTA TO " << geoDelta << endl;
+      cerr << "\t\tSET GEO_P TO " << geoP << endl;
     }
   }
-
-  // use best delta to set geo_p
-  geoDelta = best_delta;
-  geoP = best_geoP;
-  if (Model::DEBUG_LEVEL >= 1) {
-    cerr << "\t\tSET DELTA TO " << geoDelta << endl;
-    cerr << "\t\tSET GEO_P TO " << geoP << endl;
-  }
-
 }
 
 
@@ -596,7 +624,8 @@ get_numerator_seq_de_for_site(const string &seq,
                               const int geo_delta,
                               const double gamma,
                               const size_t site,
-                              double &num) {
+                              double &num,
+                              const double de_weight) {
   // the log-likelihood of a nucleotide in the foreground (motif) if it is
   // an N. We make this pretty bad, but be careful to make sure we could sum
   // this across all positions of the matrix without causing an overflow.
@@ -639,7 +668,7 @@ get_numerator_seq_de_for_site(const string &seq,
   if (diagEvents.size() > 0) {
     vector<double> powers;
     for (size_t j = 0; j < seq.length(); j++)
-      powers.push_back((log(diagEvents[j]) * Model::DE_WEIGHT) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+      powers.push_back((log(diagEvents[j]) * de_weight) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
   num += log(gamma);
@@ -660,7 +689,8 @@ get_numerator_seq_str_de_for_site(const string &seq,
                                const int geo_delta,
                                const double gamma,
                                const size_t site,
-                               double &num) {
+                               double &num,
+                               const double de_weight) {
   const double N_LOG_PROB = -10000;
 
   // calculating the contribution of the foreground and the powers
@@ -721,7 +751,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
   if (diagnostic_events.size() > 0) {
     vector<double> powers;
     for (size_t j = 0; j < seq.length(); j++)
-      powers.push_back((log(diagnostic_events[j]) * Model::DE_WEIGHT) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+      powers.push_back((log(diagnostic_events[j]) * de_weight) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
 
@@ -746,7 +776,8 @@ expectation_seq_str_de_for_single_seq(const string &seq,
                                       const int geo_delta,
                                       const double gamma,
                                       vector<double> &site_indic,
-                                      double &seq_indic) {
+                                      double &seq_indic,
+                                      const double de_weight) {
   // used to stop values reaching exactly zero and then taking their log..
   const double TINY = 1e-100;
 
@@ -766,7 +797,7 @@ expectation_seq_str_de_for_single_seq(const string &seq,
     get_numerator_seq_str_de_for_site(seq, secondary_structure,
                                       diagnostic_events, matrix, motif_sec_str,
                                       freqs, f_sec_str, geo_p, geo_delta, gamma,
-                                      i, numerator[i]);
+                                      i, numerator[i], de_weight);
     assert(std::isfinite(numerator[i]));
   }
 
@@ -820,7 +851,8 @@ expectation_seq_de_for_single_seq(const string &seq,
                                   const int geo_delta,
                                   const double gamma,
                                   vector<double> &site_indic,
-                                  double &seq_indic) {
+                                  double &seq_indic,
+                                  const double de_weight) {
   // used to stop values reaching exactly zero and then taking their log..
   const double TINY = 1e-100;
 
@@ -836,7 +868,7 @@ expectation_seq_de_for_single_seq(const string &seq,
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i) {
     get_numerator_seq_de_for_site(seq, diagnostic_events, matrix, freqs, geo_p,
-                                  geo_delta, gamma, i, numerator[i]);
+                                  geo_delta, gamma, i, numerator[i], de_weight);
     assert(std::isfinite(numerator[i]));
   }
 
@@ -896,7 +928,8 @@ expectation_for_single_seq(const string &seq,
   const double geoP = 1;
   const int geoDelta = 0;
   expectation_seq_de_for_single_seq(seq, diagEvents, matrix, freqs, geoP,
-                                    geoDelta, gamma, site_indic, seq_indic);
+                                    geoDelta, gamma, site_indic, seq_indic, 1);
+
 }
 
 /***
@@ -931,10 +964,26 @@ expectation_seq_de(const vector<string> &sequences,
   if (Model::DEBUG_LEVEL >= 2)
     cerr << "performing expectation step with matrix " << endl
          << matrixToString(matrix) << endl;
-  for (size_t i = 0; i < sequences.size(); i++)
+  for (size_t i = 0; i < sequences.size(); i++) {
+    vector<double> old_site_indic (site_indic[i]);
+    double old_seq_indic (seq_indic[i]);
     expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
                                       matrix, freqs, geo_p, geo_delta, gamma,
-                                      site_indic[i], seq_indic[i]);
+                                      site_indic[i], seq_indic[i], Model::DE_WEIGHT);
+    // re-normalise the site and seq indicators using DE weight of 1 if we
+    // used some other weight.
+    if (Model::DE_WEIGHT != 1) {
+      expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
+                                        matrix, freqs, geo_p, geo_delta, gamma,
+                                        old_site_indic, old_seq_indic, 1);
+      double gamma_ratio = old_seq_indic / seq_indic[i];
+      seq_indic[i] = 0;
+      for (size_t j = 0; j < site_indic[i].size(); ++j) {
+        site_indic[i][j] = site_indic[i][j] * gamma_ratio;
+        seq_indic[i] += site_indic[i][j];
+      }
+    }
+  }
   if (Model::DEBUG_LEVEL >= 2)
     cerr << "finished expectation step" << endl;
 }
@@ -966,11 +1015,30 @@ expectation_seq_str_de(const vector<string> &sequences,
         cerr << diagnostic_events[i][j] << ", ";
       cerr << endl;
     }
+
+    vector<double> old_site_indic (site_indic[i]);
+    double old_seq_indic (seq_indic[i]);
     expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
                                           diagnostic_events[i], matrix,
                                           motif_sec_str, freqs, f_sec_str,
                                           geo_p, geo_delta, gamma,
-                                          site_indic[i], seq_indic[i]);
+                                          site_indic[i], seq_indic[i], Model::DE_WEIGHT);
+    // re-normalise the site and seq indicators using DE weight of 1 if we
+    // used some other weight.
+    if (Model::DE_WEIGHT != 1) {
+      expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
+                                            diagnostic_events[i], matrix,
+                                            motif_sec_str, freqs, f_sec_str,
+                                            geo_p, geo_delta, gamma,
+                                            old_site_indic, old_seq_indic, 1);
+      double gamma_ratio = old_seq_indic / seq_indic[i];
+      seq_indic[i] = 0;
+      for (size_t j = 0; j < site_indic[i].size(); ++j) {
+        site_indic[i][j] = site_indic[i][j] * gamma_ratio;
+        seq_indic[i] += site_indic[i][j];
+      }
+    }
+
     if (Model::DEBUG_LEVEL >= 3) {
       cerr << "gamma is " << gamma << endl;
       cerr << "site indicators after exp step: ";
@@ -1315,7 +1383,8 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
     if (diagEvents.front().size() > 0) {
       if (Model::DEBUG_LEVEL >= 1) cerr << "\tDE MAX. STEP" << endl;
-      maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta);
+      maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta,
+                      this->opt_geo, this->opt_delta);
     }
     if (Model::DEBUG_LEVEL >= 1) cerr << "\tCALC. LOG-LIKE" << endl;
     score = calculate_zoops_log_l(seqs, diagEvents, site_indic, seq_indic);
@@ -1365,7 +1434,8 @@ Model::expectationMax_SeqStrDE(const vector<string> &seqs,
     maximization_seq(seqs, siteInd, seqInd, matrix, f, gamma);
     maximization_str(secStr, siteInd, seqInd, matrix, motif_sec_str, f_sec_str);
     if (diagEvents.front().size() > 0) {
-      maximization_de(diagEvents, siteInd, seqInd, matrix, p, delta);
+      maximization_de(diagEvents, siteInd, seqInd, matrix, p, delta,
+                      this->opt_geo, this->opt_delta);
     }
     score = calculate_zoops_log_l(seqs, secStr, diagEvents, siteInd, seqInd);
     if (!first) {

@@ -45,6 +45,8 @@ struct Model {
               smithlab::alphabet_size, 1.0 / smithlab::alphabet_size)) {
     useStructure = false;
     useDEs = false;
+    opt_delta = true;
+    opt_geo = true;
   }
 
   void
@@ -135,6 +137,10 @@ struct Model {
   bool useStructure;
   bool useDEs;
 
+  // flags for what to optimise
+  bool opt_delta;
+  bool opt_geo;
+
   // class constants (probably some should be adjustable)
   static const double DE_WEIGHT;
 
@@ -152,7 +158,7 @@ struct Model {
   static const int DEFAULT_DELTA = 0;
   static const bool HOLD_DELTA_FIXED = true;
 
-  static const size_t DEBUG_LEVEL = 2;
+  static const size_t DEBUG_LEVEL = 1;
 };
 
 #endif

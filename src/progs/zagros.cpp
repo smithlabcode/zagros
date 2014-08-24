@@ -500,6 +500,8 @@ int main(int argc, const char **argv) {
     string indicators_file = "";
     double epsilon = 0;
     size_t numStartingPoints = 3;
+    size_t delta = -1;
+    double geo = 0;
 
     /****************** COMMAND LINE OPTIONS ********************/
     // TODO -- PJU: some options below don't have their defaults specified,
@@ -524,6 +526,16 @@ int main(int argc, const char **argv) {
                       "with fewer than this fraction of all DEs in a sequence."
                       "default: " + toa(epsilon) +  ")",
                       OptionParser::OPTIONAL, epsilon);
+    opt_parse.add_opt("delta", 'l', "provide a fixed value for delta, the "
+                      "offset of cross-linking site from motif occurrences. "
+                      "-8 <= l <= 8; if omitted, delta is optimised using an "
+                      "exhaustive search", OptionParser::OPTIONAL, delta);
+    opt_parse.add_opt("geo", 'g', "provide a fixed value for the geometric "
+                      "distribution parameter for the distirbution of "
+                      "cross-link sites around motif occurrences. "
+                      "0 < g < 1; if omitted, this parameter is optimised using "
+                      "the Newton-Raphson algorithm",
+                      OptionParser::OPTIONAL, geo);
     opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
                       "each sequence and motif to this file",
                       OptionParser::OPTIONAL, indicators_file);
@@ -638,6 +650,14 @@ int main(int argc, const char **argv) {
       for (size_t j = 0; j < numStartingPoints; ++j) {
         Model model_l;
         Model::set_model_by_word(Model::pseudocount, top_kmers[j].kmer, model_l);
+        if (delta != -1) {
+          model_l.delta = delta;
+          model_l.opt_delta = false;
+        }
+        if (geo != 0) {
+          model.p = geo;
+          model.opt_geo = false;
+        }
         if (!reads_file.empty())
           model_l.useDEs = true;
         model_l.p = 0.5;
