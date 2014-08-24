@@ -655,8 +655,8 @@ int main(int argc, const char **argv) {
           model_l.opt_delta = false;
         }
         if (geo != 0) {
-          model.p = geo;
-          model.opt_geo = false;
+          model_l.p = geo;
+          model_l.opt_geo = false;
         }
         if (!reads_file.empty())
           model_l.useDEs = true;

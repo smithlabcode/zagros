@@ -745,7 +745,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
 
 
   double oldnum = num;
-  if (Model::DEBUG_LEVEL >= 3)
+  if (Model::DEBUG_LEVEL >= 4)
     cerr << "\tlog prob before des: " << num << "; ";
 
   if (diagnostic_events.size() > 0) {
@@ -755,7 +755,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
     num += smithlab::log_sum_log_vec(powers, powers.size());
   }
 
-  if (Model::DEBUG_LEVEL >= 3)
+  if (Model::DEBUG_LEVEL >= 4)
     cerr << "\tlog prob after des: " << num << " diff = " << (num-oldnum) << endl;
 
 }
@@ -792,7 +792,7 @@ expectation_seq_str_de_for_single_seq(const string &seq,
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i) {
-    if (Model::DEBUG_LEVEL >= 3)
+    if (Model::DEBUG_LEVEL >= 4)
       cerr << "loc  " << i << " = " << seq.substr(i,6) << endl;
     get_numerator_seq_str_de_for_site(seq, secondary_structure,
                                       diagnostic_events, matrix, motif_sec_str,
@@ -967,7 +967,7 @@ expectation_seq_de(const vector<string> &sequences,
   for (size_t i = 0; i < sequences.size(); i++) {
     vector<double> old_site_indic (site_indic[i]);
     double old_seq_indic (seq_indic[i]);
-    expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
+    expectation_seq_de_for_single_seq(sequences[i], vector<double>(),
                                       matrix, freqs, geo_p, geo_delta, gamma,
                                       site_indic[i], seq_indic[i], Model::DE_WEIGHT);
     // re-normalise the site and seq indicators using DE weight of 1 if we
@@ -1027,7 +1027,7 @@ expectation_seq_str_de(const vector<string> &sequences,
     // used some other weight.
     if (Model::DE_WEIGHT != 1) {
       expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
-                                            diagnostic_events[i], matrix,
+                                            vector<double>(), matrix,
                                             motif_sec_str, freqs, f_sec_str,
                                             geo_p, geo_delta, gamma,
                                             old_site_indic, old_seq_indic, 1);
@@ -1057,10 +1057,10 @@ expectation_seq_str_de(const vector<string> &sequences,
       size_t best_de_l = std::distance(diagnostic_events[i].begin(),
                                        max_element(diagnostic_events[i].begin(),
                                                    diagnostic_events[i].end()));
-      cerr << "best DE loc is at " << best_de_l << " with "
-           << diagnostic_events[i][best_de_l] << endl;
-      //string junk;
-      //std::cin >> junk;
+      if (!diagnostic_events[0].empty()) {
+        cerr << "best DE loc is at " << best_de_l << " with "
+             << diagnostic_events[i][best_de_l] << endl;
+      }
     }
   }
 }
