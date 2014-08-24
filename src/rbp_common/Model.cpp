@@ -479,7 +479,7 @@ de_log_like(const vector<vector<double> > &diagEvents,
            << siteInd[i][j] << " = "
            << (smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j])
            << endl;*/
-      res += (smithlab::log_sum_log_vec(sum, sum.size() * siteInd[i][j]));
+      res += (smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j]);
     }
     /*cerr << "ll so far: " << res << endl;
     std::cin >> junk;*/
@@ -972,6 +972,7 @@ expectation_seq_str_de(const vector<string> &sequences,
                                           geo_p, geo_delta, gamma,
                                           site_indic[i], seq_indic[i]);
     if (Model::DEBUG_LEVEL >= 3) {
+      cerr << "gamma is " << gamma << endl;
       cerr << "site indicators after exp step: ";
       for (size_t j = 0; j < site_indic[i].size(); ++j)
         cerr << site_indic[i][j] << ", ";
@@ -979,9 +980,19 @@ expectation_seq_str_de(const vector<string> &sequences,
                                       max_element(site_indic[i].begin(),
                                                   site_indic[i].end()));
       cerr << endl;
+      cerr << "sum of indicators: "
+           << std::accumulate(site_indic[i].begin(), site_indic[i].end(), 0.0)
+           << endl;
       cerr << "most likely occurrence at location " << best_loc << " with prob "
            << site_indic[i][best_loc] << " has seq "
            << sequences[i].substr(best_loc,6) << endl;
+      size_t best_de_l = std::distance(diagnostic_events[i].begin(),
+                                       max_element(diagnostic_events[i].begin(),
+                                                   diagnostic_events[i].end()));
+      cerr << "best DE loc is at " << best_de_l << " with "
+           << diagnostic_events[i][best_de_l] << endl;
+      //string junk;
+      //std::cin >> junk;
     }
   }
 }
