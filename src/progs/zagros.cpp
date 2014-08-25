@@ -488,20 +488,20 @@ int main(int argc, const char **argv) {
   try {
     // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
-
+    static const double GEO_P_DEFAULT = 0.2;
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
-    size_t n_motifs = 1;
+    size_t n_motifs = 10;
     string outfile;
     string chrom_dir = "";
     string structure_file;
     string reads_file;
     string indicators_file = "";
     double epsilon = 0;
-    size_t numStartingPoints = 3;
-    size_t delta = -1;
-    double geo = 0;
+    size_t numStartingPoints = 1;
+    string delta = "NotApp";
+    bool geo = false;
 
     /****************** COMMAND LINE OPTIONS ********************/
     // TODO -- PJU: some options below don't have their defaults specified,
@@ -513,7 +513,7 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, outfile);
     opt_parse.add_opt("width", 'w', "width of motifs to find (4 <= w <= 12; "
                       "default: 6)", OptionParser::OPTIONAL, motif_width);
-    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 1)",
+    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 10)",
                       OptionParser::OPTIONAL, n_motifs);
     opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)",
                       OptionParser::OPTIONAL, chrom_dir);
@@ -530,18 +530,19 @@ int main(int argc, const char **argv) {
                       "offset of cross-linking site from motif occurrences. "
                       "-8 <= l <= 8; if omitted, delta is optimised using an "
                       "exhaustive search", OptionParser::OPTIONAL, delta);
-    opt_parse.add_opt("geo", 'g', "provide a fixed value for the geometric "
-                      "distribution parameter for the distirbution of "
-                      "cross-link sites around motif occurrences. "
-                      "0 < g < 1; if omitted, this parameter is optimised using "
-                      "the Newton-Raphson algorithm",
+    opt_parse.add_opt("geo", 'g', "optimize the geometric distribution"
+                      "parameter for the distirbution of cross-link "
+                      "sites around motif occurrences, using the "
+                      "Newton-Raphson algorithm. If omitted, this "
+                      "parameter is not optimised and is set to a "
+                      "empirically pre-determined default value.",
                       OptionParser::OPTIONAL, geo);
     opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
                       "each sequence and motif to this file",
                       OptionParser::OPTIONAL, indicators_file);
     opt_parse.add_opt("starting-points", 's', "number of starting points to try"
                       " for EM search. Higher values will be slower, but more"
-                      " likely to find the global maximum.",
+                      " likely to find the global maximum (default: 1)",
                       OptionParser::OPTIONAL, numStartingPoints);
     opt_parse.add_opt("verbose", 'v', "print more run info",
                       OptionParser::OPTIONAL, VERBOSE);
@@ -567,6 +568,14 @@ int main(int argc, const char **argv) {
     if ((epsilon < 0) || (epsilon > 1)) {
       cerr << "diagEventsThresh option must be between 0 and 1" << endl;
       return EXIT_SUCCESS;
+    }
+    if (delta!="0" && atoi(delta.c_str())==0 && delta != "NotApp") {
+      cerr << "Delta parameter is not valid!" << endl;
+      return EXIT_SUCCESS;
+    } else if (delta!="0" && atoi(delta.c_str())!=0 && 
+               ((atoi(delta.c_str()) < -8) || (atoi(delta.c_str()) > 8))) {
+      cerr << "delta parameter should be between -8 and 8" << endl;
+       return EXIT_SUCCESS;
     }
     if (leftover_args.size() != 1) {
       cerr << "Zagros requires one input file, found "
@@ -650,17 +659,17 @@ int main(int argc, const char **argv) {
       for (size_t j = 0; j < numStartingPoints; ++j) {
         Model model_l;
         Model::set_model_by_word(Model::pseudocount, top_kmers[j].kmer, model_l);
-        if (delta != -1) {
-          model_l.delta = delta;
-          model_l.opt_delta = false;
-        }
-        if (geo != 0) {
-          model_l.p = geo;
+        if (!geo) {
+          model_l.p = GEO_P_DEFAULT;
           model_l.opt_geo = false;
+        } else
+          model_l.p = 0.5;
+        if (delta != "NotApp") {
+          model_l.delta = atoi(delta.c_str());
+          model_l.opt_delta = false;
         }
         if (!reads_file.empty())
           model_l.useDEs = true;
-        model_l.p = 0.5;
         model_l.gamma = ((seqs.size() -
 			  (zoops_expansion_factor*
 			   (seqs.size() - top_kmers[j].observed)))/
