@@ -932,15 +932,15 @@ expectation_seq_de(const vector<string> &sequences,
   for (size_t i = 0; i < sequences.size(); i++) {
     vector<double> old_site_indic (site_indic[i]);
     double old_seq_indic (seq_indic[i]);
-    expectation_seq_de_for_single_seq(sequences[i], vector<double>(),
+    expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
                                       matrix, freqs, geo_p, geo_delta, gamma,
                                       site_indic[i], seq_indic[i], Model::DE_WEIGHT);
     // re-normalise the site and seq indicators using DE weight of 1 if we
     // used some other weight.
-    if (Model::DE_WEIGHT != 1) {
-      expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
+    if (Model::DE_WEIGHT != 1.0) {
+      expectation_seq_de_for_single_seq(sequences[i], vector<double>(),
                                         matrix, freqs, geo_p, geo_delta, gamma,
-                                        old_site_indic, old_seq_indic, 1);
+                                        old_site_indic, old_seq_indic, 1.0);
       double gamma_ratio = old_seq_indic / seq_indic[i];
       seq_indic[i] = 0;
       for (size_t j = 0; j < site_indic[i].size(); ++j) {
@@ -988,18 +988,20 @@ expectation_seq_str_de(const vector<string> &sequences,
                                           motif_sec_str, freqs, f_sec_str,
                                           geo_p, geo_delta, gamma,
                                           site_indic[i], seq_indic[i], Model::DE_WEIGHT);
-    // re-normalise the site and seq indicators using DE weight of 1 if we
-    // used some other weight.
-    expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
-                                          vector<double>(), matrix,
-                                          motif_sec_str, freqs, f_sec_str,
-                                          geo_p, geo_delta, gamma,
-                                          old_site_indic, old_seq_indic, 1.0);
-    double gamma_ratio = old_seq_indic / seq_indic[i];
-    seq_indic[i] = 0;
-    for (size_t j = 0; j < site_indic[i].size(); ++j) {
-      site_indic[i][j] = site_indic[i][j] * gamma_ratio;
-      seq_indic[i] += site_indic[i][j];
+    if (Model::DE_WEIGHT != 1.0) {
+      // re-normalise the site and seq indicators using DE weight of 1 if we
+      // used some other weight.
+      expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
+                                            vector<double>(), matrix,
+                                            motif_sec_str, freqs, f_sec_str,
+                                            geo_p, geo_delta, gamma,
+                                            old_site_indic, old_seq_indic, 1.0);
+      double gamma_ratio = old_seq_indic / seq_indic[i];
+      seq_indic[i] = 0;
+      for (size_t j = 0; j < site_indic[i].size(); ++j) {
+        site_indic[i][j] = site_indic[i][j] * gamma_ratio;
+        seq_indic[i] += site_indic[i][j];
+      }
     }
 
     if (Model::DEBUG_LEVEL >= 3) {
