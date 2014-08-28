@@ -44,10 +44,10 @@ using smithlab::alphabet_size;
 const double Model::pseudocount = 0.1;
 const double Model::tolerance = 1e-10;
 const double Model::zoops_threshold = 0;
-const double Model::DEFAULT_GEO_P = 0.4;
+const double Model::DEFAULT_GEO_P = 0.135;
 const double Model::MAX_GEO_P = 0.99;
 const double Model::MIN_GEO_P = 0.01;
-const double Model::DE_WEIGHT = 5;
+const double Model::DE_WEIGHT = 5.0;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -452,14 +452,8 @@ de_log_like(const vector<vector<double> > &diagEvents,
             const vector<double> &seqInd,
             double &geoP,
             int &geoDelta) {
-  string junk;
   double res = 0;
   for(size_t i = 0; i < diagEvents.size(); ++i) {
-    /*cerr << "diag events for sequence " << i << endl;
-    for (size_t j = 0; j < diagEvents[i].size(); ++j)
-      cerr << diagEvents[i][j] << ", ";
-    cerr << endl;
-    std::cin >> junk;*/
     for (size_t j = 0; j < siteInd[i].size(); ++j) {
       vector<double> sum;
       for (size_t l = 0; l < diagEvents[i].size(); ++l) {
@@ -467,21 +461,10 @@ de_log_like(const vector<vector<double> > &diagEvents,
         double geo_log_prob = geoP + (abs(l - (j + geoDelta)) * log(1.0 - geoP));
         double term = prior_log_prob + geo_log_prob;
         assert(std::isfinite(term));
-        /*cerr << "given that the motif in seq " << i << " is at pos " << j
-             << " the prob that the cross-link is at " << l << " is "
-             << exp(term) << " which is the prior, " << exp(prior_log_prob)
-             << " times the geo_prob, " << exp(geo_log_prob) << endl;*/
         sum.push_back(term);
       }
-      /*cerr << "ll term far seq " << i << " at loc " << j << " is log-prob: "
-           << smithlab::log_sum_log_vec(sum, sum.size()) << " times site ind "
-           << siteInd[i][j] << " = "
-           << (smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j])
-           << endl;*/
       res += (smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j]);
     }
-    /*cerr << "ll so far: " << res << endl;
-    std::cin >> junk;*/
   }
   assert(std::isfinite(res));
   return res;
@@ -814,14 +797,6 @@ expectation_seq_str_de_for_single_seq(const string &seq,
         * log(freqs[base] * (1.0 - f_sec_str)));
   }
 
-/*  if (diagnostic_events.size() > 0) {
-    vector<double> powers;
-    for (size_t site = 0; site < site_indic.size(); ++site)
-      for (size_t j = 0; j < seq.length(); j++)
-        powers.push_back(log((1.0/site_indic.size())) + log(diagnostic_events[j]) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
-    no_motif += smithlab::log_sum_log_vec(powers, powers.size());;
-  }*/
-
   const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
   numerator.push_back(no_motif + log(fracSeqsWithoutMotif));
 
@@ -830,8 +805,6 @@ expectation_seq_str_de_for_single_seq(const string &seq,
   assert(std::isfinite(denominator));
   for (size_t i = 0; i < site_indic.size(); ++i) {
     site_indic[i] = std::max(std::numeric_limits<double>::min(), exp(numerator[i] - denominator));
-    /*cerr << "setting site indic at " << i << " to log prob "
-         << numerator[i] - denominator << " == prob " << site_indic[i] << endl;*/
   }
 
   seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
@@ -880,14 +853,6 @@ expectation_seq_de_for_single_seq(const string &seq,
     assert(base < alphabet_size);
     no_motif += log(freqs[base]);
   }
-
-/*   if (diagnostic_events.size() > 0) {
-    vector<double> powers;
-    for (size_t site = 0; site < site_indic.size(); ++site)
-      for (size_t j = 0; j < seq.length(); j++)
-        powers.push_back(log((1.0/site_indic.size())) + log(diagnostic_events[j]) + log(geo_p) + (abs(j - (site + geo_delta)) * log(1.0-geo_p)));
-    no_motif += smithlab::log_sum_log_vec(powers, powers.size());
-  }*/
 
   const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
   numerator.push_back(no_motif + log(fracSeqsWithoutMotif));
@@ -1025,18 +990,16 @@ expectation_seq_str_de(const vector<string> &sequences,
                                           site_indic[i], seq_indic[i], Model::DE_WEIGHT);
     // re-normalise the site and seq indicators using DE weight of 1 if we
     // used some other weight.
-    if (Model::DE_WEIGHT != 1) {
-      expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
-                                            vector<double>(), matrix,
-                                            motif_sec_str, freqs, f_sec_str,
-                                            geo_p, geo_delta, gamma,
-                                            old_site_indic, old_seq_indic, 1);
-      double gamma_ratio = old_seq_indic / seq_indic[i];
-      seq_indic[i] = 0;
-      for (size_t j = 0; j < site_indic[i].size(); ++j) {
-        site_indic[i][j] = site_indic[i][j] * gamma_ratio;
-        seq_indic[i] += site_indic[i][j];
-      }
+    expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
+                                          vector<double>(), matrix,
+                                          motif_sec_str, freqs, f_sec_str,
+                                          geo_p, geo_delta, gamma,
+                                          old_site_indic, old_seq_indic, 1.0);
+    double gamma_ratio = old_seq_indic / seq_indic[i];
+    seq_indic[i] = 0;
+    for (size_t j = 0; j < site_indic[i].size(); ++j) {
+      site_indic[i][j] = site_indic[i][j] * gamma_ratio;
+      seq_indic[i] += site_indic[i][j];
     }
 
     if (Model::DEBUG_LEVEL >= 3) {
@@ -1190,16 +1153,6 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       has_no_motif += log(f[base]);
     }
 
-/*    if (diagnostic_events[i].size() > 0) {
-      vector<double> powers;
-      for (size_t k = 0; k < site_indic[i].size(); k++) {
-        for (size_t j = 0; j < sequences[i].length(); j++) {
-          powers.push_back(log((1.0/site_indic.size())) + log(diagnostic_events[i][j]) + log(p) + (abs(j - (k + delta)) * log(1.0-p)));
-        }
-      }
-      has_no_motif += smithlab::log_sum_log_vec(powers, powers.size());
-    }
-*/
     ret += ((1.0 - seq_indic[i]) * has_no_motif);
     ret += ((1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0)));
     ret += (seq_indic[i] * log(gamma));
@@ -1271,16 +1224,6 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       assert(base < alphabet_size);
       has_no_motif += log(f[base]);
     }
-
-/*    if (diagnostic_events[i].size() > 0) {
-      vector<double> powers;
-      for (size_t k = 0; k < site_indic[i].size(); k++) {
-        for (size_t j = 0; j < sequences[i].length(); j++) {
-          powers.push_back(log((1.0/site_indic.size())) + log(diagnostic_events[i][j]) + log(p) + (abs(j - (k + delta)) * log(1.0-p)));
-        }
-      }
-      has_no_motif += smithlab::log_sum_log_vec(powers, powers.size());
-    }*/
 
     ret += ((1.0 - seq_indic[i]) * has_no_motif);
     ret += ((1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0)));

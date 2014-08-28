@@ -488,18 +488,18 @@ int main(int argc, const char **argv) {
   try {
     // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
-    static const double GEO_P_DEFAULT = 0.2;
+    static const double GEO_P_DEFAULT = 0.135;
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
-    size_t n_motifs = 10;
+    size_t n_motifs = 3;
     string outfile;
     string chrom_dir = "";
     string structure_file;
     string reads_file;
     string indicators_file = "";
     double epsilon = 0;
-    size_t numStartingPoints = 1;
+    size_t numStartingPoints = 3;
     string delta = "NotApp";
     bool geo = false;
 
@@ -632,7 +632,6 @@ int main(int argc, const char **argv) {
       if (VERBOSE)
         cerr << "DONE (FOUND " << deCount << " EVENTS IN TOTAL)" << endl;
     }
-//    downsampleDiagEvents(diagEvents, diagEventsThresh);
 
 
     // find and output each of the motifs that the user asked for.
