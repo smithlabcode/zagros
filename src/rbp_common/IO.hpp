@@ -43,7 +43,11 @@
 double
 loadDiagnosticEvents(const std::string &fn,
                      std::vector<std::vector<double> > &diagEvents,
-                     const float epsilon=0);
+                     std::vector<std::vector<std::vector<double> > > &diag_values,
+                     const float epsilon,
+                     const double de_weight,
+                     const double geo_p,
+                     const size_t w);
 
 void
 load_sequences(const std::string &targets_file,

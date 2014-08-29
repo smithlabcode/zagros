@@ -489,6 +489,7 @@ int main(int argc, const char **argv) {
     // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
     static const double GEO_P_DEFAULT = 0.135;
+    static const double de_weight = 1.0;
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
@@ -617,11 +618,13 @@ int main(int argc, const char **argv) {
 
     // Load the diagnostic events
     vector<vector<double> > diagEvents(seqs.size());
+    vector<vector<vector<double> > > diag_values(seqs.size());
     if (!reads_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING DIAGNOSTIC EVENTS... ";
       const double deCount = loadDiagnosticEvents(reads_file, diagEvents,
-                                                  epsilon);
+                                                  diag_values, epsilon,
+                                                  de_weight, GEO_P_DEFAULT, motif_width);
       if (diagEvents.size() != seqs.size()) {
         stringstream ss;
         ss << "inconsistent dimensions of sequence and diagnostic events data. "
@@ -690,16 +693,16 @@ int main(int argc, const char **argv) {
         if (VERBOSE)
           cerr << "\t" << "TRYING STARTING POINT " << (j+1) << " OF "
           << numStartingPoints << " (" << top_kmers[j].kmer << ") ... ";
-        model_l.expectationMax(seqs, diagEvents, secondary_structure,
+        model_l.expectationMax(seqs, diagEvents, diag_values, secondary_structure,
             indicators_l, has_motif_l);
         double logLike;
         if (secondary_structure.size() == 0) {
-          logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents,
+          logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents, diag_values,
                                                   indicators_l, has_motif_l);
         } else {
           logLike = model_l.calculate_zoops_log_l(original_seqs,
 						  secondary_structure,
-                                                  diagEvents, indicators_l,
+                                                  diagEvents, diag_values, indicators_l,
                                                   has_motif_l);
         }
         if (VERBOSE)

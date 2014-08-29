@@ -52,6 +52,7 @@ struct Model {
   void
   expectationMax(const std::vector<std::string> &sequences,
                  const std::vector<std::vector<double> > &diagnostic_events,
+                 const std::vector<std::vector<std::vector<double> > > &diag_values,
                  const std::vector<std::vector<double> > &secondary_structure,
                  std::vector<std::vector<double> > &site_indic,
                  std::vector<double> &seq_indic);
@@ -69,15 +70,17 @@ struct Model {
 
   void
   expectation_maximization_seq_de(const std::vector<std::string> &sequences,
-                                   const std::vector<std::vector<double> > &diagnostic_events,
-                                   std::vector<std::vector<double> > &site_indic,
-                                   std::vector<double> &seq_indic,
-                                   const bool holdDelta);
+                                  const std::vector<std::vector<double> > &diagnostic_events,
+                                  const std::vector<std::vector<std::vector<double> > > &diag_values,
+                                  std::vector<std::vector<double> > &site_indic,
+                                  std::vector<double> &seq_indic,
+                                  const bool holdDelta);
 
   void
   expectationMax_SeqStrDE(const std::vector<std::string> &sequences,
                           const std::vector<std::vector<double> > &secStructure,
-                          const std::vector<std::vector<double> > &diagEvents,
+                          const std::vector<std::vector<double> > &diagnostic_events,
+                          const std::vector<std::vector<std::vector<double> > > &diag_values,
                           std::vector<std::vector<double> > &site_indic,
                           std::vector<double> &seq_indic);
 
@@ -93,6 +96,7 @@ struct Model {
   double
   calculate_zoops_log_l(const std::vector<std::string> &sequences,
                         const std::vector<std::vector<double> > &diagnostic_events,
+                        const std::vector<std::vector<std::vector<double> > > &diag_values,
                         const std::vector<std::vector<double> > &site_indic,
                         const std::vector<double> &seq_indic) const;
 
@@ -100,12 +104,14 @@ struct Model {
   calculate_zoops_log_l(const std::vector<std::string> &sequences,
                         const std::vector<std::vector<double> > &secondary_structure,
                         const std::vector<std::vector<double> > &diagnostic_events,
+                        const std::vector<std::vector<std::vector<double> > > &diag_values,
                         const std::vector<std::vector<double> > &site_indic,
                         const std::vector<double> &seq_indic) const;
 
   void
   estimateDelta (const std::vector<std::string> &seqs,
-                 const std::vector<std::vector<double> > &diagEvents);
+                 const std::vector<std::vector<double> > &diagnostic_events,
+                 const std::vector<std::vector<std::vector<double> > > &diag_values);
 
   std::string
   toString_pwm() const;

@@ -789,7 +789,8 @@ fill_buffer_mapped_reads(std::ifstream &in, const string &mapper,
  */
 double
 loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
-                     const float epsilon) {
+                     vector<vector<vector<double> > > &diag_values, const float epsilon,
+                     const double de_weight, const double geo_p, const size_t w) {
   const bool DEBUG = false;
   size_t total = 0;
   static const size_t buffer_size = 100000; // TODO magic number
@@ -852,6 +853,19 @@ loadDiagnosticEvents(const string &fn, vector<vector<double> > &diagEvents,
       for (size_t i = 0; i < diagEvents.back().size(); ++i)
         std::cerr << diagEvents.back()[i] << ",";
       std::cerr << endl;
+    }
+  }
+
+  for (size_t i = 0; i < diagEvents.size(); ++i) {
+    diag_values[i].resize(diagEvents[i].size() - w + 1);
+    for (size_t j = 0; j < diagEvents[i].size() - w + 1; ++j) {
+      diag_values[i][j].resize(17,0);
+      for (size_t delta = 0; delta < 17; ++delta) {
+        vector<double> powers;
+        for (size_t k = 0; k < diagEvents[i].size(); k++)
+          powers.push_back(log(diagEvents[i][k]) + de_weight*log(geo_p) + de_weight * (abs(k - (j + (delta - 8))) * log(1.0-geo_p)));
+        diag_values[i][j][delta] = smithlab::log_sum_log_vec(powers, powers.size());
+      }
     }
   }
   return total;
