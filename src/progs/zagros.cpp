@@ -493,14 +493,14 @@ int main(int argc, const char **argv) {
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
-    size_t n_motifs = 3;
+    size_t n_motifs = 10;
     string outfile;
     string chrom_dir = "";
     string structure_file;
     string reads_file;
     string indicators_file = "";
-    double epsilon = 0;
-    size_t numStartingPoints = 3;
+    double epsilon = 0.0;
+    size_t numStartingPoints = 10;
     string delta = "NotApp";
     bool geo = false;
 
@@ -523,10 +523,6 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt("diagnostic_events", 'd',
                       "diagnostic events information file",
                       OptionParser::OPTIONAL, reads_file);
-    opt_parse.add_opt("diagEventsThresh", 'e', "give equal weight to locations "
-                      "with fewer than this fraction of all DEs in a sequence."
-                      "default: " + toa(epsilon) +  ")",
-                      OptionParser::OPTIONAL, epsilon);
     opt_parse.add_opt("delta", 'l', "provide a fixed value for delta, the "
                       "offset of cross-linking site from motif occurrences. "
                       "-8 <= l <= 8; if omitted, delta is optimised using an "
