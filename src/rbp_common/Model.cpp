@@ -968,14 +968,14 @@ expectation_seq_de(const vector<string> &sequences,
     cerr << "performing expectation step with matrix " << endl
          << matrixToString(matrix) << endl;
   for (size_t i = 0; i < sequences.size(); i++) {
-    vector<double> old_site_indic (site_indic[i]);
-    double old_seq_indic (seq_indic[i]);
+/*    vector<double> old_site_indic (site_indic[i]);
+    double old_seq_indic (seq_indic[i]);*/
     expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i], diag_values[i],
                                       matrix, freqs, geo_p, geo_delta, gamma,
                                       site_indic[i], seq_indic[i], Model::DE_WEIGHT, optGeo);
     // re-normalise the site and seq indicators using DE weight of 1 if we
     // used some other weight.
-    if (Model::DE_WEIGHT != 1.0) {
+/*    if (Model::DE_WEIGHT != 1.0) {
       expectation_seq_de_for_single_seq(sequences[i], vector<double>(), vector<vector<double> >(),
                                         matrix, freqs, geo_p, geo_delta, gamma,
                                         old_site_indic, old_seq_indic, 1.0, optGeo);
@@ -985,7 +985,7 @@ expectation_seq_de(const vector<string> &sequences,
         site_indic[i][j] = site_indic[i][j] * gamma_ratio;
         seq_indic[i] += site_indic[i][j];
       }
-    }
+    }*/
   }
   if (Model::DEBUG_LEVEL >= 2)
     cerr << "finished expectation step" << endl;
@@ -1021,14 +1021,14 @@ expectation_seq_str_de(const vector<string> &sequences,
       cerr << endl;
     }
 
-    vector<double> old_site_indic (site_indic[i]);
-    double old_seq_indic (seq_indic[i]);
+/*    vector<double> old_site_indic (site_indic[i]);
+    double old_seq_indic (seq_indic[i]); */
     expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
                                           diagnostic_events[i], diag_values[i], matrix,
                                           motif_sec_str, freqs, f_sec_str,
                                           geo_p, geo_delta, gamma,
                                           site_indic[i], seq_indic[i], Model::DE_WEIGHT, optGeo);
-    if (Model::DE_WEIGHT != 1.0) {
+/*    if (Model::DE_WEIGHT != 1.0) {
       // re-normalise the site and seq indicators using DE weight of 1 if we
       // used some other weight.
       expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
@@ -1042,7 +1042,7 @@ expectation_seq_str_de(const vector<string> &sequences,
         site_indic[i][j] = site_indic[i][j] * gamma_ratio;
         seq_indic[i] += site_indic[i][j];
       }
-    }
+    }*/
 
     if (Model::DEBUG_LEVEL >= 3) {
       cerr << "gamma is " << gamma << endl;
