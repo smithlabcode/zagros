@@ -47,7 +47,7 @@ const double Model::zoops_threshold = 0;
 const double Model::DEFAULT_GEO_P = 0.135;
 const double Model::MAX_GEO_P = 0.99;
 const double Model::MIN_GEO_P = 0.01;
-const double Model::DE_WEIGHT = 1.0;
+const double Model::DE_WEIGHT = 1.1;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
