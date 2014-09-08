@@ -268,7 +268,7 @@ find_best_kmers(const size_t k_value,
  *                  should be done, or >= 0 (setting to 0 will remove all
  *                  diagnostic events)
  */
-static void
+/*static void
 downsampleDiagEvents(vector<vector<size_t> > &dEvents, const int thresh) {
   if (thresh == -1) return;
   if (thresh < 0) {
@@ -285,7 +285,7 @@ downsampleDiagEvents(vector<vector<size_t> > &dEvents, const int thresh) {
     dEvents[i].resize(tThresh);
     sort(dEvents[i].begin(), dEvents[i].end());
   }
-}
+}*/
 
 /***
  * \summary given a set of sequences and indicators for motif occurrences,
@@ -488,22 +488,21 @@ int main(int argc, const char **argv) {
   try {
     // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
-
-    // TODO -- PJU: the level parameter, specifying how much influence the DEs
-    //              have, is currently not used, so I commented it out; it
-    //              needs to be (sensibly) implemented.
-
+    static const double GEO_P_DEFAULT = 0.135;
+    static const double de_weight = 1.1;
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
-    size_t n_motifs = 1;
+    size_t n_motifs = 10;
     string outfile;
     string chrom_dir = "";
     string structure_file;
     string reads_file;
     string indicators_file = "";
-    int diagEventsThresh = -1;
-    size_t numStartingPoints = 3;
+    double epsilon = 0.0;
+    size_t numStartingPoints = 10;
+    string delta = "NotApp";
+    bool geo = false;
 
     /****************** COMMAND LINE OPTIONS ********************/
     // TODO -- PJU: some options below don't have their defaults specified,
@@ -515,7 +514,7 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, outfile);
     opt_parse.add_opt("width", 'w', "width of motifs to find (4 <= w <= 12; "
                       "default: 6)", OptionParser::OPTIONAL, motif_width);
-    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 1)",
+    opt_parse.add_opt("number", 'n', "number of motifs to output (default: 10)",
                       OptionParser::OPTIONAL, n_motifs);
     opt_parse.add_opt("chrom", 'c', "directory with chrom files (FASTA format)",
                       OptionParser::OPTIONAL, chrom_dir);
@@ -524,16 +523,23 @@ int main(int argc, const char **argv) {
     opt_parse.add_opt("diagnostic_events", 'd',
                       "diagnostic events information file",
                       OptionParser::OPTIONAL, reads_file);
-    opt_parse.add_opt("diagEventsThresh", 'i', "down-sample diagnostic events "
-                      "to this many per sequence (-1 for no down-sampling; "
-                      "default: " + toa(diagEventsThresh) +  ")",
-                      OptionParser::OPTIONAL, diagEventsThresh);
+    opt_parse.add_opt("delta", 'l', "provide a fixed value for delta, the "
+                      "offset of cross-linking site from motif occurrences. "
+                      "-8 <= l <= 8; if omitted, delta is optimised using an "
+                      "exhaustive search", OptionParser::OPTIONAL, delta);
+    opt_parse.add_opt("geo", 'g', "optimize the geometric distribution"
+                      "parameter for the distirbution of cross-link "
+                      "sites around motif occurrences, using the "
+                      "Newton-Raphson algorithm. If omitted, this "
+                      "parameter is not optimised and is set to a "
+                      "empirically pre-determined default value.",
+                      OptionParser::OPTIONAL, geo);
     opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
                       "each sequence and motif to this file",
                       OptionParser::OPTIONAL, indicators_file);
     opt_parse.add_opt("starting-points", 's', "number of starting points to try"
                       " for EM search. Higher values will be slower, but more"
-                      " likely to find the global maximum.",
+                      " likely to find the global maximum (default: 1)",
                       OptionParser::OPTIONAL, numStartingPoints);
     opt_parse.add_opt("verbose", 'v', "print more run info",
                       OptionParser::OPTIONAL, VERBOSE);
@@ -555,6 +561,18 @@ int main(int argc, const char **argv) {
     if (motif_width < 4 || motif_width > 12) {
       cerr << "motif width should be between 4 and 12" << endl;
       return EXIT_SUCCESS;
+    }
+    if ((epsilon < 0) || (epsilon > 1)) {
+      cerr << "diagEventsThresh option must be between 0 and 1" << endl;
+      return EXIT_SUCCESS;
+    }
+    if (delta!="0" && atoi(delta.c_str())==0 && delta != "NotApp") {
+      cerr << "Delta parameter is not valid!" << endl;
+      return EXIT_SUCCESS;
+    } else if (delta!="0" && atoi(delta.c_str())!=0 && 
+               ((atoi(delta.c_str()) < -8) || (atoi(delta.c_str()) > 8))) {
+      cerr << "delta parameter should be between -8 and 8" << endl;
+       return EXIT_SUCCESS;
     }
     if (leftover_args.size() != 1) {
       cerr << "Zagros requires one input file, found "
@@ -595,11 +613,14 @@ int main(int argc, const char **argv) {
     }
 
     // Load the diagnostic events
-    vector<vector<size_t> > diagEvents (seqs.size());
+    vector<vector<double> > diagEvents(seqs.size());
+    vector<vector<vector<double> > > diag_values(seqs.size());
     if (!reads_file.empty()) {
       if (VERBOSE)
         cerr << "LOADING DIAGNOSTIC EVENTS... ";
-      const size_t deCount = loadDiagnosticEvents(reads_file, diagEvents);
+      const double deCount = loadDiagnosticEvents(reads_file, diagEvents,
+                                                  diag_values, epsilon,
+                                                  de_weight, GEO_P_DEFAULT, motif_width);
       if (diagEvents.size() != seqs.size()) {
         stringstream ss;
         ss << "inconsistent dimensions of sequence and diagnostic events data. "
@@ -610,7 +631,6 @@ int main(int argc, const char **argv) {
       if (VERBOSE)
         cerr << "DONE (FOUND " << deCount << " EVENTS IN TOTAL)" << endl;
     }
-    downsampleDiagEvents(diagEvents, diagEventsThresh);
 
 
     // find and output each of the motifs that the user asked for.
@@ -637,9 +657,17 @@ int main(int argc, const char **argv) {
       for (size_t j = 0; j < numStartingPoints; ++j) {
         Model model_l;
         Model::set_model_by_word(Model::pseudocount, top_kmers[j].kmer, model_l);
+        if (!geo) {
+          model_l.p = GEO_P_DEFAULT;
+          model_l.opt_geo = false;
+        } else
+          model_l.p = 0.5;
+        if (delta != "NotApp") {
+          model_l.delta = atoi(delta.c_str());
+          model_l.opt_delta = false;
+        }
         if (!reads_file.empty())
           model_l.useDEs = true;
-        model_l.p = 0.5;
         model_l.gamma = ((seqs.size() -
 			  (zoops_expansion_factor*
 			   (seqs.size() - top_kmers[j].observed)))/
@@ -661,16 +689,16 @@ int main(int argc, const char **argv) {
         if (VERBOSE)
           cerr << "\t" << "TRYING STARTING POINT " << (j+1) << " OF "
           << numStartingPoints << " (" << top_kmers[j].kmer << ") ... ";
-        model_l.expectationMax(seqs, diagEvents, secondary_structure,
+        model_l.expectationMax(seqs, diagEvents, diag_values, secondary_structure,
             indicators_l, has_motif_l);
         double logLike;
         if (secondary_structure.size() == 0) {
-          logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents,
+          logLike = model_l.calculate_zoops_log_l(original_seqs, diagEvents, diag_values,
                                                   indicators_l, has_motif_l);
         } else {
           logLike = model_l.calculate_zoops_log_l(original_seqs,
 						  secondary_structure,
-                                                  diagEvents, indicators_l,
+                                                  diagEvents, diag_values, indicators_l,
                                                   has_motif_l);
         }
         if (VERBOSE)

@@ -45,11 +45,14 @@ struct Model {
               smithlab::alphabet_size, 1.0 / smithlab::alphabet_size)) {
     useStructure = false;
     useDEs = false;
+    opt_delta = true;
+    opt_geo = true;
   }
 
   void
   expectationMax(const std::vector<std::string> &sequences,
-                 const std::vector<std::vector<size_t> > &diagnostic_events,
+                 const std::vector<std::vector<double> > &diagnostic_events,
+                 const std::vector<std::vector<std::vector<double> > > &diag_values,
                  const std::vector<std::vector<double> > &secondary_structure,
                  std::vector<std::vector<double> > &site_indic,
                  std::vector<double> &seq_indic);
@@ -67,15 +70,17 @@ struct Model {
 
   void
   expectation_maximization_seq_de(const std::vector<std::string> &sequences,
-                                   const std::vector<std::vector<size_t> > &diagnostic_events,
-                                   std::vector<std::vector<double> > &site_indic,
-                                   std::vector<double> &seq_indic,
-                                   const bool holdDelta);
+                                  const std::vector<std::vector<double> > &diagnostic_events,
+                                  const std::vector<std::vector<std::vector<double> > > &diag_values,
+                                  std::vector<std::vector<double> > &site_indic,
+                                  std::vector<double> &seq_indic,
+                                  const bool holdDelta);
 
   void
   expectationMax_SeqStrDE(const std::vector<std::string> &sequences,
                           const std::vector<std::vector<double> > &secStructure,
-                          const std::vector<std::vector<size_t> > &diagEvents,
+                          const std::vector<std::vector<double> > &diagnostic_events,
+                          const std::vector<std::vector<std::vector<double> > > &diag_values,
                           std::vector<std::vector<double> > &site_indic,
                           std::vector<double> &seq_indic);
 
@@ -90,26 +95,23 @@ struct Model {
 
   double
   calculate_zoops_log_l(const std::vector<std::string> &sequences,
-                        const std::vector<std::vector<double> > &secondary_structure,
-                        const std::vector<std::vector<double> > &site_indic,
-                        const std::vector<double> &seq_indic) const;
-
-  double
-  calculate_zoops_log_l(const std::vector<std::string> &sequences,
-                        const std::vector<std::vector<size_t> > &diagnostic_events,
+                        const std::vector<std::vector<double> > &diagnostic_events,
+                        const std::vector<std::vector<std::vector<double> > > &diag_values,
                         const std::vector<std::vector<double> > &site_indic,
                         const std::vector<double> &seq_indic) const;
 
   double
   calculate_zoops_log_l(const std::vector<std::string> &sequences,
                         const std::vector<std::vector<double> > &secondary_structure,
-                        const std::vector<std::vector<size_t> > &diagnostic_events,
+                        const std::vector<std::vector<double> > &diagnostic_events,
+                        const std::vector<std::vector<std::vector<double> > > &diag_values,
                         const std::vector<std::vector<double> > &site_indic,
                         const std::vector<double> &seq_indic) const;
 
   void
   estimateDelta (const std::vector<std::string> &seqs,
-                 const std::vector<std::vector<size_t> > &diagEvents);
+                 const std::vector<std::vector<double> > &diagnostic_events,
+                 const std::vector<std::vector<std::vector<double> > > &diag_values);
 
   std::string
   toString_pwm() const;
@@ -141,20 +143,28 @@ struct Model {
   bool useStructure;
   bool useDEs;
 
+  // flags for what to optimise
+  bool opt_delta;
+  bool opt_geo;
+
   // class constants (probably some should be adjustable)
+  static const double DE_WEIGHT;
+
   static const size_t max_iterations = 10;
   static const double pseudocount;
   static const double zoops_threshold;
   static const double tolerance;
 
   static const double DEFAULT_GEO_P;
+  static const double MIN_GEO_P;
+  static const double MAX_GEO_P;
 
   static const int MIN_DELTA = -8;
   static const int MAX_DELTA = 8;
   static const int DEFAULT_DELTA = 0;
   static const bool HOLD_DELTA_FIXED = true;
 
-  static const size_t DEBUG_LEVEL = 0;
+  static const size_t DEBUG_LEVEL = 1;
 };
 
 #endif

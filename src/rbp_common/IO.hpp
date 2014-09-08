@@ -40,9 +40,14 @@
 #include "GenomicRegion.hpp"
 #include "MappedRead.hpp"
 
-size_t
+double
 loadDiagnosticEvents(const std::string &fn,
-                     std::vector<std::vector<size_t> > &diagEvents);
+                     std::vector<std::vector<double> > &diagEvents,
+                     std::vector<std::vector<std::vector<double> > > &diag_values,
+                     const float epsilon,
+                     const double de_weight,
+                     const double geo_p,
+                     const size_t w);
 
 void
 load_sequences(const std::string &targets_file,

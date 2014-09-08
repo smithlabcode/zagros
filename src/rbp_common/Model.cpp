@@ -1,4 +1,4 @@
-/*    
+/*
  *    Copyright (C) 2013 University of Southern California and
  *                       Andrew D. Smith
  *
@@ -44,7 +44,10 @@ using smithlab::alphabet_size;
 const double Model::pseudocount = 0.1;
 const double Model::tolerance = 1e-10;
 const double Model::zoops_threshold = 0;
-const double Model::DEFAULT_GEO_P = 0.5;
+const double Model::DEFAULT_GEO_P = 0.135;
+const double Model::MAX_GEO_P = 0.99;
+const double Model::MIN_GEO_P = 0.01;
+const double Model::DE_WEIGHT = 1.1;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -56,7 +59,7 @@ const double Model::DEFAULT_GEO_P = 0.5;
  *          not. Consistent means their dimensions are all matching.
  * \param seqs          seqs[i][j] is the nuc. at the jth pos. in the ith seq
  * \param struc         struc[i][j] is the prob. that nuc. j in seq. i is paired
- * \param diagEvents    diagEvents[i][j] is the jth diagnostic event in seq i
+ * \param diagnostic_events    diagnostic_events[i][j] is the jth diagnostic event in seq i
  * \param msg           message to use in exception if not consistent
  * \throw SMTIHLABException if the number of structure vectors or the number of
  *                          diagnostic events vectors does not match the number
@@ -66,13 +69,13 @@ const double Model::DEFAULT_GEO_P = 0.5;
 static void
 checkAndThrow_consistent(const vector<string> &seqs,
                          const vector<vector<double> > &struc,
-                         const vector<vector<size_t> > &diagEvents,
+                         const vector<vector<double> > &diagnostic_events,
                          const string &msg) {
-  if (diagEvents.size() != seqs.size()) {
+  if (diagnostic_events.size() != seqs.size()) {
       stringstream ss;
       ss << msg << " Expected diagnostic events vector to have same dimension "
          << "as sequences vector (" << seqs.size() << " elements), but it "
-         << "doesn't (has " << diagEvents.size() << ")";
+         << "doesn't (has " << diagnostic_events.size() << ")";
       throw SMITHLABException(ss.str());
   }
   if (struc.size() != seqs.size()) {
@@ -253,7 +256,7 @@ calculate_number_of_bases_fg_bg_str(const vector<string> &seqs,
         const double curr_sec_str = secStr[i][j + k];
         const double curr_site_indic = site_indic[i][j];
         nb_fg_ss[k][base_idx] += (1.0 - curr_sec_str) * curr_site_indic;
-        nb_fg_ds[k][base_idx] += curr_sec_str * curr_site_indic;
+        nb_fg_ds[k][base_idx] += (curr_sec_str * curr_site_indic);
       }
     }
   }
@@ -272,8 +275,8 @@ calculate_number_of_bases_fg_bg_str(const vector<string> &seqs,
 
       const size_t base_idx = base2int(seqs[i][j]);
       assert(base_idx < alphabet_size);
-      nb_bg_ss[base_idx] += (1.0 - secStr[i][j]) * motif_width;
-      nb_bg_ds[base_idx] += (secStr[i][j] * motif_width);
+      nb_bg_ss[base_idx] += ((1.0 - secStr[i][j]) * motif_width);
+      nb_bg_ds[base_idx] += ((secStr[i][j] * motif_width));
     }
   }
   for (size_t i = 0; i < site_indic.size(); ++i) {
@@ -373,8 +376,8 @@ maximization_str(const vector<vector<double> > &secondary_structure,
   for (size_t i = 0; i < matrix.size(); ++i) {
     for (size_t j = 0; j < site_indic.size(); ++j) {
       for (size_t site = 0; site < site_indic[j].size(); ++site) {
-        motif_sec_str[i] += seq_indic[j] * site_indic[j][site]
-                            * secondary_structure[j][site + i];
+        motif_sec_str[i] += (seq_indic[j] * site_indic[j][site]
+                            * secondary_structure[j][site + i]);
       }
     }
 
@@ -387,14 +390,130 @@ maximization_str(const vector<vector<double> > &secondary_structure,
   f_sec_str = 0.5;
 }
 
-/***
- * \summary given a set of diagnostic event locations within sequences, and
+static double
+newtonRaphson (const vector<vector<double> > &diagnostic_events,
+               const vector<vector<double> > &siteInd,
+               const double &geoP,
+               const int &geoDelta)
+{
+  double numerator = 0.0;
+  double denominator = 0.0;
+  for (size_t i = 0; i < siteInd.size(); i++)
+    for (size_t j = 0; j < siteInd[i].size(); j++) {
+      vector<double> sum_1;
+      vector<double> sum_2;
+      vector<double> sum_3;
+      for (size_t l = 0; l < diagnostic_events[i].size(); l++) {
+        double term_1 = 0.0;
+        double term_2 = 0.0;
+        double term_3 = 0.0;
+        double term_4 = 0.0;
+        double term_5 = 0.0;
+
+        if (abs(l - (j + geoDelta)) > 0)
+          term_1 = log(abs(l - (j + geoDelta)));
+
+        if ((abs(l - (j + geoDelta)) - 1) > 0)
+          term_2 = log(abs(l - (j + geoDelta)) - 1.0);
+
+        if ((abs(l - (j + geoDelta)) - 2) > 0)
+          term_3 = ((abs(l - (j + geoDelta)) - 2) * log(1.0 - geoP));
+
+        if (abs(l - (j + geoDelta)) > 0)
+          term_4 = (abs(l - (j + geoDelta)) * log(1.0 - geoP));
+
+        if ((abs(l - (j + geoDelta)) - 1) > 0)
+          term_5 = ((abs(l - (j + geoDelta)) - 1) * log(1.0 - geoP));
+
+        sum_1.push_back(log(diagnostic_events[i][l]) + term_1 + term_2 + term_3);
+        sum_2.push_back(log(diagnostic_events[i][l]) + term_4);
+        sum_3.push_back(log(diagnostic_events[i][l]) + term_1 + term_5);
+      }
+      const double log_A = smithlab::log_sum_log_vec(sum_1, sum_1.size());
+      const double log_B = smithlab::log_sum_log_vec(sum_2, sum_2.size());
+      const double log_C = smithlab::log_sum_log_vec(sum_3, sum_3.size());
+      const double num_ij = (1.0/geoP) - (exp(log_C - log_B));
+      const double denom_ij = (-1.0/(geoP*geoP) - (exp(log_A - log_B) - exp(2.0*(log_C - log_B))));
+      numerator += (siteInd[i][j] * num_ij);
+      denominator += (siteInd[i][j] * denom_ij);
+    }
+  assert(std::isfinite(numerator));
+  assert(std::isfinite(denominator));
+  return std::min(geoP - (numerator / denominator), Model::MAX_GEO_P);
+}
+
+
+
+
+
+static double
+de_log_like(const vector<vector<double> > &diagnostic_events,
+            const vector<vector<vector<double> > > &diag_values,
+            const vector<vector<double> > &siteInd,
+            const vector<double> &seqInd,
+            double &geoP,
+            int &geoDelta,
+            const bool optGeo) {
+  double res = 0;
+  if (optGeo) {
+    for(size_t i = 0; i < diagnostic_events.size(); ++i) {
+      for (size_t j = 0; j < siteInd[i].size(); ++j) {
+        vector<double> sum;
+        for (size_t l = 0; l < diagnostic_events[i].size(); ++l) {
+         double prior_log_prob = log(diagnostic_events[i][l]);
+          double geo_log_prob = log(geoP) + (abs(l - (j + geoDelta)) * log(1.0 - geoP));
+          double term = prior_log_prob + geo_log_prob;
+          assert(std::isfinite(term));
+          sum.push_back(term);
+        }
+        res += (smithlab::log_sum_log_vec(sum, sum.size()) * siteInd[i][j]);
+      }
+    }
+  } else {
+    for(size_t i = 0; i < diagnostic_events.size(); ++i) {
+      for (size_t j = 0; j < siteInd[i].size(); ++j) {
+        res += (diag_values[i][j][geoDelta] * siteInd[i][j]);
+      }
+    }
+  }
+  assert(std::isfinite(res));
+  return res;
+}
+
+
+static void
+maximization_geoP(const vector<vector<double> > &diagnostic_events,
+                const vector<vector<double> > &siteInd,
+                const vector<double> &seqInd,
+                vector<vector<double> > &matrix,
+                double &geoP,
+                const int geoDelta) {
+  const double tol = 0.001;    // 0.0001 is the error level we wish
+  const size_t max_iters = 10;
+  size_t num_iters = 0;
+  double old;
+  do {
+    old = geoP;
+    geoP = max(min(newtonRaphson(diagnostic_events, siteInd, geoP, geoDelta),
+               Model::MAX_GEO_P), Model::MIN_GEO_P);
+    if (Model::DEBUG_LEVEL >= 2)
+      cerr << "\t\t\tOLD GEO_P: " << old << " NEW GEO_P: "
+           << geoP << " diff is " << fabs(old - geoP) << endl;
+    num_iters += 1;
+  } while ((fabs(old - geoP) > tol) && (num_iters < max_iters));
+  if (Model::DEBUG_LEVEL >= 2)
+    cerr << "\t\t\tFINISHED GEO_P OPTIM.;" << endl;
+}
+
+
+/**
+ * \brief   given a set of diagnostic event locations within sequences, and
  *          both indicators on the probability of motif occurrence at each
  *          position within each sequence and the probability that each
  *          sequence has a motif, calculate the MLE estimate for the geometric
  *          distribution of distances between diagnostic events and motif
  *          occurrences.
- * \param diagEvents diagEvents[i][k] is the (relative) position of the kth
+ * \param diagnostic_events diagnostic_events[i][k] is the (relative) position of the kth
  *                   diagnostic event in sequence i
  * \param siteInd    siteInd[i][j] is the probability that the motif occurrence
  *                   in sequence i is at position j, given that an sequence i
@@ -410,49 +529,77 @@ maximization_str(const vector<vector<double> > &secondary_structure,
  *            updated added to comments.
  */
 static void
-maximization_de(const vector<vector<size_t> > &diagEvents,
+maximization_de(const vector<vector<double> > &diagnostic_events,
+                const vector<vector<vector<double> > > &diag_values,
                 const vector<vector<double> > &siteInd,
                 const vector<double> &seqInd,
                 vector<vector<double> > &matrix,
                 double &geoP,
-                int &geoDelta) {
-  // weighted count of diagnostic events
-  double numerator = 0.0;
-  for (size_t i = 0; i < siteInd.size(); i++)
-    for (size_t k = 0; k < siteInd[i].size(); k++)
-      numerator += (seqInd[i] * siteInd[i][k] * diagEvents[i].size());
-
-  // we might either have no diagnostic events, or none in practice because
-  // all of them fall in sequences where we think there are no motif
-  // occurrences; either way, we can't estimate P.. just set it to some default
-  if (numerator == 0.0) {
-    geoP = Model::DEFAULT_GEO_P;
-  } else {
-    double denominator = 0.0;
-    for (size_t i = 0; i < siteInd.size(); i++) {
-      double seq_sum = 0.0;
-      for (size_t k = 0; k < siteInd[i].size(); k++) {
-        double site_sum = 0.0;
-        for (size_t j = 0; j < diagEvents[i].size(); j++)
-          site_sum += abs(diagEvents[i][j] - (k + geoDelta));
-        seq_sum += siteInd[i][k] * (diagEvents[i].size() + site_sum);
+                int &geoDelta,
+                const bool max_geo,
+                const bool max_delta) {
+  if ((!max_geo) && (!max_delta)) return;
+  if ((max_geo) && (!max_delta)) {
+    maximization_geoP(diagnostic_events, siteInd, seqInd, matrix, geoP, geoDelta);
+  }
+  if ((!max_geo) && (max_delta)) {
+    bool first = true;
+    int best_delta = 0;
+    double best_delta_ll = 0.0;
+    for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
+      double ll_delta_param = de_log_like(diagnostic_events, diag_values, siteInd, seqInd,
+                                          geoP, geoDelta,max_geo);
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
+      if ((ll_delta_param > best_delta_ll) || (first)) {
+        best_delta_ll = ll_delta_param;
+        best_delta = geoDelta;
+        first = false;
+        if (Model::DEBUG_LEVEL >= 1)
+          cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
+               << " with LL " << best_delta_ll << endl;
       }
-      denominator += seqInd[i] * seq_sum;
+    }
+    geoDelta = best_delta;
+  }
+  if ((max_geo) && (max_delta)) {
+    bool first = true;
+    int best_delta = 0;
+    double best_delta_ll = 0.0;
+    double best_geoP = 0.0;
+
+    for (geoDelta = Model::MIN_DELTA; geoDelta <= Model::MAX_DELTA; ++geoDelta) {
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\tTRYING DELTA = " << geoDelta << endl;
+      maximization_geoP(diagnostic_events, siteInd, seqInd, matrix, geoP, geoDelta);
+      double ll_delta_param = de_log_like(diagnostic_events, diag_values, siteInd, seqInd,
+                                          geoP, geoDelta,max_geo);
+      if (Model::DEBUG_LEVEL >= 1)
+        cerr << "\t\t\tLOGLIKE. FOR DELTA PARAM: " <<  ll_delta_param << endl;
+      if ((ll_delta_param > best_delta_ll) || (first)) {
+        best_delta_ll = ll_delta_param;
+        best_delta = geoDelta;
+        best_geoP = geoP;
+        first = false;
+        if (Model::DEBUG_LEVEL >= 1)
+          cerr << "\t\t\tUPDATED BEST DELTA TO: " << best_delta
+               << " with LL " << best_delta_ll << endl;
+      }
     }
 
-    geoP = max(min(numerator / denominator, 0.999),
-               std::numeric_limits<double>::min());
-
-    // sanity check
-    if (!std::isfinite(geoP)) {
-      stringstream ss;
-      ss << "failed maximization of geometric parameter; numerator was "
-         << numerator << " denominator was " << denominator << " siteInd were "
-         << matrixToString(siteInd) << " seqInd were " << vecToString(seqInd);
-      throw SMITHLABException(ss.str());
+    // use best delta to set geo_p
+    geoDelta = best_delta;
+    geoP = best_geoP;
+    if (Model::DEBUG_LEVEL >= 1) {
+      cerr << "\t\tSET DELTA TO " << geoDelta << endl;
+      cerr << "\t\tSET GEO_P TO " << geoP << endl;
     }
   }
 }
+
+
 
 
 /******************************************************************************
@@ -464,14 +611,17 @@ maximization_de(const vector<vector<size_t> > &diagEvents,
  */
 static void
 get_numerator_seq_de_for_site(const string &seq,
-                              const vector<size_t> &diagEvents,
+                              const vector<double> &diagnostic_events,
+                              const double diag_value,
                               const vector<vector<double> > &matrix,
                               const vector<double> &freqs,
                               const double geo_p,
                               const int geo_delta,
                               const double gamma,
                               const size_t site,
-                              double &num) {
+                              double &num,
+                              const double de_weight,
+                              const bool optGeo) {
   // the log-likelihood of a nucleotide in the foreground (motif) if it is
   // an N. We make this pretty bad, but be careful to make sure we could sum
   // this across all positions of the matrix without causing an overflow.
@@ -507,31 +657,21 @@ get_numerator_seq_de_for_site(const string &seq,
   }
 
   for (size_t b = 0; b < alphabet_size; b++) {
-    num += f_powers[b] * log(freqs[b]);
+    num += (f_powers[b] * log(freqs[b]));
     assert(std::isfinite(num));
   }
-  if (diagEvents.size() > 0) {
-    double power = 0.0;
-    for (size_t j = 0; j < diagEvents.size(); j++)
-      power += abs(diagEvents[j] - (site + geo_delta));
-    assert(std::isfinite(power));
-    num += ((power * log(1 - geo_p)) + (diagEvents.size() * log(geo_p)));
-    if (!std::isfinite(num)) {
-      stringstream ss;
-      ss << "failed expectation calculation; numerator non-finite. power is "
-         << power << " geo_p is " << geo_p << " num diag. events is "
-         << diagEvents.size();
-      throw SMITHLABException(ss.str());
+
+  if (diagnostic_events.size() > 0) {
+    if (optGeo) {
+      vector<double> powers;
+      for (size_t j = 0; j < seq.length(); j++)
+        powers.push_back(log(diagnostic_events[j]) + Model::DE_WEIGHT*log(geo_p) + Model::DE_WEIGHT*(abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+      num += smithlab::log_sum_log_vec(powers, powers.size());
+    } else {
+      num += diag_value;
     }
   }
-
-  num += log(gamma / (seq.length() - matrix.size() + 1.0));
-  if (!std::isfinite(num)) {
-    stringstream ss;
-    ss << "failed expectation calculation; numerator non-finite. gamma is "
-       << gamma;
-    throw SMITHLABException(ss.str());
-  }
+  num += log(gamma);
 }
 
 /***
@@ -540,7 +680,8 @@ get_numerator_seq_de_for_site(const string &seq,
 static void
 get_numerator_seq_str_de_for_site(const string &seq,
                                const vector<double> &secondary_structure,
-                               const vector<size_t> &diagnostic_events,
+                               const vector<double> &diagnostic_events,
+                               const double diag_value,
                                const vector<vector<double> > &matrix,
                                const vector<double> &motif_sec_str,
                                const vector<double> &freqs,
@@ -549,7 +690,9 @@ get_numerator_seq_str_de_for_site(const string &seq,
                                const int geo_delta,
                                const double gamma,
                                const size_t site,
-                               double &num) {
+                               double &num,
+                               const double de_weight,
+                               const bool optGeo) {
   const double N_LOG_PROB = -10000;
 
   // calculating the contribution of the foreground and the powers
@@ -595,18 +738,32 @@ get_numerator_seq_str_de_for_site(const string &seq,
   // calculating the contribution of the background (outside the motif
   // occurrences)
   for (size_t b = 0; b < alphabet_size; b++) {
-    num += f_powers_ss[b] * log(freqs[b] * (1 - f_sec_str));
-    num += f_powers_ds[b] * log(freqs[b] * (f_sec_str));
+    num += (f_powers_ss[b] * log(freqs[b] * (1.0 - f_sec_str)));
+    num += (f_powers_ds[b] * log(freqs[b] * (f_sec_str)));
     assert(std::isfinite(num));
   }
+
+  num += log(gamma);
+
+
+  double oldnum = num;
+  if (Model::DEBUG_LEVEL >= 4)
+    cerr << "\tlog prob before des: " << num << "; ";
+
   if (diagnostic_events.size() > 0) {
-    double power = 0.0;
-    for (size_t j = 0; j < diagnostic_events.size(); j++)
-      power += abs(diagnostic_events[j] - (site + geo_delta));
-    assert(std::isfinite(power));
-    num += ((power * log(1 - geo_p)) + (diagnostic_events.size() * log(geo_p)));
+    if (optGeo) {
+      vector<double> powers;
+      for (size_t j = 0; j < seq.length(); j++)
+        powers.push_back(log(diagnostic_events[j]) + Model::DE_WEIGHT*log(geo_p) + Model::DE_WEIGHT*(abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+      num += smithlab::log_sum_log_vec(powers, powers.size());
+    } else {
+      num += diag_value;
+    }
   }
-  num += log(gamma / (seq.length() - matrix.size() + 1.0));
+
+  if (Model::DEBUG_LEVEL >= 4)
+    cerr << "\tlog prob after des: " << num << " diff = " << (num-oldnum) << endl;
+
 }
 
 /***
@@ -616,7 +773,8 @@ get_numerator_seq_str_de_for_site(const string &seq,
 static void
 expectation_seq_str_de_for_single_seq(const string &seq,
                                       const vector<double> &secondary_structure,
-                                      const vector<size_t> &diagnostic_events,
+                                      const vector<double> &diagnostic_events,
+                                      const vector<vector<double> > &diag_values,
                                       const vector<vector<double> > &matrix,
                                       const vector<double> &motif_sec_str,
                                       const vector<double> &freqs,
@@ -625,7 +783,9 @@ expectation_seq_str_de_for_single_seq(const string &seq,
                                       const int geo_delta,
                                       const double gamma,
                                       vector<double> &site_indic,
-                                      double &seq_indic) {
+                                      double &seq_indic,
+                                      const double de_weight,
+                                      const bool optGeo) {
   // used to stop values reaching exactly zero and then taking their log..
   const double TINY = 1e-100;
 
@@ -640,10 +800,15 @@ expectation_seq_str_de_for_single_seq(const string &seq,
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i) {
+    if (Model::DEBUG_LEVEL >= 4)
+      cerr << "loc  " << i << " = " << seq.substr(i,6) << endl;
+    double diag_value = 1.0;
+    if (diagnostic_events.size() > 0)
+      diag_value = diag_values[i][geo_delta + 8];
     get_numerator_seq_str_de_for_site(seq, secondary_structure,
-                                      diagnostic_events, matrix, motif_sec_str,
+                                      diagnostic_events, diag_value, matrix, motif_sec_str,
                                       freqs, f_sec_str, geo_p, geo_delta, gamma,
-                                      i, numerator[i]);
+                                      i, numerator[i], Model::DE_WEIGHT, optGeo);
     assert(std::isfinite(numerator[i]));
   }
 
@@ -654,21 +819,21 @@ expectation_seq_str_de_for_single_seq(const string &seq,
     const size_t base = base2int(seq[i]);
     assert(base < alphabet_size);
 
-    no_motif += secondary_structure[i]
-        * log(freqs[base] * f_sec_str);
-    no_motif += ((1 - secondary_structure[i])
-        * log(freqs[base] * (1 - f_sec_str)));
-    if (diagnostic_events.size() > 0)
-      no_motif -= (diagnostic_events.size() * log(seq.length()));
+    no_motif += (secondary_structure[i]
+        * log(freqs[base] * f_sec_str));
+    no_motif += ((1.0 - secondary_structure[i])
+        * log(freqs[base] * (1.0 - f_sec_str)));
   }
+
   const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
   numerator.push_back(no_motif + log(fracSeqsWithoutMotif));
 
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
   assert(std::isfinite(denominator));
-  for (size_t i = 0; i < site_indic.size(); ++i)
-    site_indic[i] = exp(numerator[i] - denominator);
+  for (size_t i = 0; i < site_indic.size(); ++i) {
+    site_indic[i] = std::max(std::numeric_limits<double>::min(), exp(numerator[i] - denominator));
+  }
 
   seq_indic = accumulate(site_indic.begin(), site_indic.end(), 0.0);
   assert(std::isfinite(seq_indic));
@@ -680,14 +845,17 @@ expectation_seq_str_de_for_single_seq(const string &seq,
  */
 static void
 expectation_seq_de_for_single_seq(const string &seq,
-                                  const vector<size_t> &diagnostic_events,
+                                  const vector<double> &diagnostic_events,
+                                  const vector<vector<double> > &diag_values,
                                   const vector<vector<double> > &matrix,
                                   const vector<double> &freqs,
                                   const double geo_p,
                                   const int geo_delta,
                                   const double gamma,
                                   vector<double> &site_indic,
-                                  double &seq_indic) {
+                                  double &seq_indic,
+                                  const double de_weight,
+                                  const bool optGeo) {
   // used to stop values reaching exactly zero and then taking their log..
   const double TINY = 1e-100;
 
@@ -702,8 +870,11 @@ expectation_seq_de_for_single_seq(const string &seq,
   // get log likelihood for each site
   vector<double> numerator(site_indic.size(), 0.0);
   for (size_t i = 0; i < site_indic.size(); ++i) {
-    get_numerator_seq_de_for_site(seq, diagnostic_events, matrix, freqs, geo_p,
-                                  geo_delta, gamma, i, numerator[i]);
+    double diag_value = 1.0;
+    if (diagnostic_events.size() > 0)
+      diag_value = diag_values[i][geo_delta + 8];
+    get_numerator_seq_de_for_site(seq, diagnostic_events, diag_value, matrix, freqs, geo_p,
+                                  geo_delta, gamma, i, numerator[i], Model::DE_WEIGHT, optGeo);
     assert(std::isfinite(numerator[i]));
   }
 
@@ -715,15 +886,14 @@ expectation_seq_de_for_single_seq(const string &seq,
     assert(base < alphabet_size);
     no_motif += log(freqs[base]);
   }
-  if (diagnostic_events.size() > 0)
-    no_motif -= (diagnostic_events.size() * log(seq.length()));
+
   const double fracSeqsWithoutMotif = std::min((1.0 - gamma) + TINY, 1.0);
   numerator.push_back(no_motif + log(fracSeqsWithoutMotif));
 
   const double denominator = smithlab::log_sum_log_vec(numerator,
                                                        numerator.size());
   for (size_t i = 0; i < site_indic.size(); ++i) {
-    site_indic[i] = exp(numerator[i] - denominator);
+    site_indic[i] = std::max(std::numeric_limits<double>::min(), exp(numerator[i] - denominator));
     assert(std::isfinite(site_indic[i]));
   }
 
@@ -747,16 +917,19 @@ expectation_for_single_seq(const string &seq,
                            const vector<double> &freqs,
                            const double gamma,
                            vector<double> &site_indic,
-                           double &seq_indic) {
+                           double &seq_indic,
+                           const bool optGeo) {
   // sequence expectation is equivalent to sequence and DE expectation, but
   // with no DEs, so...
-  vector<size_t> diagEvents;
+  vector<double> diagnostic_events;
+  vector<vector<double> > diag_values;
   // geoP and geoDelta could be anything really, they'll be passed through,
-  // but won't be used since diagEvents.size() == 0
+  // but won't be used since diagnostic_events.size() == 0
   const double geoP = 1;
   const int geoDelta = 0;
-  expectation_seq_de_for_single_seq(seq, diagEvents, matrix, freqs, geoP,
-                                    geoDelta, gamma, site_indic, seq_indic);
+  expectation_seq_de_for_single_seq(seq, diagnostic_events, diag_values, matrix, freqs, geoP,
+                                    geoDelta, gamma, site_indic, seq_indic, 1, optGeo);
+
 }
 
 /***
@@ -768,11 +941,12 @@ expectation_seq(const vector<string> &sequences,
                 const vector<double> &freqs,
                 const double gamma,
                 vector<vector<double> > &site_indic,
-                vector<double> &seq_indic) {
+                vector<double> &seq_indic,
+                const bool optGeo) {
 
   for (size_t i = 0; i < sequences.size(); i++)
     expectation_for_single_seq(sequences[i], matrix, freqs, gamma,
-                               site_indic[i], seq_indic[i]);
+                               site_indic[i], seq_indic[i], optGeo);
 }
 
 /***
@@ -780,21 +954,39 @@ expectation_seq(const vector<string> &sequences,
  */
 static void
 expectation_seq_de(const vector<string> &sequences,
-                   const vector<vector<size_t> > &diagnostic_events,
+                   const vector<vector<double> > &diagnostic_events,
+                   const vector<vector<vector<double> > > &diag_values,
                    const vector<vector<double> > &matrix,
                    const vector<double> &freqs,
                    const double geo_p,
                    const int geo_delta,
                    const double gamma,
                    vector<vector<double> > &site_indic,
-                   vector<double> &seq_indic) {
+                   vector<double> &seq_indic,
+                   const bool optGeo) {
   if (Model::DEBUG_LEVEL >= 2)
     cerr << "performing expectation step with matrix " << endl
          << matrixToString(matrix) << endl;
-  for (size_t i = 0; i < sequences.size(); i++)
-    expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i],
+  for (size_t i = 0; i < sequences.size(); i++) {
+/*    vector<double> old_site_indic (site_indic[i]);
+    double old_seq_indic (seq_indic[i]);*/
+    expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i], diag_values[i],
                                       matrix, freqs, geo_p, geo_delta, gamma,
-                                      site_indic[i], seq_indic[i]);
+                                      site_indic[i], seq_indic[i], Model::DE_WEIGHT, optGeo);
+    // re-normalise the site and seq indicators using DE weight of 1 if we
+    // used some other weight.
+/*    if (Model::DE_WEIGHT != 1.0) {
+      expectation_seq_de_for_single_seq(sequences[i], vector<double>(), vector<vector<double> >(),
+                                        matrix, freqs, geo_p, geo_delta, gamma,
+                                        old_site_indic, old_seq_indic, 1.0, optGeo);
+      double gamma_ratio = old_seq_indic / seq_indic[i];
+      seq_indic[i] = 0;
+      for (size_t j = 0; j < site_indic[i].size(); ++j) {
+        site_indic[i][j] = site_indic[i][j] * gamma_ratio;
+        seq_indic[i] += site_indic[i][j];
+      }
+    }*/
+  }
   if (Model::DEBUG_LEVEL >= 2)
     cerr << "finished expectation step" << endl;
 }
@@ -805,7 +997,8 @@ expectation_seq_de(const vector<string> &sequences,
 static void
 expectation_seq_str_de(const vector<string> &sequences,
                        const vector<vector<double> > &secondary_structure,
-                       const vector<vector<size_t> > &diagnostic_events,
+                       const vector<vector<double> > &diagnostic_events,
+                       const vector<vector<vector<double> > > &diag_values,
                        const vector<vector<double> > &matrix,
                        const vector<double> &motif_sec_str,
                        const vector<double> &freqs,
@@ -814,13 +1007,67 @@ expectation_seq_str_de(const vector<string> &sequences,
                        const int geo_delta,
                        const double gamma,
                        vector<vector<double> > &site_indic,
-                       vector<double> &seq_indic) {
-  for (size_t i = 0; i < sequences.size(); i++)
+                       vector<double> &seq_indic,
+                       const bool optGeo) {
+  if (Model::DEBUG_LEVEL >= 3)
+    cerr << "performing expectation step with matrix " << endl
+         << matrixToString(matrix) << endl;
+  for (size_t i = 0; i < sequences.size(); i++) {
+    if (Model::DEBUG_LEVEL >= 3) {
+      cerr << "for seq " << i << endl;
+      cerr << "des: ";
+      for (size_t j = 0; j < diagnostic_events[i].size(); ++j)
+        cerr << diagnostic_events[i][j] << ", ";
+      cerr << endl;
+    }
+
+/*    vector<double> old_site_indic (site_indic[i]);
+    double old_seq_indic (seq_indic[i]); */
     expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
-                                          diagnostic_events[i], matrix,
+                                          diagnostic_events[i], diag_values[i], matrix,
                                           motif_sec_str, freqs, f_sec_str,
                                           geo_p, geo_delta, gamma,
-                                          site_indic[i], seq_indic[i]);
+                                          site_indic[i], seq_indic[i], Model::DE_WEIGHT, optGeo);
+/*    if (Model::DE_WEIGHT != 1.0) {
+      // re-normalise the site and seq indicators using DE weight of 1 if we
+      // used some other weight.
+      expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
+                                            vector<double>(), vector<vector<double> >(), matrix,
+                                            motif_sec_str, freqs, f_sec_str,
+                                            geo_p, geo_delta, gamma,
+                                            old_site_indic, old_seq_indic, 1.0, optGeo);
+      double gamma_ratio = old_seq_indic / seq_indic[i];
+      seq_indic[i] = 0;
+      for (size_t j = 0; j < site_indic[i].size(); ++j) {
+        site_indic[i][j] = site_indic[i][j] * gamma_ratio;
+        seq_indic[i] += site_indic[i][j];
+      }
+    }*/
+
+    if (Model::DEBUG_LEVEL >= 3) {
+      cerr << "gamma is " << gamma << endl;
+      cerr << "site indicators after exp step: ";
+      for (size_t j = 0; j < site_indic[i].size(); ++j)
+        cerr << site_indic[i][j] << ", ";
+      size_t best_loc = std::distance(site_indic[i].begin(),
+                                      max_element(site_indic[i].begin(),
+                                                  site_indic[i].end()));
+      cerr << endl;
+      cerr << "sum of indicators: "
+           << std::accumulate(site_indic[i].begin(), site_indic[i].end(), 0.0)
+           << endl;
+      cerr << "most likely occurrence at location " << best_loc << " with prob "
+           << site_indic[i][best_loc] << " has seq "
+           << sequences[i].substr(best_loc,6) << endl;
+      size_t best_de_l = std::distance(diagnostic_events[i].begin(),
+                                       max_element(diagnostic_events[i].begin(),
+                                                   diagnostic_events[i].end()));
+      if (!diagnostic_events[0].empty()) {
+        cerr << "best DE loc is at " << best_de_l << " with "
+             << diagnostic_events[i][best_de_l] << endl;
+      }
+    }
+  }
 }
 
 /******************************************************************************
@@ -849,9 +1096,9 @@ Model::calculate_oops_log_l(const vector<string> &sequences,
 
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
-    ret += nb_bg[i] * log(f[i]);
+    ret += (nb_bg[i] * log(f[i]));
     for (size_t j = 0; j < matrix.size(); ++j)
-      ret += nb_fg[j][i] * log(matrix[j][i]);
+      ret += (nb_fg[j][i] * log(matrix[j][i]));
   }
 
   for (size_t i = 0; i < site_indic.size(); ++i)
@@ -875,8 +1122,9 @@ Model::calculate_zoops_log_l(const vector<string> &seqs,
                              const vector<vector<double> > &site_indic,
                              const vector<double> &seq_indic) const {
   // calc. without diag. events is equivalent to having no diag. events, so...
-  vector<vector<size_t> > diagEvents (seqs.size());
-  return calculate_zoops_log_l(seqs, diagEvents, site_indic, seq_indic);
+  vector<vector<double> > diagnostic_events (seqs.size());
+  vector<vector<vector<double> > > diag_values (seqs.size());
+  return calculate_zoops_log_l(seqs, diagnostic_events, diag_values, site_indic, seq_indic);
 }
 
 /***
@@ -893,7 +1141,8 @@ Model::calculate_zoops_log_l(const vector<string> &seqs,
  */
 double
 Model::calculate_zoops_log_l(const vector<string> &sequences,
-                             const vector<vector<size_t> > &diagnostic_events,
+                             const vector<vector<double> > &diagnostic_events,
+                             const vector<vector<vector<double> > > &diag_values,
                              const vector<vector<double> > &site_indic,
                              const vector<double> &seq_indic) const {
   // used to stop values reaching exactly zero and then taking their log..
@@ -906,7 +1155,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
 
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
-    ret += nb_bg[i] * log(f[i]);
+    ret += (nb_bg[i] * log(f[i]));
     if (!std::isfinite(ret)) {
       stringstream ss;
       ss << "log-likelihood calculation failed; result not finite. background "
@@ -914,7 +1163,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       throw SMITHLABException(ss.str());
     }
     for (size_t j = 0; j < matrix.size(); ++j) {
-      ret += nb_fg[j][i] * log(matrix[j][i]);
+      ret += (nb_fg[j][i] * log(matrix[j][i]));
       if (!std::isfinite(ret)) {
         stringstream ss;
         ss << "log-likelihood calculation failed; result not finite. "
@@ -925,23 +1174,21 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
     }
   }
 
-  for (size_t i = 0; i < sequences.size(); i++) {
-    if (diagnostic_events[i].size() > 0) {
-      for (size_t k = 0; k < site_indic[i].size(); k++) {
-        double power = 0.0;
-        for (size_t j = 0; j < diagnostic_events[i].size(); j++) {
-          power += abs(diagnostic_events[i][j] - (k + delta));
-          if (!std::isfinite(power)) {
-            stringstream ss;
-            ss << "failed likelihood calculation; power is non-finite. Diag. "
-               << "event is: " << diagnostic_events[i][j] << "; k+delta is: "
-               << (k+delta);
-            throw SMITHLABException(ss.str());
+  if (diagnostic_events.size() > 0) {
+    if (opt_geo) {
+      for (size_t i = 0; i < sequences.size(); i++)
+        if (diagnostic_events[i].size() > 0)
+          for (size_t k = 0; k < site_indic[i].size(); k++) {
+            vector<double> powers;
+            for (size_t j = 0; j < sequences[i].length(); j++)
+              powers.push_back(log(diagnostic_events[i][j]) + Model::DE_WEIGHT*log(p) + Model::DE_WEIGHT * (abs(j - (k + delta)) * log(1.0-p)));
+            ret += (site_indic[i][k] * smithlab::log_sum_log_vec(powers, powers.size()));
           }
-        }
-        ret += site_indic[i][k]
-            * ((power * log(1 - p)) + (diagnostic_events[i].size() * log(p)));
-      }
+    } else {
+      for (size_t i = 0; i < sequences.size(); i++)
+        if (diagnostic_events[i].size() > 0)
+          for (size_t k = 0; k < site_indic[i].size(); k++)
+            ret += (site_indic[i][k] * diag_values[i][k][delta+8]);
     }
   }
 
@@ -955,39 +1202,14 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       assert(base < alphabet_size);
       has_no_motif += log(f[base]);
     }
-    if (diagnostic_events[i].size() > 0)
-      has_no_motif -= (diagnostic_events[i].size() * log(sequences[i].length()));
-    ret += (1 - seq_indic[i]) * has_no_motif;
-    ret += (1 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0));
-    ret += seq_indic[i] * log(gamma / site_indic[i].size());
+
+    ret += ((1.0 - seq_indic[i]) * has_no_motif);
+    ret += ((1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0)));
+    ret += (seq_indic[i] * log(gamma));
   }
   //--------
 
   return ret;
-}
-
-/***
- * \summary calculate the log-likelihood for this model given a set of
- *          sequences, their structure, and indicator variables on occurrences
- *          of the motif
- * \param sequences             TODO
- * \param secondary_structure   secondary_structure[i][j] is the probability
- *                              that the jth base in the ith sequence is paired.
- * \param site_indic            site_indic[i][j] is the probability that the
- *                              jth position in the ith sequence is the start
- *                              of a motif occurrence.
- * \param seq_indic             seq_indic[i] is the probability that the ith
- *                              sequence contains an occurrence of the motif.
- */
-double
-Model::calculate_zoops_log_l(const vector<string> &sequences,
-                             const vector<vector<double> > &secondary_structure,
-                             const vector<vector<double> > &site_indic,
-                             const vector<double> &seq_indic) const {
-  // calc. without diag. events is equivalent to having no diag. events, so...
-  vector< vector<size_t> > diagEvents(sequences.size());
-  return calculate_zoops_log_l(sequences, secondary_structure, diagEvents,
-                        site_indic, seq_indic);
 }
 
 /***
@@ -997,7 +1219,8 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
 double
 Model::calculate_zoops_log_l(const vector<string> &sequences,
                              const vector<vector<double> > &secondary_structure,
-                             const vector<vector<size_t> > &diagnostic_events,
+                             const vector<vector<double> > &diagnostic_events,
+                             const vector<vector<vector<double> > > &diag_values,
                              const vector<vector<double> > &site_indic,
                              const vector<double> &seq_indic) const {
   // used to stop values reaching exactly zero and then taking their log..
@@ -1021,32 +1244,30 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
   // below.
   double ret = 0.0;
   for (size_t i = 0; i < alphabet_size; ++i) {
-    ret += (nb_bg_ss[i] * log(f[i] * (1 - f_sec_str)));
+    ret += (nb_bg_ss[i] * log(f[i] * (1.0 - f_sec_str)));
     ret += (nb_bg_ds[i] * log(f[i] * f_sec_str));
     for (size_t j = 0; j < matrix.size(); ++j) {
-      ret += (nb_fg_ss[j][i] * log(matrix[j][i] * (1 - motif_sec_str[j])));
+      ret += (nb_fg_ss[j][i] * log(matrix[j][i] * (1.0 - motif_sec_str[j])));
       ret += (nb_fg_ds[j][i] * log(matrix[j][i] * motif_sec_str[j]));
     }
   }
 
   // ZOOPS-specific calculation starts from here --------
-  for (size_t i = 0; i < sequences.size(); i++) {
-    if (diagnostic_events[i].size() > 0) {
-      for (size_t k = 0; k < site_indic[i].size(); k++) {
-        double power = 0.0;
-        for (size_t j = 0; j < diagnostic_events[i].size(); j++) {
-          power += abs(diagnostic_events[i][j] - (k + delta));
-          if (!std::isfinite(power)) {
-            stringstream ss;
-            ss << "failed likelihood calculation; power is non-finite. Diag. "
-               << "event is: " << diagnostic_events[i][j] << "; k+delta is: "
-               << (k+delta);
-            throw SMITHLABException(ss.str());
+  if (diagnostic_events.size() > 0) {
+    if (opt_geo) {
+      for (size_t i = 0; i < sequences.size(); i++)
+        if (diagnostic_events[i].size() > 0)
+          for (size_t k = 0; k < site_indic[i].size(); k++) {
+            vector<double> powers;
+            for (size_t j = 0; j < sequences[i].length(); j++)
+              powers.push_back(log(diagnostic_events[i][j]) + Model::DE_WEIGHT*log(p) + Model::DE_WEIGHT * (abs(j - (k + delta)) * log(1.0-p)));
+            ret += (site_indic[i][k] * smithlab::log_sum_log_vec(powers, powers.size()));
           }
-        }
-        ret += site_indic[i][k]
-            * ((power * log(1 - p)) + (diagnostic_events[i].size() * log(p)));
-      }
+    } else {
+      for (size_t i = 0; i < sequences.size(); i++)
+        if (diagnostic_events[i].size() > 0) 
+          for (size_t k = 0; k < site_indic[i].size(); k++) 
+            ret += (site_indic[i][k] * diag_values[i][k][delta+8]);      
     }
   }
 
@@ -1059,12 +1280,10 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
       assert(base < alphabet_size);
       has_no_motif += log(f[base]);
     }
-    if (diagnostic_events[i].size() > 0)
-      has_no_motif -=
-          (diagnostic_events[i].size() * log(sequences[i].length()));
-    ret += (1 - seq_indic[i]) * has_no_motif;
-    ret += (1 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0));
-    ret += seq_indic[i] * log(gamma / site_indic[i].size());
+
+    ret += ((1.0 - seq_indic[i]) * has_no_motif);
+    ret += ((1.0 - seq_indic[i]) * log(std::min(1.0 - gamma + TINY, 1.0)));
+    ret += (seq_indic[i] * log(gamma));
   }
   // ZOOPS-specific calculation ends here --------
 
@@ -1093,8 +1312,9 @@ Model::expectation_maximization_seq_str(const vector<string> &sequences,
   // performing EM with sequence and structure but not diagnostic events is
   // equivalent to doing it with diagnsotic event vectors, but with them all
   // empty, so..
-  vector<vector<size_t> > diagEvents(sequences.size());
-  expectationMax_SeqStrDE(sequences, secStr, diagEvents,
+  vector<vector<double> > diagnostic_events(sequences.size());
+  vector<vector<vector<double> > > diag_values(sequences.size());
+  expectationMax_SeqStrDE(sequences, secStr, diagnostic_events, diag_values,
                           site_indic, seq_indic);
 }
 
@@ -1109,7 +1329,7 @@ Model::expectation_maximization_seq(const vector<string> &seqs,
   bool first = true;
   double prev_score = std::numeric_limits<double>::max();
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq(seqs, matrix, f, gamma, site_indic, seq_indic);
+    expectation_seq(seqs, matrix, f, gamma, site_indic, seq_indic, opt_geo);
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
     const double score = calculate_zoops_log_l(seqs, site_indic, seq_indic);
     if (!first) {
@@ -1132,7 +1352,7 @@ Model::expectation_maximization_seq(const vector<string> &seqs,
  *          parameters for this model given a set of sequences, and diagnostic
  *          events within them.
  * \param seqs         TODO
- * \param diagEvents   diagnostic_events[i][j] is the location of the jth
+ * \param diagnostic_events   diagnostic_events[i][j] is the location of the jth
  *                     diagnostic event in the ith sequence.
  *                     diagnostic_events[i] can be empty for any value of i
  *                     (i.e. there are no diagnostic events in that sequence)
@@ -1144,27 +1364,31 @@ Model::expectation_maximization_seq(const vector<string> &seqs,
  */
 void
 Model::expectation_maximization_seq_de(const vector<string> &seqs,
-                                       const vector<vector<size_t> > &diagEvents,
+                                       const vector<vector<double> > &diagnostic_events,
+                                       const vector<vector<vector<double> > > &diag_values,
                                        vector<vector<double> > &site_indic,
                                        vector<double> &seq_indic,
                                        const bool holdDelta = false) {
-  if (!holdDelta) this->estimateDelta(seqs, diagEvents);
+  this->delta = Model::DEFAULT_DELTA;
   double prev_score = std::numeric_limits<double>::max();
   bool first = true;
   double score = 0.0;
   for (size_t i = 0; i < max_iterations; ++i) {
     if (Model::DEBUG_LEVEL >= 1) {
-      cerr << "EM, sequence and DE, iteration number " << i << endl
-           << "expectation step" << endl;
+      cerr << "EM, SEQ. AND DE, ITER NUM " << i << endl
+           << "\tEXPECTATION STEP" << endl;
     }
-    expectation_seq_de(seqs, diagEvents, matrix, f, p, delta, gamma,
-                       site_indic, seq_indic);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "sequence maximization step" << endl;
+    expectation_seq_de(seqs, diagnostic_events, diag_values, matrix, f, p, delta, gamma,
+                       site_indic, seq_indic, opt_geo);
+    if (Model::DEBUG_LEVEL >= 1) cerr << "\tSEQUENCE MAX. STEP" << endl;
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "DE maximization step" << endl;
-    maximization_de(diagEvents, site_indic, seq_indic, matrix, p, delta);
-    if (Model::DEBUG_LEVEL >= 1) cerr << "calculating log-likelihood" << endl;
-    score = calculate_zoops_log_l(seqs, diagEvents, site_indic, seq_indic);
+    if (diagnostic_events.front().size() > 0) {
+      if (Model::DEBUG_LEVEL >= 1) cerr << "\tDE MAX. STEP" << endl;
+      maximization_de(diagnostic_events, diag_values, site_indic, seq_indic, matrix, p, delta,
+                      this->opt_geo, this->opt_delta);
+    }
+    if (Model::DEBUG_LEVEL >= 1) cerr << "\tCALC. LOG-LIKE" << endl;
+    score = calculate_zoops_log_l(seqs, diagnostic_events, diag_values, site_indic, seq_indic);
     if (!first) {
       const double delta = fabs(prev_score - score);
       const double deltaProp = delta / fabs(prev_score);
@@ -1187,7 +1411,7 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
  *          and diagnostic events.
  * \param seqs                TODO
  * \param secStr              TODO
- * \param diagEvents          diagnostic_events[i][j] is the location of the jth
+ * \param diagnostic_events          diagnostic_events[i][j] is the location of the jth
  *                            diagnostic event in the ith sequence.
  *                            diagnostic_events[i] can be empty for any value
  *                            of i (i.e. there are no diagnostic events in that
@@ -1198,20 +1422,24 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
 void
 Model::expectationMax_SeqStrDE(const vector<string> &seqs,
                                const vector<vector<double> > &secStr,
-                               const vector<vector<size_t> > &diagEvents,
+                               const vector<vector<double> > &diagnostic_events,
+                               const vector<vector<vector<double> > > &diag_values,
                                vector<vector<double> > &siteInd,
                                vector<double> &seqInd) {
-  estimateDelta(seqs, diagEvents);
+  this->delta = Model::DEFAULT_DELTA;
   double prev_score = std::numeric_limits<double>::max();
   double score = 0.0;
   bool first = true;
   for (size_t i = 0; i < max_iterations; ++i) {
-    expectation_seq_str_de(seqs, secStr, diagEvents, matrix, motif_sec_str,
-                           f, f_sec_str, p, delta, gamma, siteInd, seqInd);
+    expectation_seq_str_de(seqs, secStr, diagnostic_events, diag_values, matrix, motif_sec_str,
+                           f, f_sec_str, p, delta, gamma, siteInd, seqInd, opt_geo);
     maximization_seq(seqs, siteInd, seqInd, matrix, f, gamma);
     maximization_str(secStr, siteInd, seqInd, matrix, motif_sec_str, f_sec_str);
-    maximization_de(diagEvents, siteInd, seqInd, matrix, p, delta);
-    score = calculate_zoops_log_l(seqs, secStr, diagEvents, siteInd, seqInd);
+    if (diagnostic_events.front().size() > 0) {
+      maximization_de(diagnostic_events, diag_values, siteInd, seqInd, matrix, p, delta,
+                      this->opt_geo, this->opt_delta);
+    }
+    score = calculate_zoops_log_l(seqs, secStr, diagnostic_events, diag_values, siteInd, seqInd);
     if (!first) {
       const double delta = fabs(prev_score - score);
       const double deltaProp = delta / fabs(prev_score);
@@ -1234,7 +1462,7 @@ Model::expectationMax_SeqStrDE(const vector<string> &seqs,
  *          the correct methods to call depending on whether the secondary
  *          structure of the sequences is known or not.
  * \param seqs          TODO
- * \param diagEvents    diagnostic_events[i][j] is the location of the jth
+ * \param diagnostic_events    diagnostic_events[i][j] is the location of the jth
  *                      diagnostic event in the ith sequence.
  *                      diagnostic_events[i] can be empty for any value
  *                      of i (i.e. there are no diagnostic events in that
@@ -1248,74 +1476,18 @@ Model::expectationMax_SeqStrDE(const vector<string> &seqs,
  */
 void
 Model::expectationMax(const vector<string> &seqs,
-                      const vector<vector<size_t> > &diagEvents,
+                      const vector<vector<double> > &diagnostic_events,
+                      const vector<vector<vector<double> > > &diag_values,
                       const vector<vector<double> > &secStruct,
                       vector<vector<double> > &site_indic,
                       vector<double> &seq_indic) {
   if (secStruct.empty()) {
-    expectation_maximization_seq_de(seqs, diagEvents, site_indic, seq_indic);
+    expectation_maximization_seq_de(seqs, diagnostic_events, diag_values, site_indic, seq_indic);
   }
   else {
     // TODO -- throw an exception here if the size of the secStrc vectors
     // don't match the sequences...?
-    expectationMax_SeqStrDE(seqs, secStruct, diagEvents, site_indic, seq_indic);
-  }
-}
-
-
-/******************************************************************************
- * SETTERS -- PARAMETER ESTIMATION BY EXHAUSTIVE SEARCH
- ******************************************************************************/
-
-/***
- * \summary estimate the delta parameter for this model given a set of
- *          sequences and the diagnostic events within them.
- * \param seqs          seqs[i] is the ith sequence (string)
- * \param diagEvents    diagEvents[i][j] is the jth diagnostic event in the
- *                      ith sequence
- */
-void
-Model::estimateDelta(const vector<string> &seqs,
-                     const vector<vector<size_t> > &diagEvents) {
-  // if we have no diagnostic events, then just set delta to be the default,
-  // otherwise we just try an exhaustive search of reasonable options with
-  // a uniform PWM.
-  size_t numDiagEvents = 0;
-  for (size_t i=0; i < diagEvents.size(); i++)
-    numDiagEvents += diagEvents[i].size();
-  if (numDiagEvents == 0) {
-    this->delta = Model::DEFAULT_DELTA;
-  } else {
-    vector<double> ll_delta;
-    for (int deltaP = Model::MIN_DELTA; deltaP <= Model::MAX_DELTA; ++deltaP) {
-      Model dummy;
-      Model::set_model_uniform(this->size(), dummy);
-      dummy.delta = deltaP;
-
-      vector<double> has_motif(seqs.size(), dummy.gamma);
-      vector<vector<double> > indicators;
-      for (size_t i = 0; i < seqs.size(); ++i) {
-        const size_t n_pos = seqs[i].length() - dummy.matrix.size() + 1;
-        indicators.push_back(vector<double>(n_pos, 1.0 / n_pos));
-      }
-      // use EM to fit the sequence component and the geometric distribution,
-      // but hold delta fixed (to avoid cyclic dependency)
-      dummy.expectation_maximization_seq_de(seqs, diagEvents, indicators,
-                                            has_motif, Model::HOLD_DELTA_FIXED);
-      double score = calculate_zoops_log_l(seqs, diagEvents, indicators, has_motif);
-      ll_delta.push_back(score);
-    }
-
-    double max_ll = -1.0 * std::numeric_limits<double>::max();
-    int max_i = 0;
-    for (size_t i = 0; i < ll_delta.size(); i++) {
-      if (ll_delta[i] > max_ll) {
-        max_ll = ll_delta[i];
-        max_i = i + Model::MIN_DELTA;
-      }
-    }
-
-    this->delta = max_i;
+    expectationMax_SeqStrDE(seqs, secStruct, diagnostic_events, diag_values, site_indic, seq_indic);
   }
 }
 
@@ -1371,4 +1543,3 @@ Model::set_model_by_word(const double pseudocount,
                 std::bind2nd(std::divides<double>(), tot));
     }
 }
-
