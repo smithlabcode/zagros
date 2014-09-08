@@ -491,6 +491,7 @@ int main(int argc, const char **argv) {
     static const double GEO_P_DEFAULT = 0.135;
     static const double de_weight = 1.1;
     // options/parameters that the user can set.
+
     bool VERBOSE = false;
     size_t motif_width = 6;
     size_t n_motifs = 10;
