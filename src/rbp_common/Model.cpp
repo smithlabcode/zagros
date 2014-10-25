@@ -472,7 +472,7 @@ de_log_like(const vector<vector<double> > &diagnostic_events,
   } else {
     for(size_t i = 0; i < diagnostic_events.size(); ++i) {
       for (size_t j = 0; j < siteInd[i].size(); ++j) {
-        res += (diag_values[i][j][geoDelta] * siteInd[i][j]);
+        res += (diag_values[i][j][geoDelta+8] * siteInd[i][j]);
       }
     }
   }
