@@ -47,6 +47,7 @@ struct Model {
     useDEs = false;
     opt_delta = true;
     opt_geo = true;
+    de_weight = 1.1;
   }
 
   void
@@ -148,7 +149,7 @@ struct Model {
   bool opt_geo;
 
   // class constants (probably some should be adjustable)
-  static const double DE_WEIGHT;
+  double de_weight;
 
   static const size_t max_iterations = 10;
   static const double pseudocount;

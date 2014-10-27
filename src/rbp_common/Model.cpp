@@ -47,7 +47,6 @@ const double Model::zoops_threshold = 0;
 const double Model::DEFAULT_GEO_P = 0.135;
 const double Model::MAX_GEO_P = 0.99;
 const double Model::MIN_GEO_P = 0.01;
-const double Model::DE_WEIGHT = 1.1;
 
 /******************************************************************************
  *        STATIC HELPER FUNCTIONS USED FOR CHECKING DATA CONSISTENCY
@@ -665,7 +664,7 @@ get_numerator_seq_de_for_site(const string &seq,
     if (optGeo) {
       vector<double> powers;
       for (size_t j = 0; j < seq.length(); j++)
-        powers.push_back(log(diagnostic_events[j]) + Model::DE_WEIGHT*log(geo_p) + Model::DE_WEIGHT*(abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+        powers.push_back(log(diagnostic_events[j]) + de_weight*log(geo_p) + de_weight*(abs(j - (site + geo_delta)) * log(1.0-geo_p)));
       num += smithlab::log_sum_log_vec(powers, powers.size());
     } else {
       num += diag_value;
@@ -754,7 +753,7 @@ get_numerator_seq_str_de_for_site(const string &seq,
     if (optGeo) {
       vector<double> powers;
       for (size_t j = 0; j < seq.length(); j++)
-        powers.push_back(log(diagnostic_events[j]) + Model::DE_WEIGHT*log(geo_p) + Model::DE_WEIGHT*(abs(j - (site + geo_delta)) * log(1.0-geo_p)));
+        powers.push_back(log(diagnostic_events[j]) + de_weight*log(geo_p) + de_weight*(abs(j - (site + geo_delta)) * log(1.0-geo_p)));
       num += smithlab::log_sum_log_vec(powers, powers.size());
     } else {
       num += diag_value;
@@ -808,7 +807,7 @@ expectation_seq_str_de_for_single_seq(const string &seq,
     get_numerator_seq_str_de_for_site(seq, secondary_structure,
                                       diagnostic_events, diag_value, matrix, motif_sec_str,
                                       freqs, f_sec_str, geo_p, geo_delta, gamma,
-                                      i, numerator[i], Model::DE_WEIGHT, optGeo);
+                                      i, numerator[i], de_weight, optGeo);
     assert(std::isfinite(numerator[i]));
   }
 
@@ -874,7 +873,7 @@ expectation_seq_de_for_single_seq(const string &seq,
     if (diagnostic_events.size() > 0)
       diag_value = diag_values[i][geo_delta + 8];
     get_numerator_seq_de_for_site(seq, diagnostic_events, diag_value, matrix, freqs, geo_p,
-                                  geo_delta, gamma, i, numerator[i], Model::DE_WEIGHT, optGeo);
+                                  geo_delta, gamma, i, numerator[i], de_weight, optGeo);
     assert(std::isfinite(numerator[i]));
   }
 
@@ -963,6 +962,7 @@ expectation_seq_de(const vector<string> &sequences,
                    const double gamma,
                    vector<vector<double> > &site_indic,
                    vector<double> &seq_indic,
+                   const double de_weight,
                    const bool optGeo) {
   if (Model::DEBUG_LEVEL >= 2)
     cerr << "performing expectation step with matrix " << endl
@@ -972,10 +972,10 @@ expectation_seq_de(const vector<string> &sequences,
     double old_seq_indic (seq_indic[i]);*/
     expectation_seq_de_for_single_seq(sequences[i], diagnostic_events[i], diag_values[i],
                                       matrix, freqs, geo_p, geo_delta, gamma,
-                                      site_indic[i], seq_indic[i], Model::DE_WEIGHT, optGeo);
+                                      site_indic[i], seq_indic[i], de_weight, optGeo);
     // re-normalise the site and seq indicators using DE weight of 1 if we
     // used some other weight.
-/*    if (Model::DE_WEIGHT != 1.0) {
+/*    if (Model::de_weight != 1.0) {
       expectation_seq_de_for_single_seq(sequences[i], vector<double>(), vector<vector<double> >(),
                                         matrix, freqs, geo_p, geo_delta, gamma,
                                         old_site_indic, old_seq_indic, 1.0, optGeo);
@@ -1008,6 +1008,7 @@ expectation_seq_str_de(const vector<string> &sequences,
                        const double gamma,
                        vector<vector<double> > &site_indic,
                        vector<double> &seq_indic,
+                       const double de_weight,
                        const bool optGeo) {
   if (Model::DEBUG_LEVEL >= 3)
     cerr << "performing expectation step with matrix " << endl
@@ -1027,8 +1028,8 @@ expectation_seq_str_de(const vector<string> &sequences,
                                           diagnostic_events[i], diag_values[i], matrix,
                                           motif_sec_str, freqs, f_sec_str,
                                           geo_p, geo_delta, gamma,
-                                          site_indic[i], seq_indic[i], Model::DE_WEIGHT, optGeo);
-/*    if (Model::DE_WEIGHT != 1.0) {
+                                          site_indic[i], seq_indic[i], de_weight, optGeo);
+/*    if (Model::de_weight != 1.0) {
       // re-normalise the site and seq indicators using DE weight of 1 if we
       // used some other weight.
       expectation_seq_str_de_for_single_seq(sequences[i], secondary_structure[i],
@@ -1181,7 +1182,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
           for (size_t k = 0; k < site_indic[i].size(); k++) {
             vector<double> powers;
             for (size_t j = 0; j < sequences[i].length(); j++)
-              powers.push_back(log(diagnostic_events[i][j]) + Model::DE_WEIGHT*log(p) + Model::DE_WEIGHT * (abs(j - (k + delta)) * log(1.0-p)));
+              powers.push_back(log(diagnostic_events[i][j]) + de_weight*log(p) + de_weight * (abs(j - (k + delta)) * log(1.0-p)));
             ret += (site_indic[i][k] * smithlab::log_sum_log_vec(powers, powers.size()));
           }
     } else {
@@ -1260,7 +1261,7 @@ Model::calculate_zoops_log_l(const vector<string> &sequences,
           for (size_t k = 0; k < site_indic[i].size(); k++) {
             vector<double> powers;
             for (size_t j = 0; j < sequences[i].length(); j++)
-              powers.push_back(log(diagnostic_events[i][j]) + Model::DE_WEIGHT*log(p) + Model::DE_WEIGHT * (abs(j - (k + delta)) * log(1.0-p)));
+              powers.push_back(log(diagnostic_events[i][j]) + de_weight*log(p) + de_weight * (abs(j - (k + delta)) * log(1.0-p)));
             ret += (site_indic[i][k] * smithlab::log_sum_log_vec(powers, powers.size()));
           }
     } else {
@@ -1379,7 +1380,7 @@ Model::expectation_maximization_seq_de(const vector<string> &seqs,
            << "\tEXPECTATION STEP" << endl;
     }
     expectation_seq_de(seqs, diagnostic_events, diag_values, matrix, f, p, delta, gamma,
-                       site_indic, seq_indic, opt_geo);
+                       site_indic, seq_indic, de_weight, opt_geo);
     if (Model::DEBUG_LEVEL >= 1) cerr << "\tSEQUENCE MAX. STEP" << endl;
     maximization_seq(seqs, site_indic, seq_indic, matrix, f, gamma);
     if (diagnostic_events.front().size() > 0) {
@@ -1432,7 +1433,7 @@ Model::expectationMax_SeqStrDE(const vector<string> &seqs,
   bool first = true;
   for (size_t i = 0; i < max_iterations; ++i) {
     expectation_seq_str_de(seqs, secStr, diagnostic_events, diag_values, matrix, motif_sec_str,
-                           f, f_sec_str, p, delta, gamma, siteInd, seqInd, opt_geo);
+                           f, f_sec_str, p, delta, gamma, siteInd, seqInd, de_weight, opt_geo);
     maximization_seq(seqs, siteInd, seqInd, matrix, f, gamma);
     maximization_str(secStr, siteInd, seqInd, matrix, motif_sec_str, f_sec_str);
     if (diagnostic_events.front().size() > 0) {

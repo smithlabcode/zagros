@@ -489,7 +489,7 @@ int main(int argc, const char **argv) {
     // TODO -- PJU: what is this?
     static const double zoops_expansion_factor = 0.75;
     static const double GEO_P_DEFAULT = 0.135;
-    static const double de_weight = 1.1;
+
     // options/parameters that the user can set.
     bool VERBOSE = false;
     size_t motif_width = 6;
@@ -503,6 +503,7 @@ int main(int argc, const char **argv) {
     size_t numStartingPoints = 10;
     string delta = "NotApp";
     bool geo = false;
+    double de_weight = 1.1;
 
     /****************** COMMAND LINE OPTIONS ********************/
     // TODO -- PJU: some options below don't have their defaults specified,
@@ -534,6 +535,8 @@ int main(int argc, const char **argv) {
                       "parameter is not optimised and is set to a "
                       "empirically pre-determined default value.",
                       OptionParser::OPTIONAL, geo);
+    opt_parse.add_opt("de_weight", 'w', "A weight to determine the diagnostic events' "
+                      "level of contribution (default: 1.1)", OptionParser::OPTIONAL, de_weight);
     opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
                       "each sequence and motif to this file",
                       OptionParser::OPTIONAL, indicators_file);
@@ -657,6 +660,7 @@ int main(int argc, const char **argv) {
       for (size_t j = 0; j < numStartingPoints; ++j) {
         Model model_l;
         Model::set_model_by_word(Model::pseudocount, top_kmers[j].kmer, model_l);
+        model_l.de_weight = de_weight;
         if (!geo) {
           model_l.p = GEO_P_DEFAULT;
           model_l.opt_geo = false;
