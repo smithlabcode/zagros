@@ -535,7 +535,7 @@ int main(int argc, const char **argv) {
                       "parameter is not optimised and is set to a "
                       "empirically pre-determined default value.",
                       OptionParser::OPTIONAL, geo);
-    opt_parse.add_opt("de_weight", 'w', "A weight to determine the diagnostic events' "
+    opt_parse.add_opt("de_weight", 'k', "A weight to determine the diagnostic events' "
                       "level of contribution (default: 1.1)", OptionParser::OPTIONAL, de_weight);
     opt_parse.add_opt("indicators", 'a', "output indicator probabilities for "
                       "each sequence and motif to this file",
