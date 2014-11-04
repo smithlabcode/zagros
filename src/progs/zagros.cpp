@@ -542,7 +542,7 @@ int main(int argc, const char **argv) {
                       OptionParser::OPTIONAL, indicators_file);
     opt_parse.add_opt("starting-points", 's', "number of starting points to try"
                       " for EM search. Higher values will be slower, but more"
-                      " likely to find the global maximum (default: 1)",
+                      " likely to find the global maximum (default: 10)",
                       OptionParser::OPTIONAL, numStartingPoints);
     opt_parse.add_opt("verbose", 'v', "print more run info",
                       OptionParser::OPTIONAL, VERBOSE);
